@@ -86,7 +86,7 @@ class Streamer ():
 if __name__ == "__main__":
 
     stations_file = 'stations.json'
-    audio = 'alsa'  # or pulse
+    audio = 'pulse'  # or alsa
     clip_duration = 10
 
     with Path(stations_file).open(mode='r') as f:
@@ -97,6 +97,11 @@ if __name__ == "__main__":
     urls = list(set(url_list))  # De-duped list
 
     print(f'{len(urls)} URLs')
+    
+    for url in urls:
+        i = urls.index(url)
+        if i < 200:
+            print(f'Index: {i}, {url}')
 
     while True:
         for url in urls:

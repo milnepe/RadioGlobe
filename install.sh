@@ -7,3 +7,9 @@ sudo cp services/*.service /etc/systemd/system
 sudo systemctl daemon-reload
 sudo systemctl start radioglobe.service
 sudo systemctl enable radioglobe.service
+
+# Grove lcd display
+curl -sL https://github.com/Seeed-Studio/grove.py/raw/master/install.sh | sudo bash -s -
+git clone https://github.com/Seeed-Studio/grove.py
+cd grove.py
+sudo pip3 install .
