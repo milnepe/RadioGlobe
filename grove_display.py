@@ -40,19 +40,20 @@ class Display (threading.Thread):
         self.changed = True
 
     def message(self, lines: list):
-        """Display independent buffer update"""
+        """Display message from list of items, one item per row"""
         logging.debug(f'Display lines: {lines}')
-        for line_num in range(DISPLAY_ROWS):
-            self.buffer[line_num] = lines[line_num].center(DISPLAY_COLUMNS)
+        for line in range(DISPLAY_ROWS):
+            if line <= len(lines) - 1:
+                self.buffer[line] = lines[line].center(DISPLAY_COLUMNS)
+            else:
+                self.buffer[line] = "".center(DISPLAY_COLUMNS)
         self.changed = True
 
     def update(self, north: float, east: float, location: str,
                volume: int, station: str, arrows: bool):
-        """Update display buffers by calling message member function"""
+        """Update display for a location - calls message"""
         lines = []
-
-        lines.append(location.center(DISPLAY_COLUMNS))
-
+        lines.append(location)
         if arrows:
             # Trim/pad the station name to fit arrows
             station = station[:(DISPLAY_COLUMNS - 4)]
@@ -80,13 +81,13 @@ class Display (threading.Thread):
         lines.append(latitude + longitude)
 
         # Volume display
-        # self.buffer[2] = ""
-        # bar_length = (volume * DISPLAY_COLUMNS) // 100
-        # for i in range(bar_length):
-        #   self.buffer[2] += "-"
-        # for i in range(bar_length, DISPLAY_COLUMNS):
-        #   self.buffer[2] += " "
-        lines.append(volume)
+        vol_str = ""
+        bar_length = (volume * DISPLAY_COLUMNS) // 100
+        for i in range(bar_length):
+          vol_str += "-"
+        for i in range(bar_length, DISPLAY_COLUMNS):
+          vol_str += " "
+        lines.append(f'{vol_str}')
 
         self.message(lines)
 
@@ -100,6 +101,8 @@ if __name__ == "__main__":
         time.sleep(1)
         display_thread.message(["Hello", "World"])
         time.sleep(5)
+        display_thread.message(["Tuning...."])
+        time.sleep(5)
         display_thread.update(north=51.42, east=-2.59,
                               location="Bristol, United Kingdom",
                               volume=40,
@@ -107,7 +110,7 @@ if __name__ == "__main__":
                               arrows=True)
         time.sleep(5)
         display_thread.update(0, 0, "Clearing in 2s...", 0, "", False)
-        time.sleep(2)
+        time.sleep(5)
         display_thread.clear()
 
     except:

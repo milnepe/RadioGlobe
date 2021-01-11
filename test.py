@@ -29,7 +29,6 @@ VOLUME_INCREMENT = 5
 state = "start"
 volume_display = False
 volume = 50
-state_entry = True
 ui_manager = UI_Manager()
 
 
@@ -60,24 +59,8 @@ def Look_Around(latitude: int, longitude: int, fuzziness: int):
     return search_coords
 
 
-def Back_To_Tuning():
-    global state
-    global state_entry
-
-    if state != "tuning":
-        state = "tuning"
-        state_entry = True
-
-
-def Clear_Volume_Display():
-    global volume_display
-
-    volume_display = False
-
-
 def Process_UI_Events():
     global state
-    global state_entry
     global volume
     global volume_display
     global jog
@@ -101,28 +84,26 @@ def Process_UI_Events():
         elif event[0] == "Volume":
             if event[1] == 1:
                 volume += VOLUME_INCREMENT
-                volume = set_volume(volume)
+                if volume <= 100:
+                    set_volume(volume)
+                else:
+                    volume = 100
+                    set_volume(volume)
                 volume_display = True
-                scheduler.attach_timer(Clear_Volume_Display, 3)
                 # rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                # print(("Volume up: {}%").format(volume))
-                logging.debug(f'Volume up: {volume}')
 
             elif event[1] == -1:
                 volume -= VOLUME_INCREMENT
-                volume = set_volume(volume)
+                if volume >= 0:
+                    set_volume(volume)
+                else:
+                    volume = 0
+                    set_volume(volume)
                 volume_display = True
-                scheduler.attach_timer(Clear_Volume_Display, 3)
                 # rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                # print(("Volume down: {}%").format(volume))
-                logging.debug(f'Voluming down: {volume}')
-
-        elif event[0] == "Random":
-            print("Toggle jog mode - not implemented")
 
         elif event[0] == "Shutdown":
             state = "shutdown_confirm"
-            state_entry = True
 
         elif event[0] == "Calibrate":
             # Zero the positional encoders
@@ -142,7 +123,6 @@ def Process_UI_Events():
         elif event[0] == "Confirm":
             if state == "shutdown_confirm":
                 state = "shutdown"
-                state_entry = True
             else:
                 pass
 
@@ -230,14 +210,8 @@ while True:
         # latitude = round((360 * coordinates[0] / ENCODER_RESOLUTION - 180), 2)
         # longitude = round((360 * coordinates[1] / ENCODER_RESOLUTION - 180), 2)
 
-        if volume_display:
-            volume_disp = volume
-        else:
-            volume_disp = 0
-
         logging.debug(f'Updating display, Lat: {latitude}, Lon: {longitude}')
-        display_thread.update(latitude, longitude,
-                              "Tuning...", volume_disp, "", False)
+        display_thread.message(["Tuning..."])
 
     # Plays the station for the current location and updates display
     elif state == "play":
@@ -263,10 +237,10 @@ while True:
         # Add arrows to the display if there is more than one station here
         if len(stations_list) > 1:
             display_thread.update(latitude, longitude, location,
-                                  volume_disp, stations_list[jog], True)
+                                  volume, stations_list[jog], True)
         elif len(stations_list) == 1:
             display_thread.update(latitude, longitude, location,
-                                  volume_disp, stations_list[jog], False)
+                                  volume, stations_list[jog], False)
         state = "playing"
 
     # Playing just waits for UI events and dispatches next state
@@ -274,20 +248,17 @@ while True:
         # If the jog dial is used, stop the stream and restart with the new url
         if jog != last_jog:
             state = "joggling"
+        # If volume buttons are used, update display with new volume setting
+        elif volume_display:
+            volume_display = False
+            state = "voluming"
 
-        # Exit back to tuning state if latch has 'come unstuck'
-        # elif not encoders_thread.is_latched():
-            # streamer.stop()
-            # state = "tuning"
-            # logging.debug(f'going back to {state} state')
-            # state_entry = true
-
-        # Idle operation - just keep display updated
-        else:
-            if volume_display:
-                volume_disp = volume
-            else:
-                volume_disp = 0
+    # Displays current volume setting with short pause
+    # The location display is returned afterwards
+    elif state == "voluming":
+            display_thread.message(["Volume", str(volume)])
+            state = "updating"
+            time.sleep(2)
 
     # Joggling cycles round the stations list for the current location
     elif state == "joggling":
@@ -300,7 +271,7 @@ while True:
 
     elif state == "shutdown_confirm":
         if state_entry:
-            state_entry = False
+            # state_entry = False
             display_thread.clear()
             time.sleep(0.1)
             display_thread.message(line_1="Really shut down?",
@@ -313,7 +284,7 @@ while True:
 
     elif state == "shutdown":
         if state_entry:
-            state_entry = False
+            # state_entry = False
             display_thread.clear()
             time.sleep(0.1)
             display_thread.message(line_1="Shutting down...",
