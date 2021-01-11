@@ -16,7 +16,7 @@ from scheduler import Scheduler
 
 logging.basicConfig(level=logging.DEBUG)
 
-# Inject test co-ordinates for station index 1 "Shkodra, AL"
+# Inject test encoder co-ordinates for station index 1 "Shkodra, AL"
 ENCODER_LATITUDE = 632
 ENCODER_LATITUDE_OFFSET = 1024
 ENCODER_LONGITUDE = 567
@@ -170,14 +170,14 @@ scheduler = Scheduler(50, "SCHEDULER")
 scheduler.start()
 
 set_volume(volume)
-counter = 0
 previous_state = None
 
-jog = 0
-last_jog = 0
+# jog = 0
+# last_jog = 0
 
 while True:
-    # Displays a start-up message, transitions to Tuning
+    # Displays a start-up message
+    # Transitions to Tuning
     if state == "start":
         logging.debug(f'State: {state}')
         lines = ["Radio Globe", "Made for DesignSpark",
@@ -186,8 +186,12 @@ while True:
         time.sleep(3)
         state = "tuning"
 
-    # Tuning generates a list of stations in vicinity of cursor and sets
-    # the location to the first station in the list
+    # Tuning generates a search area around the cross-hair set by the
+    # size of the fuzziness value. Search area is a list of encoder
+    # co-ordinates. Each co-ordinate is matched against the location
+    # database until the first match is found. A list of stations for
+    # that location is generated for the player
+    # Transitions to play
     elif state == "tuning":
         logging.debug(f'State: {state}')
 
@@ -201,9 +205,9 @@ while True:
                        (longitude + longitude_offset) % ENCODER_RESOLUTION]
         search_area = Look_Around(coordinates[0], coordinates[1], fuzziness=3)
         logging.debug(f'Search area: {search_area}')
-        location_name = ""
         stations_list = []
         url_list = []
+        last_jog = jog = 0
 
         # Check the search area.  Saving the first location name encountered
         # and all radio stations in the area, in order encountered
@@ -214,16 +218,17 @@ while True:
 
             if index != 0xFFFF:
                 # encoders_thread.latch(coordinates[0], coordinates[1], stickiness=3)
-                state = "play"
-                state_entry = True
                 location = database.Get_Location_By_Index(index)
-                logging.debug(f'Location: {location}')
-                if location_name == "":
-                    location_name = location
-
+                # Set first location found for player
+                if location:
+                    logging.debug(f'Location found: {location}')
                     for station in database.stations_data[location]["urls"]:
-                        stations_list.append(station["name"])
-                        url_list.append(station["url"])
+                        # De-dup lists
+                        if station["name"] not in stations_list:
+                            stations_list.append(station["name"])
+                        if station["url"] not in url_list:
+                            url_list.append(station["url"])
+                    state = "play"
                     break
 
         # List out stations in search area
@@ -241,7 +246,6 @@ while True:
         logging.debug(f'Updating display, Lat: {latitude}, Lon: {longitude}')
         display_thread.update(latitude, longitude,
                               "Tuning...", volume_disp, "", False)
-        counter += 1
 
     # Plays the station for the current location and updates display
     elif state == "play":
@@ -266,10 +270,10 @@ while True:
         logging.debug(f'State: {state}')
         # Add arrows to the display if there is more than one station here
         if len(stations_list) > 1:
-            display_thread.update(latitude, longitude, location_name,
+            display_thread.update(latitude, longitude, location,
                                   volume_disp, stations_list[jog], True)
         elif len(stations_list) == 1:
-            display_thread.update(latitude, longitude, location_name,
+            display_thread.update(latitude, longitude, location,
                                   volume_disp, stations_list[jog], False)
         state = "playing"
 
