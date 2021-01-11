@@ -259,15 +259,18 @@ while True:
         streamer = Streamer(AUDIO_SERVICE, url_list[jog])
         streamer.play()
 
+        state = "updating"
+
+    # Updating display with current station
+    elif state == "updating":
+        logging.debug(f'State: {state}')
         # Add arrows to the display if there is more than one station here
-        logging.debug(f'Update display')
         if len(stations_list) > 1:
             display_thread.update(latitude, longitude, location_name,
                                   volume_disp, stations_list[jog], True)
         elif len(stations_list) == 1:
             display_thread.update(latitude, longitude, location_name,
                                   volume_disp, stations_list[jog], False)
-
         state = "playing"
 
     # Playing just waits for UI events and dispatches next state
