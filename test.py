@@ -28,9 +28,7 @@ VOLUME_INCREMENT = 5
 
 state = "start"
 volume_display = False
-volume = 95
-jog = 0
-last_jog = 0
+volume = 50
 state_entry = True
 ui_manager = UI_Manager()
 
@@ -106,21 +104,18 @@ def Process_UI_Events():
                 volume = set_volume(volume)
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
-                rgb_led.set_static("BLUE", timeout_sec=0.5,
-                                   restore_previous_on_timeout=True)
-                print(("Volume up: {}%").format(volume))
+                # rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
+                # print(("Volume up: {}%").format(volume))
+                logging.debug(f'Volume up: {volume}')
 
-        elif event[1] == -1:
-            if state == "shutdown_confirm":
-                Back_To_Tuning()
-            else:
+            elif event[1] == -1:
                 volume -= VOLUME_INCREMENT
                 volume = set_volume(volume)
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
-                rgb_led.set_static("BLUE", timeout_sec=0.5,
-                                   restore_previous_on_timeout=True)
-                print(("Volume down: {}%").format(volume))
+                # rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
+                # print(("Volume down: {}%").format(volume))
+                logging.debug(f'Voluming down: {volume}')
 
         elif event[0] == "Random":
             print("Toggle jog mode - not implemented")
@@ -171,9 +166,6 @@ scheduler.start()
 
 set_volume(volume)
 previous_state = None
-
-# jog = 0
-# last_jog = 0
 
 while True:
     # Displays a start-up message
