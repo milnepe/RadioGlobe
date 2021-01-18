@@ -30,6 +30,7 @@ state = "start"
 volume_display = False
 volume = 50
 ui_manager = UI_Manager()
+do_calibrate = False
 
 
 # This is used to increase the size of the area searched around the coords
@@ -67,6 +68,7 @@ def Process_UI_Events():
     global ui_manager
     global encoders_thread
     global rgb_led
+    global do_calibrate
 
     ui_events = []
     ui_manager.update(ui_events)
@@ -79,7 +81,6 @@ def Process_UI_Events():
             # Previous station
             elif event[1] == -1:
                 jog -= 1
-            logging.debug(f'Joggling: {jog}')
 
         elif event[0] == "Volume":
             if event[1] == 1:
@@ -102,29 +103,12 @@ def Process_UI_Events():
                 volume_display = True
                 # rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
 
+        # Shutdown can be initiated from any state
         elif event[0] == "Shutdown":
-            state = "shutdown_confirm"
+            state = "shutdown"
 
         elif event[0] == "Calibrate":
-            # Zero the positional encoders
-            offsets = encoders_thread.zero()
-            database.Save_Calibration(offsets[0], offsets[1])
-            rgb_led.set_static("GREEN", timeout_sec=0.5,
-                               restore_previous_on_timeout=True)
-            print("Calibrated")
-            display_thread.message(
-                line_1="",
-                line_2="Calibrated!",
-                line_3="",
-                line_4="")
-
-            time.sleep(1)
-
-        elif event[0] == "Confirm":
-            if state == "shutdown_confirm":
-                state = "shutdown"
-            else:
-                pass
+            do_calibrate = True
 
 
 # PROGRAM START
@@ -252,6 +236,9 @@ while True:
         elif volume_display:
             volume_display = False
             state = "voluming"
+        elif do_calibrate:
+            do_calibrate = False
+            state = "calibrate"
 
     # Displays current volume setting with short pause
     # The location display is returned afterwards
@@ -269,29 +256,29 @@ while True:
         streamer.stop()
         state = "play"
 
-    elif state == "shutdown_confirm":
-        if state_entry:
-            # state_entry = False
-            display_thread.clear()
-            time.sleep(0.1)
-            display_thread.message(line_1="Really shut down?",
-                                   line_2="<- Press mid button ",
-                                   line_3="to confirm or",
-                                   line_4="<- bottom to cancel.")
+    # Zero the positional encoders
+    elif state == "calibrate":
+        logging.debug(f'State: {state}')
+        display_thread.message(["Calibrating..."])
+        time.sleep(2)
+        streamer.stop()
+        # Removed for testing
+        # offsets = encoders_thread.zero()
+        offsets = 0, 0
+        database.Save_Calibration(offsets[0], offsets[1])
+        # rgb_led.set_static("GREEN", timeout_sec=0.5, restore_previous_on_timeout=True)
+        display_thread.message(["Calibrated"])
+        time.sleep(2)
+        state = "tuning"
 
-            # Auto-cancel in 5s
-            scheduler.attach_timer(Back_To_Tuning, 5)
-
+    # Safe shutdown of system
     elif state == "shutdown":
-        if state_entry:
-            # state_entry = False
-            display_thread.clear()
-            time.sleep(0.1)
-            display_thread.message(line_1="Shutting down...",
-                                   line_2="Please wait 10 sec",
-                                   line_3="before disconnecting",
-                                   line_4="power.")
-            subprocess.run(["sudo", "poweroff"])
+        logging.debug(f'State: {state}')
+        display_thread.message(["Shutting down..."])
+        time.sleep(2)
+        display_thread.clear()
+        time.sleep(0.1)
+        subprocess.run(["sudo", "poweroff"])
 
     else:
         # Just in case!

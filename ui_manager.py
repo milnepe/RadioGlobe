@@ -7,7 +7,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 SHUTDOWN_HOLD_TIME = 3
-CALIBRATE_HOLD_TIME = 5
+CALIBRATE_HOLD_TIME = 3
 
 
 class UI_Manager:
@@ -44,14 +44,13 @@ class UI_Manager:
                     ui_events = [["Shutdown", 0]]
                     self.button_manager.clear("Jog_push")
                     break
-                else:
-                    ui_events.append(["Random", 0])
-            elif event[0] == "Mid":
-                if event[1] > CALIBRATE_HOLD_TIME:
+                # else:
+                    # ui_events.append(["Random", 0])
+            elif event[0] == "Mid" and event[1] > CALIBRATE_HOLD_TIME:
                     ui_events.append(["Calibrate", 0])
                     self.button_manager.clear("Mid")
-                else:
-                    ui_events.append(["Confirm", 0])
+                # else:
+                    # ui_events.append(["Confirm", 0])
             elif event[0] == "Top":
                 ui_events.append(["Volume", 1])
             elif event[0] == "Low":
@@ -68,8 +67,8 @@ if __name__ == "__main__":
     while True:
         ui_manager.update(ui_events)
 
-        while len(ui_events) > 0:
+        # while len(ui_events) > 0:
             # print(ui_events.pop())
-            logging.debug(f'{ui_events.pop()}')
+            # logging.debug(f'{ui_events.pop()}')
 
         time.sleep(0.1)
