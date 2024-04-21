@@ -128,7 +128,7 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(logging.DEBUG)
 
     stations_dict = Load_Stations(radio_config.STATIONS_JSON)
-    Get_Location_By_Index(0)
+    Get_Location_By_Index(0, radio_config.STATIONS_JSON)
     get_checksum(radio_config.STATIONS_JSON)
     # Build_Map(radio_config.STATIONS_JSON, radio_config.STATIONS_MAP)
     Build_Map(stations_dict, radio_config.STATIONS_MAP)
