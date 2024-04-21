@@ -81,9 +81,12 @@ def Get_Found_Stations(search_area: list, index_map) -> str:
                 url_list.append(station["url"])
 
     # Provide 'helper' coordinates
-    logging.debug(f"Coords: {coordinates[0]}, {coordinates[1]}")
-    latitude = round((360 * coordinates[0] / ENCODER_RESOLUTION - 180), 2)
-    longitude = round((360 * coordinates[1] / ENCODER_RESOLUTION - 180), 2)
+    # logging.debug(f"Coords: {coordinates[0]}, {coordinates[1]}")
+    # latitude = round((360 * coordinates[0] / ENCODER_RESOLUTION - 180), 2)
+    # longitude = round((360 * coordinates[1] / ENCODER_RESOLUTION - 180), 2)
+    logging.debug(f"Coords: {coords_lat}, {coords_long}")
+    latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
+    longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
 
     logging.debug(f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}")
     return location_name, latitude, longitude, stations_list, url_list
@@ -219,9 +222,10 @@ while True:
         # Normal operation
         else:
             # Look arround and gather station info in the search area
-            coordinates = encoders_thread.get_readings()
-            logging.debug(f"Coordinates: {coordinates}")
-            search_area = Look_Around(coordinates[0], coordinates[1], fuzziness=radio_config.FUZZINESS)
+            coords_lat, coords_long = encoders_thread.get_readings()
+            logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
+            # search_area = Look_Around(coordinates[0], coordinates[1], fuzziness=radio_config.FUZZINESS)
+            search_area = Look_Around(coords_lat, coords_long, fuzziness=radio_config.FUZZINESS)
             location_name, latitude, longitude, stations_list, url_list = Get_Found_Stations(search_area, index_map)
             if location_name != "":
                 # Stations found so start playing them otherwise stay tuning
