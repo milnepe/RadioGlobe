@@ -10,6 +10,35 @@ from positional_encoders import ENCODER_RESOLUTION
 os.makedirs(radio_config.DATADIR, exist_ok=True)
 
 
+def index_globe() -> dict:
+    """Return an indexed map of all possible coordinates returned by the encoders
+    The map is a dict where the key is the lat / long tuple
+    returned by the encoders position on the globe
+    The Origin is {(5125, 512): 512, ...}"""
+
+    index_list = []
+    # Generate map ENCODER_RESOLUTION x ENCODER_RESOLUTION / 2
+    for lat_coords in range(ENCODER_RESOLUTION // 2, ENCODER_RESOLUTION):
+        for long_coords in range(0, ENCODER_RESOLUTION):
+            index_list.append((lat_coords, long_coords))
+    # print(index_list)
+
+    index_dict = {}
+    for index, value in enumerate(index_list):
+        index_dict[value] = index
+    # print(index_dict)
+
+    # swap key values
+    # index_map = {value: key for key, value in index_dict.items()}
+    # print(index_map)
+
+    return index_dict
+
+
+def get_global_index(index_map: dict, index: tuple) -> int:
+    return index_map[index]
+
+
 def Load_Stations(stations_json: str) -> dict:
     """Return dictionary of stations from stations file"""
     stations_dict = {}
@@ -21,6 +50,42 @@ def Load_Stations(stations_json: str) -> dict:
         logging.info(f"{stations_json} not found")
 
     return stations_dict
+
+
+def index_cities(stations_json: str) -> dict:
+    """Return a list of citiy keys"""
+    stations_dict = Load_Stations(stations_json)
+
+    cities_list = []
+    for city in (stations_dict):
+        cities_list.append(city)
+
+    return cities_list
+
+
+def cities_map(stations_data: dict) -> dict:
+    # Parse every location
+    cities_index = {}
+    for location in stations_data:
+        # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
+        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
+        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
+
+        location_list = []
+        city_coords = (latitude, longitude)
+        if city_coords not in cities_index:
+            location_list.append(location)
+            cities_index[city_coords] = location_list
+        else:
+            cities_index[city_coords].append(location)
+        # # Reduce number of locations we need to process
+        # if city_coords in global_map:
+            # # print(location, city_coords)
+            # location_list.append(city_coords)
+    for k, v in cities_index.items():
+        if len(v) > 1:
+            print(k, v)
+    return cities_index
 
 
 def Get_Location_By_Index(index: int, stations_data: dict):
@@ -127,14 +192,34 @@ if __name__ == "__main__":
     logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
     logging.getLogger().setLevel(logging.DEBUG)
 
-    stations_dict = Load_Stations(radio_config.STATIONS_JSON)
-    Get_Location_By_Index(0, radio_config.STATIONS_JSON)
-    get_checksum(radio_config.STATIONS_JSON)
-    # Build_Map(radio_config.STATIONS_JSON, radio_config.STATIONS_MAP)
-    Build_Map(stations_dict, radio_config.STATIONS_MAP)
-    index_map = Load_Map(radio_config.STATIONS_MAP)
+    global_map = index_globe()
 
-    for lat in range(ENCODER_RESOLUTION):
-        for lon in range(ENCODER_RESOLUTION):
-            if index_map[lat][lon] != 0xFFFF:
-                print("OUT", lat, lon, index_map[lat][lon])
+    MIN_COORDS = (ENCODER_RESOLUTION // 2, 0)
+    index = get_global_index(global_map, MIN_COORDS)
+    print(f"MIN: {MIN_COORDS}, INDEX: {index}")
+
+    MAX_COORDS = (ENCODER_RESOLUTION - 1, ENCODER_RESOLUTION - 1)
+    index = get_global_index(global_map, MAX_COORDS)
+    print(f"MAX: {MAX_COORDS}, INDEX: {index}")
+
+    ORIGIN = (ENCODER_RESOLUTION // 2, ENCODER_RESOLUTION // 2)
+    index = get_global_index(global_map, ORIGIN)
+    print(f"ORIGIN: {ORIGIN}, INDEX: {index}")
+
+    cities_list = index_cities(radio_config.STATIONS_JSON)
+    print(cities_list)
+
+    stations_data = Load_Stations(radio_config.STATIONS_JSON)
+    city_map = cities_map(stations_data)
+    # print(city_map)
+
+    # stations_dict = Load_Stations(radio_config.STATIONS_JSON)
+    # Get_Location_By_Index(0, radio_config.STATIONS_JSON)
+    # get_checksum(radio_config.STATIONS_JSON)
+    # Build_Map(stations_dict, radio_config.STATIONS_MAP)
+    # index_map = Load_Map(radio_config.STATIONS_MAP)
+
+    # for lat in range(ENCODER_RESOLUTION):
+        # for lon in range(ENCODER_RESOLUTION):
+            # if index_map[lat][lon] != 0xFFFF:
+                # print("OUT", lat, lon, index_map[lat][lon])
