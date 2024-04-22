@@ -29,67 +29,67 @@ streamer = Streamer(audio=radio_config.AUDIO_SERVICE)
 stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
 
 
-def Look_Around(latitude: int, longitude: int, fuzziness: int) -> list:
-    """Return list of lat, long pairs for the current coords. Fuzziness
-    increases the size of the area searched around the coords.
+# def Look_Around(latitude: int, longitude: int, fuzziness: int) -> list:
+    # """Return list of lat, long pairs for the current coords. Fuzziness
+    # increases the size of the area searched around the coords.
 
-    For example, fuzziness 2, latitude 50 and longitude 0 will result in a
-    search square 48,1022 to 52,2 (with encoder resolution 1024)
-    Offset fuzziness. 0 means only the given coords"""
+    # For example, fuzziness 2, latitude 50 and longitude 0 will result in a
+    # search square 48,1022 to 52,2 (with encoder resolution 1024)
+    # Offset fuzziness. 0 means only the given coords"""
 
-    search_coords = []
+    # search_coords = []
 
-    # Work out how big the perimeter is for each layer out from the origin
-    ODD_NUMBERS = [((i * 2) + 1) for i in range(0, fuzziness)]
+    # # Work out how big the perimeter is for each layer out from the origin
+    # ODD_NUMBERS = [((i * 2) + 1) for i in range(0, fuzziness)]
 
-    # With each 'layer' of fuzziness we need a starting point.  70% of people are right-eye dominant and
-    # the globe is likely to be below the user, so go down and left first then scan horizontally, moving up
-    for layer in range(0, fuzziness):
-        for y in range(0, ODD_NUMBERS[layer]):
-            for x in range(0, ODD_NUMBERS[layer]):
-                coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
-                coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
-                if [coord_x, coord_y] not in search_coords:
-                    search_coords.append([coord_x, coord_y])
+    # # With each 'layer' of fuzziness we need a starting point.  70% of people are right-eye dominant and
+    # # the globe is likely to be below the user, so go down and left first then scan horizontally, moving up
+    # for layer in range(0, fuzziness):
+        # for y in range(0, ODD_NUMBERS[layer]):
+            # for x in range(0, ODD_NUMBERS[layer]):
+                # coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
+                # coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
+                # if [coord_x, coord_y] not in search_coords:
+                    # search_coords.append([coord_x, coord_y])
 
-    logging.debug(f"Search area: {search_coords}")
-    return search_coords
+    # logging.debug(f"Search area: {search_coords}")
+    # return search_coords
 
 
-def Get_Found_Stations(search_area: list, index_map) -> str:
-    """Get station info found within search area
-    Can return more than one locations worth of urls depending on fuzziness"""
-    location = ""
-    location_name = ""
-    stations_list = []
-    url_list = []
-    # Check the search area.  Saving the first location name encountered
-    # and all radio stations in the area, in order encountered
-    for ref in search_area:
-        index = index_map[ref[0]][ref[1]]
+# def Get_Found_Stations(search_area: list, index_map) -> str:
+    # """Get station info found within search area
+    # Can return more than one locations worth of urls depending on fuzziness"""
+    # location = ""
+    # location_name = ""
+    # stations_list = []
+    # url_list = []
+    # # Check the search area.  Saving the first location name encountered
+    # # and all radio stations in the area, in order encountered
+    # for ref in search_area:
+        # index = index_map[ref[0]][ref[1]]
 
-        if index != 0xFFFF:
-            logging.debug(f"Index: {index}")
-            encoders_thread.latch(ref[0], ref[1], stickiness=radio_config.STICKINESS)
-            logging.debug("Latched...")
-            location = database.Get_Location_By_Index(index, stations_data)
-            if location_name == "":
-                location_name = location
+        # if index != 0xFFFF:
+            # logging.debug(f"Index: {index}")
+            # encoders_thread.latch(ref[0], ref[1], stickiness=radio_config.STICKINESS)
+            # logging.debug("Latched...")
+            # location = database.Get_Location_By_Index(index, stations_data)
+            # if location_name == "":
+                # location_name = location
 
-            for station in stations_data[location]["urls"]:
-                stations_list.append(station["name"])
-                url_list.append(station["url"])
+            # for station in stations_data[location]["urls"]:
+                # stations_list.append(station["name"])
+                # url_list.append(station["url"])
 
-    # Provide 'helper' coordinates
-    # logging.debug(f"Coords: {coordinates[0]}, {coordinates[1]}")
-    # latitude = round((360 * coordinates[0] / ENCODER_RESOLUTION - 180), 2)
-    # longitude = round((360 * coordinates[1] / ENCODER_RESOLUTION - 180), 2)
-    logging.debug(f"Coords: {coords_lat}, {coords_long}")
-    latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
-    longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
+    # # Provide 'helper' coordinates
+    # # logging.debug(f"Coords: {coordinates[0]}, {coordinates[1]}")
+    # # latitude = round((360 * coordinates[0] / ENCODER_RESOLUTION - 180), 2)
+    # # longitude = round((360 * coordinates[1] / ENCODER_RESOLUTION - 180), 2)
+    # logging.debug(f"Coords: {coords_lat}, {coords_long}")
+    # latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
+    # longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
 
-    logging.debug(f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}")
-    return location_name, latitude, longitude, stations_list, url_list
+    # logging.debug(f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}")
+    # return location_name, latitude, longitude, stations_list, url_list
 
 
 def Back_To_Tuning():
@@ -179,8 +179,12 @@ def Process_UI_Events():
 
 
 # PROGRAM START
-database.Build_Map(stations_data, radio_config.STATIONS_MAP)
-index_map = database.Load_Map(radio_config.STATIONS_MAP)
+# database.Build_Map(stations_data, radio_config.STATIONS_MAP)
+
+stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
+city_map = database.build_map(stations_data)
+
+# index_map = database.Load_Map(radio_config.STATIONS_MAP)
 encoder_offsets = database.Load_Calibration()
 
 # Positional encoders - used to select latitude and longitude
@@ -225,9 +229,13 @@ while True:
             coords_lat, coords_long = encoders_thread.get_readings()
             logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
             # search_area = Look_Around(coordinates[0], coordinates[1], fuzziness=radio_config.FUZZINESS)
-            search_area = Look_Around(coords_lat, coords_long, fuzziness=radio_config.FUZZINESS)
-            location_name, latitude, longitude, stations_list, url_list = Get_Found_Stations(search_area, index_map)
+            # search_area = Look_Around(coords_lat, coords_long, fuzziness=radio_config.FUZZINESS)
+            search_area = database.look_around((coords_lat, coords_long), fuzziness=radio_config.FUZZINESS)
+            # location_name, latitude, longitude, stations_list, url_list = Get_Found_Stations(search_area, index_map)
+            location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area, city_map, stations_data)
             if location_name != "":
+                encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
+                logging.debug("Latched...")
                 # Stations found so start playing them otherwise stay tuning
                 state = "playing"
                 state_entry = True

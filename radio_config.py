@@ -16,7 +16,7 @@ AUDIO_SERVICE = "alsa"
 
 # Higher values of fuzziness increases the search area.
 # May include more than one city may be included if they are located close together.
-FUZZINESS = 3
+FUZZINESS = 2
 
 # Affects ability to latch on to cities
 STICKINESS = 3

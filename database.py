@@ -63,14 +63,14 @@ def index_cities(stations_json: str) -> dict:
     return cities_list
 
 
-def Get_Location_By_Index(index: int, stations_data: dict):
-    # stations_data = Load_Stations(radio_config.STATIONS_JSON)
-    for idx, location in enumerate(stations_data):
-        if idx == index:
-            logging.debug(f"{idx}, {location}")
-            return location
+# def Get_Location_By_Index(index: int, stations_data: dict):
+    # # stations_data = Load_Stations(radio_config.STATIONS_JSON)
+    # for idx, location in enumerate(stations_data):
+        # if idx == index:
+            # logging.debug(f"{idx}, {location}")
+            # return location
 
-    return "Unknown"
+    # return "Unknown"
 
 
 def get_checksum(filename: str) -> str:
@@ -106,14 +106,14 @@ def build_map(stations_data: dict) -> dict:
 
 
 def look_around(origin: tuple, fuzziness: int) -> list:
-    """Return a list of lat, long pairs arround for the origin coords.
+    """Returns a search area list of lat, long pairs arround for the origin coords.
     Fuzziness increases the area surrounding the origin.
 
     For example:
     fuzziness 2 returns the surrounding 9 locations,
     fuzziness 3 returns the surrounding 25 locations"""
 
-    search_coords = []
+    search_area = []
     latitude, longitude = origin
 
     # Work out how big the perimeter is for each layer out from the origin
@@ -127,67 +127,116 @@ def look_around(origin: tuple, fuzziness: int) -> list:
                 coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
                 coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
                 exp_coords = (coord_x, coord_y)
-                if exp_coords not in search_coords:
-                    search_coords.append(exp_coords)
+                if exp_coords not in search_area:
+                    search_area.append(exp_coords)
 
-    logging.debug(f"Search area: {search_coords}")
-    return search_coords
+    logging.debug(f"Search area: {search_area}")
+    return search_area
+
+def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -> tuple:
+    """Get station info found within search area
+    Can return more than one locations worth of urls depending on fuzziness"""
+    location = ""
+    location_name = ""
+    stations_list = []
+    url_list = []
+    # Check the search area.  Saving the first location name encountered
+    # and all radio stations in the area, in order encountered
+    for coords in search_area:
+        coords_lat, coords_long = coords 
+        if coords in city_map:
+            # encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
+            # logging.debug("Latched...")
+            cities = city_map[coords]
+            print(f"Ref: {coords}, {cities}")
+            for city in cities:
+                print(f"City: {city}")
+        
+                if location_name == "":
+                    location_name = city
+        
+                for station in stations_data[city]["urls"]:
+                    station_name = station["name"]
+                    if station_name not in stations_list:
+                        stations_list.append(station_name)
+                        url_list.append(station["url"])
+
+        # Provide 'helper' coordinates
+        latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
+        longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
+
+        # index = index_map[ref[0], ref[1]]
+
+        # if index != 0xFFFF:
+            # logging.debug(f"Index: {index}")
+            # encoders_thread.latch(ref[0], ref[1], stickiness=radio_config.STICKINESS)
+            # logging.debug("Latched...")
+            # location = database.Get_Location_By_Index(index, stations_data)
+            # if location_name == "":
+                # location_name = location
+
+            # for station in stations_data[location]["urls"]:
+                # stations_list.append(station["name"])
+                # url_list.append(station["url"])
+
+    logging.debug(f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}")
+    return location_name, latitude, longitude, stations_list, url_list
 
 
-def Build_Map(stations_data: dict, stations_map: str):
-    """Make a map representing every possible coordinate, with a 2-byte address for looking up the city, which
-    allows looking up the stations from the regular database.  This reduces the memory required to hold the map
-    to 2 MiB RAM and because the empty space is all 0xFF it can be compressed very easily if desired to just the
-    locations"""
-    index_map = [[0xFFFF for longd in range(0, ENCODER_RESOLUTION)] for lat in range(0, ENCODER_RESOLUTION)]
+# def Build_Map(stations_data: dict, stations_map: str):
+    # """Make a map representing every possible coordinate, with a 2-byte address for looking up the city, which
+    # allows looking up the stations from the regular database.  This reduces the memory required to hold the map
+    # to 2 MiB RAM and because the empty space is all 0xFF it can be compressed very easily if desired to just the
+    # locations"""
+    # index_map = [[0xFFFF for longd in range(0, ENCODER_RESOLUTION)] for lat in range(0, ENCODER_RESOLUTION)]
 
-    # Parse every location
-    for idx, location in enumerate(stations_data):
-        # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
-        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
-        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
-        index_map[latitude][longitude] = idx
+    # # Parse every location
+    # for idx, location in enumerate(stations_data):
+        # # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
+        # latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
+        # longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
+        # index_map[latitude][longitude] = idx
 
-    # Save the location of each actual location - 2 bytes for latitude, 2 for longitude, 2 for the index
-    index_bytes = bytes()
-    for lat in range(0, ENCODER_RESOLUTION):
-        for lon in range(0, ENCODER_RESOLUTION):
-            if index_map[lat][lon] != 0xFFFF:
-                index_bytes += bytes([lat & 0xFF,
-                                      (lat >> 8) & 0xFF,
-                                      lon & 0xFF,
-                                      (lon >> 8) & 0xFF,
-                                      index_map[lat][lon] & 0xFF,
-                                      (index_map[lat][lon] >> 8) & 0xFF])
+    # # Save the location of each actual location - 2 bytes for latitude, 2 for longitude, 2 for the index
+    # index_bytes = bytes()
+    # for lat in range(0, ENCODER_RESOLUTION):
+        # for lon in range(0, ENCODER_RESOLUTION):
+            # if index_map[lat][lon] != 0xFFFF:
+                # index_bytes += bytes([lat & 0xFF,
+                                      # (lat >> 8) & 0xFF,
+                                      # lon & 0xFF,
+                                      # (lon >> 8) & 0xFF,
+                                      # index_map[lat][lon] & 0xFF,
+                                      # (index_map[lat][lon] >> 8) & 0xFF])
 
-    # Save the locations to a file
-    with open(stations_map, "wb") as locations_file:
-        locations_file.write(index_bytes)
-        logging.info(f"Saving map {stations_map}")
+    # # Save the locations to a file
+    # with open(stations_map, "wb") as locations_file:
+        # locations_file.write(index_bytes)
+        # logging.info(f"Saving map {stations_map}")
 
 
-def Load_Map(filename: str) -> list:
-    # Load the map data file
-    index_bytes = None
-    try:
-        with open(filename, "rb") as map_file:
-            index_bytes = map_file.read()
-            logging.debug(f"{filename} loaded...")
-    except FileNotFoundError:
-        logging.debug(f"{filename} not found")
+# def Load_Map(filename: str) -> list:
+    # # Load the map data file
+    # index_bytes = None
+    # try:
+        # with open(filename, "rb") as map_file:
+            # index_bytes = map_file.read()
+            # logging.debug(f"{filename} loaded...")
+    # except FileNotFoundError:
+        # logging.debug(f"{filename} not found")
 
-    # Ensure index_map is empty first
-    index_map = [[0xFFFF for longd in range(0, ENCODER_RESOLUTION)] for lat in range(0, ENCODER_RESOLUTION)]
+    # # Ensure index_map is empty first
+    # index_map = [[0xFFFF for longd in range(0, ENCODER_RESOLUTION)] for lat in range(0, ENCODER_RESOLUTION)]
 
-    # Load the locations from the data file - each is represented by 6 bytes as detailed in Save_Map
-    byte = 0
-    while byte < len(index_bytes):
-        lat = (index_bytes[byte + 1] << 8) | index_bytes[byte]
-        lon = (index_bytes[byte + 3] << 8) | index_bytes[byte + 2]
-        value = (index_bytes[byte + 5] << 8) | index_bytes[byte + 4]
-        byte += 6
-        index_map[lat][lon] = value
-    return index_map
+    # # Load the locations from the data file - each is represented by 6 bytes as detailed in Save_Map
+    # byte = 0
+    # while byte < len(index_bytes):
+        # lat = (index_bytes[byte + 1] << 8) | index_bytes[byte]
+        # lon = (index_bytes[byte + 3] << 8) | index_bytes[byte + 2]
+        # value = (index_bytes[byte + 5] << 8) | index_bytes[byte + 4]
+        # byte += 6
+        # index_map[lat][lon] = value
+    # return index_map
 
 
 def Save_Calibration(latitude: int, longitude: int):
@@ -214,22 +263,22 @@ if __name__ == "__main__":
     logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
     logging.getLogger().setLevel(logging.DEBUG)
 
-    global_map = index_globe()
+    # global_map = index_globe()
 
-    MIN_COORDS = (ENCODER_RESOLUTION // 2, 0)
-    index = get_global_index(global_map, MIN_COORDS)
-    print(f"MIN: {MIN_COORDS}, INDEX: {index}")
+    # MIN_COORDS = (ENCODER_RESOLUTION // 2, 0)
+    # index = get_global_index(global_map, MIN_COORDS)
+    # print(f"MIN: {MIN_COORDS}, INDEX: {index}")
 
-    MAX_COORDS = (ENCODER_RESOLUTION - 1, ENCODER_RESOLUTION - 1)
-    index = get_global_index(global_map, MAX_COORDS)
-    print(f"MAX: {MAX_COORDS}, INDEX: {index}")
+    # MAX_COORDS = (ENCODER_RESOLUTION - 1, ENCODER_RESOLUTION - 1)
+    # index = get_global_index(global_map, MAX_COORDS)
+    # print(f"MAX: {MAX_COORDS}, INDEX: {index}")
 
-    ORIGIN = (ENCODER_RESOLUTION // 2, ENCODER_RESOLUTION // 2)
-    index = get_global_index(global_map, ORIGIN)
-    print(f"ORIGIN: {ORIGIN}, INDEX: {index}")
+    # ORIGIN = (ENCODER_RESOLUTION // 2, ENCODER_RESOLUTION // 2)
+    # index = get_global_index(global_map, ORIGIN)
+    # print(f"ORIGIN: {ORIGIN}, INDEX: {index}")
 
-    cities_list = index_cities(radio_config.STATIONS_JSON)
-    print(cities_list)
+    # cities_list = index_cities(radio_config.STATIONS_JSON)
+    # print(cities_list)
 
     stations_data = Load_Stations(radio_config.STATIONS_JSON)
     city_map = build_map(stations_data)
@@ -237,8 +286,10 @@ if __name__ == "__main__":
         if len(v) > 1:
             print(k, v)
 
-    coords_list = look_around((609, 178), 2)
-    coords_list = look_around((609, 178), 3)
+    search_area = look_around((609, 178), 2)
+    # search_area = look_around((609, 178), 3)
+
+    result = get_found_stations(search_area, city_map, stations_data)
 
     # stations_dict = Load_Stations(radio_config.STATIONS_JSON)
     # Get_Location_By_Index(0, radio_config.STATIONS_JSON)
