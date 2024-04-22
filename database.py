@@ -63,31 +63,6 @@ def index_cities(stations_json: str) -> dict:
     return cities_list
 
 
-def cities_map(stations_data: dict) -> dict:
-    # Parse every location
-    cities_index = {}
-    for location in stations_data:
-        # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
-        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
-        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
-
-        location_list = []
-        city_coords = (latitude, longitude)
-        if city_coords not in cities_index:
-            location_list.append(location)
-            cities_index[city_coords] = location_list
-        else:
-            cities_index[city_coords].append(location)
-        # # Reduce number of locations we need to process
-        # if city_coords in global_map:
-            # # print(location, city_coords)
-            # location_list.append(city_coords)
-    for k, v in cities_index.items():
-        if len(v) > 1:
-            print(k, v)
-    return cities_index
-
-
 def Get_Location_By_Index(index: int, stations_data: dict):
     # stations_data = Load_Stations(radio_config.STATIONS_JSON)
     for idx, location in enumerate(stations_data):
@@ -109,15 +84,33 @@ def get_checksum(filename: str) -> str:
     return checksum
 
 
+def build_map(stations_data: dict) -> dict:
+    """Map each encoder location to list of cities (Stations DB key) for that location.
+    Each location can have one or more cites eg:
+    {(609, 178): ['Riverside,US-CA', 'San Bernardino,US-CA'], ...}"""
+    cities_index = {}
+    for location in stations_data:
+        # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
+        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
+        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
+
+        location_list = []
+        city_coords = (latitude, longitude)
+        if city_coords not in cities_index:
+            location_list.append(location)
+            cities_index[city_coords] = location_list
+        else:
+            cities_index[city_coords].append(location)
+
+    return cities_index
+
+
 def Build_Map(stations_data: dict, stations_map: str):
     """Make a map representing every possible coordinate, with a 2-byte address for looking up the city, which
     allows looking up the stations from the regular database.  This reduces the memory required to hold the map
     to 2 MiB RAM and because the empty space is all 0xFF it can be compressed very easily if desired to just the
     locations"""
     index_map = [[0xFFFF for longd in range(0, ENCODER_RESOLUTION)] for lat in range(0, ENCODER_RESOLUTION)]
-
-    # Load stations database
-    # stations_data = Load_Stations(stations_json)
 
     # Parse every location
     for idx, location in enumerate(stations_data):
@@ -210,8 +203,10 @@ if __name__ == "__main__":
     print(cities_list)
 
     stations_data = Load_Stations(radio_config.STATIONS_JSON)
-    city_map = cities_map(stations_data)
-    # print(city_map)
+    city_map = build_map(stations_data)
+    for k, v in city_map.items():
+        if len(v) > 1:
+            print(k, v)
 
     # stations_dict = Load_Stations(radio_config.STATIONS_JSON)
     # Get_Location_By_Index(0, radio_config.STATIONS_JSON)
