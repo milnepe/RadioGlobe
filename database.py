@@ -14,7 +14,7 @@ def index_globe() -> dict:
     """Return an indexed map of all possible coordinates returned by the encoders
     The map is a dict where the key is the lat / long tuple
     returned by the encoders position on the globe
-    The Origin is {(5125, 512): 512, ...}"""
+    The Origin is {(512, 512): 512, ...}"""
 
     index_list = []
     # Generate map ENCODER_RESOLUTION x ENCODER_RESOLUTION / 2
@@ -103,6 +103,35 @@ def build_map(stations_data: dict) -> dict:
             cities_index[city_coords].append(location)
 
     return cities_index
+
+
+def look_around(origin: tuple, fuzziness: int) -> list:
+    """Return a list of lat, long pairs arround for the origin coords.
+    Fuzziness increases the area surrounding the origin.
+
+    For example:
+    fuzziness 2 returns the surrounding 9 locations,
+    fuzziness 3 returns the surrounding 25 locations"""
+
+    search_coords = []
+    latitude, longitude = origin
+
+    # Work out how big the perimeter is for each layer out from the origin
+    ODD_NUMBERS = [((i * 2) + 1) for i in range(0, fuzziness)]
+
+    # With each 'layer' of fuzziness we need a starting point.  70% of people are right-eye dominant and
+    # the globe is likely to be below the user, so go down and left first then scan horizontally, moving up
+    for layer in range(0, fuzziness):
+        for y in range(0, ODD_NUMBERS[layer]):
+            for x in range(0, ODD_NUMBERS[layer]):
+                coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
+                coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
+                exp_coords = (coord_x, coord_y)
+                if exp_coords not in search_coords:
+                    search_coords.append(exp_coords)
+
+    logging.debug(f"Search area: {search_coords}")
+    return search_coords
 
 
 def Build_Map(stations_data: dict, stations_map: str):
@@ -207,6 +236,9 @@ if __name__ == "__main__":
     for k, v in city_map.items():
         if len(v) > 1:
             print(k, v)
+
+    coords_list = look_around((609, 178), 2)
+    coords_list = look_around((609, 178), 3)
 
     # stations_dict = Load_Stations(radio_config.STATIONS_JSON)
     # Get_Location_By_Index(0, radio_config.STATIONS_JSON)
