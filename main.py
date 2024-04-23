@@ -25,8 +25,6 @@ state_entry = True
 ui_manager = UI_Manager()
 streamer = Streamer(audio=radio_config.AUDIO_SERVICE)
 
-# stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
-
 
 def Back_To_Tuning():
     global state

@@ -5,6 +5,11 @@ import vlc
 import subprocess
 
 
+# Edit these to suit your audio settings
+AUDIO_CARD = 2
+MIXER_CONTROL = "PCM"
+
+
 class Streamer():
     """
     A streaming audio player using python-vlc
@@ -57,7 +62,7 @@ class Streamer():
         elif volume < 0:
             volume = 0
         # Unfortunately MediaListPlayer doesn't have a volume control so this is a hack
-        command = ["amixer", "sset", "-c", "2", "PCM", "{}%".format(volume)]
+        command = ["amixer", "sset", "-c", "{}".format(AUDIO_CARD), "{}".format(MIXER_CONTROL), "{}%".format(volume)]
         logging.debug(f"Command: {command}")
         subprocess.run(command)
         logging.debug(f"Setting volume: {volume}%")
