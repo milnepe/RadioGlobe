@@ -2,6 +2,7 @@
 import time
 import logging
 import vlc
+import subprocess
 
 
 class Streamer():
@@ -15,8 +16,10 @@ class Streamer():
         self.url = url
         self.instance = vlc.Instance()
         self.media = None
-        self.mediaplayer = None
+        self.mediaplayer = self.instance.media_player_new()
         self.is_playing = False
+        # self.mediaplayer.audio_set_volume(100)  # default volume
+        # self.volume = self.mediaplayer.audio_get_volume()
 
     def play(self, url):
         playlists = set(['pls', 'm3u'])
@@ -46,6 +49,19 @@ class Streamer():
     def stop(self):
         self.is_playing = False
         self.mediaplayer.stop()
+
+    def set_volume(self, volume: int) -> int:
+        """Return the volume, so that the caller doesn't have to handle capping to 0-100"""
+        if volume > 100:
+            volume = 100
+        elif volume < 0:
+            volume = 0
+        # Unfortunately MediaListPlayer doesn't have a volume control so this is a hack
+        command = ["amixer", "sset", "-c", "2", "PCM", "{}%".format(volume)]
+        logging.debug(f"Command: {command}")
+        subprocess.run(command)
+        logging.debug(f"Setting volume: {volume}%")
+        return volume
 
 
 if __name__ == "__main__":

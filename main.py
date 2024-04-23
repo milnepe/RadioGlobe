@@ -13,7 +13,7 @@ from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
 
-VOLUME_INCREMENT = 5
+VOLUME_INCREMENT = 1
 
 state = "start"
 volume_display = False
