@@ -1,5 +1,6 @@
 import time
 import threading
+import subprocess
 import logging
 
 # from python-vlc-streaming import Streamer, set_volume
@@ -68,7 +69,7 @@ def Process_UI_Events():
         elif event[0] == "Volume":
             if event[1] == 1:
                 volume += VOLUME_INCREMENT
-                # volume = set_volume(volume)
+                volume = streamer.set_volume(volume)
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
                 rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -78,7 +79,7 @@ def Process_UI_Events():
                     Back_To_Tuning()
                 else:
                     volume -= VOLUME_INCREMENT
-                    # volume = set_volume(volume)
+                    volume = streamer.set_volume(volume)
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -160,7 +161,8 @@ while True:
             coords_lat, coords_long = encoders_thread.get_readings()
             logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
             search_area = database.look_around((coords_lat, coords_long), fuzziness=radio_config.FUZZINESS)
-            location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area, city_map, stations_data)
+            location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area,
+                                                                                                      city_map, stations_data)
             if location_name != "":
                 encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
                 logging.debug("Latched...")
