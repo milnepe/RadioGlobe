@@ -89,13 +89,14 @@ card 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 H
   Subdevice #6: subdevice #6
   Subdevice #7: subdevice #7
 ```
+
 To output audio to the headphone socket in this case, set the default to card 2.
 Edit or create a file `/etc/asound.conf` or `~/.asound.conf` containing the following settings according to which card you want as default, then reboot:
 ```
 defaults.pcm.card 2
 defaults.pcm.device 2
 ```
-Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use `Ctl-C to exit`
+Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use Ctl-C to exit.
 5. Set debugging on in `radio_config.py` and follow the journal - note there are pulse errors which can be ignored:
 ```
 $ sudo journalctl -u radioglobe.service -f
