@@ -40,4 +40,4 @@ sed -i "s/USER/${USER}/g" services/*.service
 sudo cp services/*.service /etc/systemd/system
 sudo systemctl daemon-reload
 sudo systemctl enable radioglobe.service
-sudo systemctl start radioglobe.service
+sudo systemctl restart radioglobe.service
