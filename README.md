@@ -44,7 +44,7 @@ At this point the RadioGlobe should start automatically.
 $ cd ~
 $ cp RadioGlobe RadioGlobe.old
 ```
-2. Follow installation instructions above. The installer supports Bookwork and Bullseye OS versions.
+2. Follow installation instructions above. The installer supports Bookworm and Bullseye OS versions.
 
 ## Calibration
 1. When starting for the first time the RadioGlobe encoders need to be calibrated. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines then press and hold the middle button until the LED flashes Green and the display shows "Calibrated".
@@ -59,25 +59,16 @@ Use `raspi-config` from an SSH session to configure WiFi once everything is work
    enter your SSID (network name) and WiFi password.
 
 ## Troubleshooting
-1. Run installer with -x to see any installations issues:
+SSH in to your device or open Terminal on the desktop.
+1. Re-run the installer with -x to see any installation issues:
 ```
 $ bash -x install.sh
 ```
 2. Check SPI and I2C are enabled in raspi-config - this can be changed by updates!
-3. SSH in and check radioglobe.service: `systemctl status radioglobe.service`
+3. Check radioglobe.service for clues: `systemctl status radioglobe.service`
 4. No audio output
-After experimenting with the Desktop OS version I found that setting the default target to multi-user.target would no longer output sound. This was fixed by creating a config file:
-```
-$ sudo vi /etc/asound.conf
-```
-with the following number according to the required sound card:
-```
-$ cat /etc/asound.conf
-defaults.pcm.card 2
-defaults.pcm.device 2
-```
-
-The card settings can be found with:
+The default sound card is usually card 0. This may need setting to a different device depending on your setup.
+List the sound card numbers with:
 ```
 $ aplay -l
 **** List of PLAYBACK Hardware Devices ****
@@ -97,7 +88,14 @@ card 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 H
   Subdevice #5: subdevice #5
   Subdevice #6: subdevice #6
   Subdevice #7: subdevice #7
-  ```
+```
+To output audio to the headphone socket in this case, set the default to card 2.
+Edit or create a file `/etc/asound.conf` or `~/.asound.conf` containing the following settings according to which card you want as default, then reboot:
+```
+defaults.pcm.card 2
+defaults.pcm.device 2
+```
+Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use `Ctl-C to exit`
 5. Set debugging on in `radio_config.py` and follow the journal - note there are pulse errors which can be ignored:
 ```
 $ sudo journalctl -u radioglobe.service -f
