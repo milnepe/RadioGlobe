@@ -8,6 +8,7 @@ import subprocess
 # Edit these to suit your audio settings
 AUDIO_CARD = 2
 MIXER_CONTROL = "PCM"
+AUDIO_SERVICE = "alsa"
 
 
 class Streamer():
@@ -15,7 +16,7 @@ class Streamer():
     A streaming audio player using python-vlc
     This improves handling of media list (pls and m3u's) streams
     """
-    def __init__(self, audio='alsa', url=None):
+    def __init__(self, audio=AUDIO_SERVICE, url=None):
         logging.debug(f"Starting Streamer: {audio}, {url}")
         self.audio = audio
         self.url = url

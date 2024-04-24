@@ -23,7 +23,7 @@ last_jog = 0
 state_entry = True
 
 ui_manager = UI_Manager()
-streamer = Streamer(audio=radio_config.AUDIO_SERVICE)
+streamer = Streamer()
 
 
 def Back_To_Tuning():
