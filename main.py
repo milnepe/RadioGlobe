@@ -3,7 +3,6 @@ import threading
 import subprocess
 import logging
 
-# from python-vlc-streaming import Streamer, set_volume
 from streaming.python_vlc_streaming import Streamer
 import database
 import radio_config
@@ -12,8 +11,6 @@ from positional_encoders import *
 from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
-
-VOLUME_INCREMENT = 1
 
 state = "start"
 volume_display = False
@@ -66,22 +63,20 @@ def Process_UI_Events():
 
         elif event[0] == "Volume":
             if event[1] == 1:
-                volume += VOLUME_INCREMENT
-                volume = streamer.set_volume(volume)
+                volume = streamer.set_volume(volume, "up")
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
                 rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                print(("Volume up: {}%").format(volume))
+                logging.debug(f"Volume up: {volume}%")
             elif event[1] == -1:
                 if state == "shutdown_confirm":
                     Back_To_Tuning()
                 else:
-                    volume -= VOLUME_INCREMENT
-                    volume = streamer.set_volume(volume)
+                    volume = streamer.set_volume(volume, "down")
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                    print(("Volume down: {}%").format(volume))
+                    logging.debug(f"Volume down: {volume}%")
 
         elif event[0] == "Random":
             print("Toggle jog mode - not implemented")

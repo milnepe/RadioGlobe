@@ -9,6 +9,7 @@ import subprocess
 AUDIO_CARD = 2
 MIXER_CONTROL = "PCM"
 AUDIO_SERVICE = "alsa"
+VOLUME_INCREMENT = 1
 
 
 class Streamer():
@@ -56,11 +57,15 @@ class Streamer():
         self.is_playing = False
         self.mediaplayer.stop()
 
-    def set_volume(self, volume: int) -> int:
-        """Return the volume, so that the caller doesn't have to handle capping to 0-100"""
-        if volume > 100:
+    def set_volume(self, volume: int, cmd: str) -> int:
+        """Set volume up or down"""
+        if cmd == "up":
+            volume += VOLUME_INCREMENT
+        else:  # down
+            volume -= VOLUME_INCREMENT
+        if volume >= 100:
             volume = 100
-        elif volume < 0:
+        elif volume <= 0:
             volume = 0
         # Unfortunately MediaListPlayer doesn't have a volume control so this is a hack
         command = ["amixer", "sset", "-c", "{}".format(AUDIO_CARD), "{}".format(MIXER_CONTROL), "{}%".format(volume)]
