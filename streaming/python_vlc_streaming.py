@@ -25,6 +25,8 @@ class Streamer():
         self.media = None
         self.mediaplayer = self.instance.media_player_new()
         self.is_playing = False
+        self.volume = 80
+        self.update_volume("down")
         # self.mediaplayer.audio_set_volume(100)  # default volume
         # self.volume = self.mediaplayer.audio_get_volume()
 
@@ -57,8 +59,9 @@ class Streamer():
         self.is_playing = False
         self.mediaplayer.stop()
 
-    def set_volume(self, volume: int, cmd: str) -> int:
+    def update_volume(self, cmd: str):
         """Set volume up or down"""
+        volume = self.volume
         if cmd == "up":
             volume += VOLUME_INCREMENT
         else:  # down
@@ -71,8 +74,8 @@ class Streamer():
         command = ["amixer", "sset", "-c", "{}".format(AUDIO_CARD), "{}".format(MIXER_CONTROL), "{}%".format(volume)]
         logging.debug(f"Command: {command}")
         subprocess.run(command)
+        self.volume = volume
         logging.debug(f"Setting volume: {volume}%")
-        return volume
 
 
 if __name__ == "__main__":

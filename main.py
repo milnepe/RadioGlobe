@@ -14,7 +14,6 @@ from scheduler import Scheduler
 
 state = "start"
 volume_display = False
-volume = 95
 jog = 0
 last_jog = 0
 state_entry = True
@@ -41,7 +40,6 @@ def Clear_Volume_Display():
 def Process_UI_Events():
     global state
     global state_entry
-    global volume
     global volume_display
     global jog
     global ui_manager
@@ -63,20 +61,18 @@ def Process_UI_Events():
 
         elif event[0] == "Volume":
             if event[1] == 1:
-                volume = streamer.set_volume(volume, "up")
+                streamer.update_volume("up")
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
                 rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                logging.debug(f"Volume up: {volume}%")
             elif event[1] == -1:
                 if state == "shutdown_confirm":
                     Back_To_Tuning()
                 else:
-                    volume = streamer.set_volume(volume, "down")
+                    streamer.update_volume("down")
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
-                    logging.debug(f"Volume down: {volume}%")
 
         elif event[0] == "Random":
             print("Toggle jog mode - not implemented")
@@ -162,7 +158,7 @@ while True:
                 state = "playing"
                 state_entry = True
             if volume_display:
-                volume_disp = volume
+                volume_disp = streamer.volume
             else:
                 volume_disp = 0
 
@@ -204,7 +200,7 @@ while True:
         # Idle operation - just keep display updated
         else:
             if volume_display:
-                volume_disp = volume
+                volume_disp = streamer.volume
             else:
                 volume_disp = 0
 
