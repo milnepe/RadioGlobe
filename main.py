@@ -130,8 +130,6 @@ rgb_led.start()
 scheduler = Scheduler(50, "SCHEDULER")
 scheduler.start()
 
-# set_volume(volume)
-
 while True:
     if state == "start":
         # Entry - setup state
@@ -143,7 +141,8 @@ while True:
                 line_2="Made for DesignSpark",
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne")
-            scheduler.attach_timer(Back_To_Tuning, 3)
+            # Allow time to get network
+            scheduler.attach_timer(Back_To_Tuning, 20)
 
     elif state == "tuning":
         logging.debug(f"State, {state}")
