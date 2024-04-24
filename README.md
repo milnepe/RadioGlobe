@@ -1,4 +1,4 @@
-# Radioglobe
+# RadioGlobe
 First, install Raspberry Pi OS Bookworm (recommended) or Bullseye (legacy) onto a 16MB microSD card and make sure you have a working OS.
 
 If using Raspberry Pi Imager use the configure cog to set SSH ON and set your default user/password. 
@@ -26,7 +26,7 @@ For initial tests we recommend connecting to your network with an Ethernet cable
 
 The installer supports Bookworm and Bullseye OS versions.
 
-The install script no longer relies on username pi. It will install the Python scripts into your default users home directory and configure the systemd services according to your chosen username.
+The install script no longer relies on username pi. It will install the Python scripts into your default users home directory and configure the systemd services according to your chosen username. It also now puts all required Python packages in a virtual environment within the RadioGlobe directory.
 
 From an SSH terminal:
 1. Run `sudo raspi-config`
@@ -57,6 +57,14 @@ Use `raspi-config` from an SSH session to configure WiFi once everything is work
 1. If you want to use WiFi, go to 'Localisation Options', then 'Enter WLAN Country' where you can select your country.
    HINT: United Kingdom is GB!  Press Esc to return to the main menu then go to 'Network Options' > 'Wireless LAN' and
    enter your SSID (network name) and WiFi password.
+
+## Audio
+Audio settings are now in `RadioGlobe/streaming/python_vlc_streaming.py` which uses python-vlc. Audio settings seem to move about with different OS versions so we don't try to detect the audio settings.
+Edit the settings at the top of the file to suit your audio settings. On a default Raspi OS Bookworm the Headphone card is `2` and the asound.conf settings are required to make this the default alsa output device (See `Troubleshooting`) 
+```
+AUDIO_CARD = 2
+MIXER_CONTROL = "PCM"
+```
 
 ## Troubleshooting
 SSH in to your device or open Terminal on the desktop.
@@ -96,7 +104,7 @@ Edit or create a file `/etc/asound.conf` or `~/.asound.conf` containing the foll
 defaults.pcm.card 2
 defaults.pcm.device 2
 ```
-Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use Ctl-C to exit
+Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use Ctrl-C to exit
 
 5. Set debugging on in `radio_config.py` and follow the journal - note there are pulse errors which can be ignored:
 ```
