@@ -1,0 +1,95 @@
+{
+  "London,GB": {
+    "href": "https://radiomap.eu/uk/london.htm",
+    "coords": {
+      "n": 51.5072,
+      "e": -0.1275
+    },
+    "urls": [
+      {
+        "name": "BBC Radio Oxford",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_oxford&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio 1",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_one&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio 2",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio 3",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_three&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio 4",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_fourfm&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio London",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_london&bitrate=320000"
+      },
+      {
+        "name": "BBC Radio 5 live",
+        "url": "http://lstn.lv/bbc.m3u8?station=bbc_radio_five_live_sports_extra&bitrate=320000"
+      },
+      {
+        "name": "NuSound Radio",
+        "url": "http://icecast.commedia.org.uk:8000/nusound.mp3.m3u"
+      },
+      {
+        "name": "Revive FM",
+        "url": "https://streaming.broadcastradio.com:10015/revive"
+      },
+      {
+        "name": "Capital (London)",
+        "url": "https://media-ice.musicradio.com/CapitalMP3.m3u"
+      },
+      {
+        "name": "Capital Xtra (London)",
+        "url": "https://media-ice.musicradio.com/CapitalXTRALondonMP3.m3u"
+      },
+      {
+        "name": "LBC (London)",
+        "url": "https://media-ice.musicradio.com/LBCLondonMP3Low.m3u"
+      },
+      {
+        "name": "KISS 100",
+        "url": "http://stream-kiss.planetradio.co.uk/kiss100.mp3"
+      },
+      {
+        "name": "Classic FM",
+        "url": "https://media-ice.musicradio.com/ClassicFMMP3.m3u"
+      },
+      {
+        "name": "Flex FM",
+        "url": "http://142.4.215.64:8116/listen.pls?sid=1"
+      },
+      {
+        "name": "Smooth Radio (London)",
+        "url": "https://media-ice.musicradio.com/SmoothLondonMP3.m3u"
+      },
+      {
+        "name": "London Greek Radio",
+        "url": "http://live3.istoikona.net:8203/stream.m3u"
+      },
+      {
+        "name": "The Beat",
+        "url": "https://stream.zeno.fm/x59sz6hkev8uv"
+      },
+      {
+        "name": "Resonance FM",
+        "url": "http://stream.resonance.fm:8000/resonance.m3u"
+      },
+      {
+        "name": "Radio X",
+        "url": "https://media-ice.musicradio.com/RadioXLondonMP3.m3u"
+      },
+      {
+        "name": "Magic Radio (London)",
+        "url": "https://stream-mz.planetradio.co.uk/magic1054.mp3"
+      }
+    ]
+  }
+}

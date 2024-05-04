@@ -1,0 +1,23 @@
+{
+  "Perth,AU": {
+    "href": "https://worldradiomap.com/au/perth.htm",
+    "coords": {
+      "n": -31.9559,
+      "e": 115.8606
+    },
+    "urls": [
+      {
+        "name": "6PPM Triple M Perth",
+        "url": "https://wz6liw.scahw.com.au/live/6ppm_128.stream/playlist.m3u8"
+      },
+      {
+        "name": "6PER Nova 93.7",
+        "url": "https://playerservices.streamtheworld.com/pls/NOVA_937_AAC48.pls"
+      },
+      {
+        "name": "6SON Sonshine FM",
+        "url": "http://stream2.cnmns.net/sfm-mp3"
+      }
+    ]
+  }
+}
