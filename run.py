@@ -140,6 +140,7 @@ AUDIO_DEVICE = "UE BOOM 2"
 
 
 class Streamer:
+    '''Streamer that handles audio media and playlists'''
 
     def __init__(self):
         self.mp = vlc.MediaPlayer()
@@ -148,6 +149,8 @@ class Streamer:
         print_audio_devices(self.mp)
         self.set_audio_device(self.mp, AUDIO_DEVICE)
         self.set_audio_device(self.mlp, AUDIO_DEVICE)
+        self.p = self.mp  # Cache current player
+        self.v = 80  # Volume cache
 
     def set_audio_device(self, player, device_name):
         if isinstance(player, vlc.MediaListPlayer):
@@ -164,38 +167,40 @@ class Streamer:
             player.audio_output_device_set(None, device)
 
     def play(self, url):
-        playlists = set(['pls'])
+        if self.p and self.p.is_playing():
+            self.p.stop()
+
+        playlists = set(['m3u', 'pls'])
         url = url.strip()
         logging.debug(f"Playing URL {url}")
 
-        p = None
         # We need a different type of media instance for urls containing playlists
         extension = (url.rpartition(".")[2])[:3]
         logging.debug(f"URL extension: {extension}")
 
         if extension in playlists:
-            logging.debug(f"Setting MediaListPlayer: {mlp_url}")
+            logging.debug(f"Setting MediaListPlayer: {url}")
             ml = vlc.MediaList()
-            ml.add_media(mlp_url)
-            streamer.mlp.set_media_list(ml)
-            p = streamer.mlp
+            ml.add_media(url)
+            self.mlp.set_media_list(ml)
+            self.p = self.mlp  # Cache player
         else:
             logging.debug(f"Setting MediaPlayer: {url}")
             m = vlc.Media(url)
-            streamer.mp.set_media(m)
-            p = streamer.mp
+            self.mp.set_media(m)
+            self.p = self.mp
 
         print("Playing...")
-        p.play()
-        if isinstance(p, vlc.MediaListPlayer):
-            # Get the media play associated with this MediaListPlayer
-            p = p.get_media_player()
+        self.set_volume(self.v)
+        self.p.play()
 
-        # Increase volume gradually
-        for v in range(50, 90, 10):
-            p.audio_set_volume(v)
-            time.sleep(2)
-        p.stop()
+    def set_volume(self, vol):
+        '''Set volume on both players'''
+        p = self.mlp.get_media_player()
+        p.audio_set_volume(vol)
+        
+        self.mp.audio_set_volume(vol)
+        self.v = vol
 
 
 def main():
@@ -204,48 +209,23 @@ def main():
     city_map = database.build_map(stations_data)
     encoder_offsets = database.Load_Calibration()
 
-    url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
+    kiss_url = "http://stream-kiss.planetradio.co.uk/kiss100.mp3"
+    bbc_url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
     # MediaListPlayer required to play this media list
-    mlp_url = "http://142.4.215.64:8116/listen.pls?sid=1"
+    flex_url = "http://142.4.215.64:8116/listen.pls?sid=1"
 
     streamer = Streamer()
 
-    # playlists = set(['pls'])
-    # url = url.strip()
-    # logging.debug(f"Playing URL {url}")
+    # Play list
+    urls = [kiss_url, bbc_url, flex_url]
 
-    # # Play list
-    # urls = [url, mlp_url]
-
-    # for url in urls:
-        # p = None
-        # # We need a different type of media instance for urls containing playlists
-        # extension = (url.rpartition(".")[2])[:3]
-        # logging.debug(f"URL extension: {extension}")
-
-        # if extension in playlists:
-            # logging.debug(f"Setting MediaListPlayer: {mlp_url}")
-            # ml = vlc.MediaList()
-            # ml.add_media(mlp_url)
-            # streamer.mlp.set_media_list(ml)
-            # p = streamer.mlp
-        # else:
-            # logging.debug(f"Setting MediaPlayer: {url}")
-            # m = vlc.Media(url)
-            # streamer.mp.set_media(m)
-            # p = streamer.mp
-
-        # print("Playing...")
-        # p.play()
-        # if isinstance(p, vlc.MediaListPlayer):
-            # # Get the media play associated with this MediaListPlayer
-            # p = p.get_media_player()
-
-        # # Increase volume gradually
-        # for v in range(50, 90, 10):
-            # p.audio_set_volume(v)
-            # time.sleep(2)
-        # p.stop()
+    for url in urls:
+        streamer.play(url)
+        # Increase volume gradually
+        for v in range(50, 90, 10):
+            streamer.set_volume(v)
+            time.sleep(2)
+        streamer.p.stop()
 
     exit()
 
