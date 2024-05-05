@@ -135,8 +135,8 @@ def Process_UI_Events():
                 pass
 
 
-AUDIO_DEVICE = "UE BOOM 2"
-# AUDIO_DEVICE = "Built-in Audio Analog Stereo"
+# AUDIO_DEVICE = "UE BOOM 2"
+AUDIO_DEVICE = "Built-in Audio Analog Stereo"
 
 
 class Streamer:
@@ -148,12 +148,12 @@ class Streamer:
         # Set both players audio output device
         print_audio_devices(self.mp)
         self.set_audio_device(self.mp, AUDIO_DEVICE)
-        # self.set_audio_device(self.mlp, AUDIO_DEVICE)
+        self.set_audio_device(self.mlp, AUDIO_DEVICE)
         self.p = self.mp  # Cache current player
         self.v = 80  # Volume cache
         logging.debug(f"MediaPlayer player ID: {id(self.mp)}")
-        # logging.debug(f"MediaListPlayer player ID: {id(self.mlp.get_media_player())}")
-        # logging.debug(f"Current player ID: {id(self.p)}")
+        logging.debug(f"MediaListPlayer player ID: {id(self.mlp.get_media_player())}")
+        logging.debug(f"Current player ID: {id(self.p)}")
 
     def set_audio_device(self, player, device_name):
         if isinstance(player, vlc.MediaListPlayer):
@@ -170,46 +170,39 @@ class Streamer:
             player.audio_output_device_set(None, device)
 
     def play(self, url):
-        print("Playing...")
         if self.p and self.p.is_playing():
             self.p.stop()
-        time.sleep(2)  # Important! Allow player to finish
+        # time.sleep(2)  # Important! Allow player to finish
 
         playlists = ('m3u', 'pls')
         url = url.strip()
-        logging.debug(f"Playing URL {url}")
-
         # We need a different type of media instance for urls containing playlists
         extension = (url.rpartition(".")[2])[:3]
         logging.debug(f"URL extension: {extension}")
 
         if extension in playlists:
-            logging.debug(f"Setting MediaListPlayer: {url}")
+            self.p = self.mlp  # Cache player
             # self.mlp.set_media_player(self.mp)  # Use MediaPlayer!
             ml = vlc.MediaList()
             ml.add_media(url)
             self.mlp.set_media_list(ml)
-            self.p = self.mlp  # Cache player
+            logging.debug(f"MediaListPlayer ID: {id(self.p)}, {url}")
         else:
-            logging.debug(f"Setting MediaPlayer: {url}")
+            self.p = self.mp
             m = vlc.Media(url)
             self.mp.set_media(m)
-            self.p = self.mp
+            logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
 
-        logging.debug(f"Current player ID: {id(self.mp)}")
         self.p.play()
 
     def set_volume(self, vol):
-        if vol != self.v:
+        if self.v != vol:
             if isinstance(self.p, vlc.MediaListPlayer):
                 p = self.mlp.get_media_player()
-                logging.debug(f"MediaListPlayer volume: {p.audio_get_volume()}")
             else:
                 p = self.p
-                logging.debug(f"MediaPlayer volume: {self.mp.audio_get_volume()}")
-
+            logging.debug(f"Player ID: {id(p)}, Volume: {p.audio_get_volume()}")
             p.audio_set_volume(vol)
-            self.mp.audio_set_volume(vol)
             self.v = vol
 
 
