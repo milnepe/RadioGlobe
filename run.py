@@ -170,9 +170,9 @@ class Streamer:
             player.audio_output_device_set(None, device)
 
     def play(self, url):
-        if self.p and self.p.is_playing():
-            self.p.stop()
-        # time.sleep(2)  # Important! Allow player to finish
+        # if self.p and self.p.is_playing():
+            # self.p.stop()
+        # # time.sleep(2)  # Important! Allow player to finish
 
         playlists = ('m3u', 'pls')
         url = url.strip()
@@ -193,6 +193,10 @@ class Streamer:
             self.mp.set_media(m)
             logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
 
+        if self.mp and self.mp.is_playing():
+            self.mp.stop()
+        if self.mlp and self.mlp.is_playing():
+            self.mlp.stop()
         self.p.play()
 
     def set_volume(self, vol):
