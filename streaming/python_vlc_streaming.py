@@ -73,6 +73,12 @@ class Streamer:
             device = get_audio(player, "Built-in Audio Analog Stereo")
             player.audio_output_device_set(None, device)
 
+    def stop(self):
+        if self.mp and self.mp.is_playing():
+            self.mp.stop()
+        if self.mlp and self.mlp.is_playing():
+            self.mlp.stop()
+
     def play(self, url):
         playlists = ('m3u', 'pls')
         url = url.strip()
@@ -93,10 +99,11 @@ class Streamer:
             self.mp.set_media(m)
             logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
 
-        if self.mp and self.mp.is_playing():
-            self.mp.stop()
-        if self.mlp and self.mlp.is_playing():
-            self.mlp.stop()
+        # if self.mp and self.mp.is_playing():
+            # self.mp.stop()
+        # if self.mlp and self.mlp.is_playing():
+            # self.mlp.stop()
+        self.stop()
         self.p.play()
 
     def set_volume(self, vol):
@@ -109,9 +116,7 @@ class Streamer:
             p.audio_set_volume(vol)
             self.v = vol
 
-    # def stop(self):
-        # if self.player.is_playing:
-            # self.player.stop()
+
 
     # def update_volume(self, cmd: str):
         # """Set volume up or down"""

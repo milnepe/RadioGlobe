@@ -200,7 +200,7 @@ while True:
         elif not encoders_thread.is_latched():
             logging.debug("Unlatching...")
 
-            # streamer.stop()
+            streamer.stop()
             state = "tuning"
             state_entry = True
 
