@@ -28,10 +28,13 @@ def get_audio(p, device_name):
     For example "UE BOOM 2" for BT speaker
     or "Built-in Audio Analog Stereo" for speaker connected to audio jack
     '''
+    if isinstance(p, vlc.MediaListPlayer):
+        p = p.get_media_player()
     device = p.audio_output_device_enum()
     while device:
         if device.contents.description.decode('utf-8') == device_name:
-            logging.debug(f"Audio: {device.contents.description.decode('utf-8')}, {device.contents.device.decode('utf-8')}")
+            logging.debug("Audio output device")
+            logging.debug(f"Name: {device.contents.description.decode('utf-8')}, Device: {device.contents.device.decode('utf-8')}")
             return device.contents.device
 
         device = device.contents.next
@@ -42,6 +45,7 @@ def print_audio_devices(p):
     if isinstance(p, vlc.MediaListPlayer):
         p = p.get_media_player()
     device = p.audio_output_device_enum()
+    logging.info("Audio devices available")
     while device:
         logging.info(f"Name: {device.contents.description.decode('utf-8')}, Device: {device.contents.device.decode('utf-8')}")
         device = device.contents.next
@@ -131,6 +135,34 @@ def Process_UI_Events():
                 pass
 
 
+AUDIO_DEVICE = "UE BOOM 2"
+# AUDIO_DEVICE = "Built-in Audio Analog Stereo"
+
+
+class Streamer:
+
+    def __init__(self):
+        self.mp = vlc.MediaPlayer()
+        self.mlp = vlc.MediaListPlayer()
+        # Set both players audio output device
+        print_audio_devices(self.mp)
+        self.set_audio_device(self.mp, AUDIO_DEVICE)
+        self.set_audio_device(self.mlp, AUDIO_DEVICE)
+
+    def set_audio_device(self, player, device_name):
+        if isinstance(player, vlc.MediaListPlayer):
+            logging.info("Setting MediaListPlayer output...")
+            player = player.get_media_player()
+        else:
+            logging.info("Setting MediaPlayer output...")
+        if device := get_audio(player, device_name):
+            player.audio_output_device_set(None, device)
+        else:
+            # Use as fallback
+            device = get_audio(player, "Built-in Audio Analog Stereo")
+            player.audio_output_device_set(None, device)
+
+
 def main():
     # PROGRAM START
     stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
@@ -141,9 +173,7 @@ def main():
     # MediaListPlayer required to play this media list
     mlp_url = "http://142.4.215.64:8116/listen.pls?sid=1"
 
-    # Create MediaPlayers
-    mp = vlc.MediaPlayer()
-    mlp = vlc.MediaListPlayer()
+    streamer = Streamer()
 
     playlists = set(['pls'])
     url = url.strip()
@@ -156,23 +186,19 @@ def main():
         p = None
         # We need a different type of media instance for urls containing playlists
         extension = (url.rpartition(".")[2])[:3]
-        logging.debug(f"Extension: {extension}")
+        logging.debug(f"URL extension: {extension}")
 
         if extension in playlists:
-            logging.debug(f"Creating media_list_player...")
+            logging.debug(f"Setting MediaListPlayer: {mlp_url}")
             ml = vlc.MediaList()
             ml.add_media(mlp_url)
-            mlp.set_media_list(ml)
-            logging.debug(mlp_url)
-            p = mlp
+            streamer.mlp.set_media_list(ml)
+            p = streamer.mlp
         else:
+            logging.debug(f"Setting MediaPlayer: {url}")
             m = vlc.Media(url)
-            mp.set_media(m)
-            logging.debug(url)
-            p = mp
-
-        # List attached audio devices
-        print_audio_devices(p)
+            streamer.mp.set_media(m)
+            p = streamer.mp
 
         print("Playing...")
         p.play()
@@ -180,19 +206,13 @@ def main():
             # Get the media play associated with this MediaListPlayer
             p = p.get_media_player()
 
-        # Set primary audio output
-        if device := get_audio(p, "UE BOOM 2"):
-            p.audio_output_device_set(None, device)
-        else:
-            # Use as fallback
-            device = get_audio(p, "Built-in Audio Analog Stereo")
-            p.audio_output_device_set(None, device)
-
         # Increase volume gradually
         for v in range(50, 90, 10):
             p.audio_set_volume(v)
             time.sleep(2)
         p.stop()
+
+    exit()
 
     # Positional encoders - used to select latitude and longitude
     encoders_thread = Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
