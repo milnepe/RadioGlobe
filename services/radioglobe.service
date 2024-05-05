@@ -3,7 +3,7 @@ Description=Radioglobe Radio Service
 #Note replace USER with username - the install script will do this for you
 
 # Only start if system is configured
-ConditionPathExists=/home/USER/RadioGlobe/stations.json
+#ConditionPathExists=/home/USER/RadioGlobe/stations.json
 
 After=network.target
 Wants=network.target
