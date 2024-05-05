@@ -21,8 +21,8 @@ last_jog = 0
 state_entry = True
 
 
-# ui_manager = UI_Manager()
-# streamer = Streamer()
+ui_manager = UI_Manager()
+streamer = Streamer()
 
 
 def Back_To_Tuning():
@@ -60,7 +60,7 @@ def Process_UI_Events():
             elif event[1] == -1:
                 # Previous station
                 jog -= 1
-            print(jog)
+            # print(jog)
 
         elif event[0] == "Volume":
             if event[1] == 1:
@@ -78,7 +78,7 @@ def Process_UI_Events():
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
 
         elif event[0] == "Random":
-            print("Toggle jog mode - not implemented")
+            logging.info("Toggle jog mode - not implemented")
 
         elif event[0] == "Shutdown":
             state = "shutdown_confirm"
@@ -89,7 +89,7 @@ def Process_UI_Events():
             offsets = encoders_thread.zero()
             database.Save_Calibration(offsets[0], offsets[1])
             rgb_led.set_static("GREEN", timeout_sec=0.5, restore_previous_on_timeout=True)
-            print("Calibrated")
+            logging.info("Calibrated")
             display_thread.message(
                 line_1="",
                 line_2="Calibrated!",
@@ -105,186 +105,173 @@ def Process_UI_Events():
             else:
                 pass
 
+format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.getLogger().setLevel(logging.DEBUG)
 
-def main():
+logging.info("Staring RadioGlobe...")
+# def main():
+    # global state
+    # global state_entry
+    # global volume_display
+    # global encoders_thread
+    # global ui_manager
     # PROGRAM START
-    stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
-    city_map = database.build_map(stations_data)
-    encoder_offsets = database.Load_Calibration()
+stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
+city_map = database.build_map(stations_data)
+encoder_offsets = database.Load_Calibration()
 
-    kiss_url = "http://stream-kiss.planetradio.co.uk/kiss100.mp3"
-    classic_url = "https://media-ice.musicradio.com/ClassicFMMP3.m3u"
-    bbc_url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
-    # MediaListPlayer required to play this media list
-    flex_url = "http://142.4.215.64:8116/listen.pls?sid=1"
+# Positional encoders - used to select latitude and longitude
+encoders_thread = Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
+encoders_thread.start()
 
-    streamer = Streamer()
+display_thread = Display(3, "Display")
+display_thread.start()
 
-    # Play list
-    urls = [classic_url, kiss_url, bbc_url, flex_url]
+rgb_led = RGB_LED(20, "RGB_LED")
+rgb_led.start()
 
-    for url in urls:
-        streamer.play(url)
-        # time.sleep(10)
-        # Increase volume gradually
-        for v in range(50, 90, 10):
-            streamer.set_volume(v)
-            time.sleep(2)
-        # streamer.mp.stop()
+scheduler = Scheduler(50, "SCHEDULER")
+scheduler.start()
 
-    exit()
-
-    # Positional encoders - used to select latitude and longitude
-    encoders_thread = Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
-    encoders_thread.start()
-
-    display_thread = Display(3, "Display")
-    display_thread.start()
-
-    rgb_led = RGB_LED(20, "RGB_LED")
-    rgb_led.start()
-
-    scheduler = Scheduler(50, "SCHEDULER")
-    scheduler.start()
-
-    while True:
-        if state == "start":
-            # Entry - setup state
-            if state_entry:
-                state_entry = False
-                logging.debug(f"State, {state}")
-                display_thread.message(
-                    line_1="Radio Globe",
-                    line_2="Made for DesignSpark",
-                    line_3="Jude Pullen, Donald",
-                    line_4="Robson, Pete Milne")
-                # Allow time to get network
-                scheduler.attach_timer(Back_To_Tuning, 20)
-
-        elif state == "tuning":
+while True:
+    if state == "start":
+        # Entry - setup state
+        if state_entry:
+            state_entry = False
             logging.debug(f"State, {state}")
-            # Entry - setup state
-            if state_entry:
-                state_entry = False
-                rgb_led.set_blink("WHITE")
-                display_thread.clear()
+            display_thread.message(
+                line_1="Radio Globe",
+                line_2="Made for DesignSpark",
+                line_3="Jude Pullen, Donald",
+                line_4="Robson, Pete Milne")
+            # Allow time to get network
+            scheduler.attach_timer(Back_To_Tuning, 20)
 
-            # Normal operation
-            else:
-                # Look arround and gather station info in the search area
-                coords_lat, coords_long = encoders_thread.get_readings()
-                logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
-                search_area = database.look_around((coords_lat, coords_long), fuzziness=radio_config.FUZZINESS)
-                location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area,
-                                                                                                          city_map, stations_data)
-                if location_name != "":
-                    encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
-                    logging.debug("Latched...")
-                    # Stations found so start playing them otherwise stay tuning
-                    state = "playing"
-                    state_entry = True
-                if volume_display:
-                    volume_disp = 100
-                    # volume_disp = streamer.volume
-                else:
-                    volume_disp = 0
+    elif state == "tuning":
+        logging.debug(f"State, {state}")
+        # Entry - setup state
+        if state_entry:
+            state_entry = False
+            rgb_led.set_blink("WHITE")
+            display_thread.clear()
 
-                display_thread.update(latitude, longitude,
-                                      "Tuning...", volume_disp, "", False)
-
-        elif state == "playing":
-            # Entry - setup
-            if state_entry:
-                state_entry = False
-                jog = 0
-                last_jog = 0
-                rgb_led.set_static("RED", timeout_sec=3.0)
-
-                # Get display coordinates - from file, so there's no jumping about
-                latitude = stations_data[location_name]["coords"]["n"]
-                longitude = stations_data[location_name]["coords"]["e"]
-
-                # Play the top station
-                if url_list:
-                    print(url_list[jog])
-                    # streamer.play(url_list[jog])
-
-            # Exit back to tuning state if latch has 'come unstuck'
-            elif not encoders_thread.is_latched():
-                logging.debug("Unlatching...")
-
-                # streamer.stop()
-                state = "tuning"
-                state_entry = True
-
-            # If the jog dial is used, stop the stream and restart with the new url
-            elif jog != last_jog:
-                # Restrict the jog dial value to the bounds of stations_list
-                jog %= len(stations_list)
-                last_jog = jog
-                print(url_list[jog])
-                # streamer.play(url_list[jog])
-
-            # Idle operation - just keep display updated
-            else:
-                if volume_display:
-                    # volume_disp = streamer.volume
-                    volume_display = 100
-                else:
-                    volume_disp = 0
-
-                # Add arrows to the display if there is more than one station here
-                if len(stations_list) > 1:
-                    display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], True)
-                elif len(stations_list) == 1:
-                    display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], False)
-
-        elif state == "shutdown_confirm":
-            logging.debug(f"State, {state}")
-            if state_entry:
-                state_entry = False
-                display_thread.clear()
-                time.sleep(0.1)
-                display_thread.message(
-                    line_1="Really shut down?",
-                    line_2="<- Press mid button ",
-                    line_3="to confirm or",
-                    line_4="<- bottom to cancel.")
-
-                # Auto-cancel in 5s
-                scheduler.attach_timer(Back_To_Tuning, 5)
-
-        elif state == "shutdown":
-            logging.debug(f"State, {state}")
-            if state_entry:
-                state_entry = False
-                display_thread.clear()
-                time.sleep(0.1)
-                display_thread.message(
-                    line_1="Shutting down...",
-                    line_2="Please wait 10 sec",
-                    line_3="before disconnecting",
-                    line_4="power.")
-                subprocess.run(["sudo", "poweroff"])
-
+        # Normal operation
         else:
-            # Just in case!
+            # Look arround and gather station info in the search area
+            coords_lat, coords_long = encoders_thread.get_readings()
+            logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
+            search_area = database.look_around((coords_lat, coords_long), fuzziness=radio_config.FUZZINESS)
+            location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area,
+                                                                                                      city_map, stations_data)
+            if location_name != "":
+                encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
+                logging.debug("Latched...")
+                # Stations found so start playing them otherwise stay tuning
+                state = "playing"
+                state_entry = True
+            if volume_display:
+                volume_disp = 100
+                # volume_disp = streamer.volume
+            else:
+                volume_disp = 0
+
+            display_thread.update(latitude, longitude,
+                                  "Tuning...", volume_disp, "", False)
+
+    elif state == "playing":
+        # Entry - setup
+        if state_entry:
+            state_entry = False
+            jog = 0
+            last_jog = 0
+            rgb_led.set_static("RED", timeout_sec=3.0)
+
+            # Get display coordinates - from file, so there's no jumping about
+            latitude = stations_data[location_name]["coords"]["n"]
+            longitude = stations_data[location_name]["coords"]["e"]
+
+            # Play the top station
+            if url_list:
+                logging.debug(url_list[jog])
+                streamer.play(url_list[jog])
+
+        # Exit back to tuning state if latch has 'come unstuck'
+        elif not encoders_thread.is_latched():
+            logging.debug("Unlatching...")
+
+            # streamer.stop()
             state = "tuning"
+            state_entry = True
 
-        Process_UI_Events()
+        # If the jog dial is used, stop the stream and restart with the new url
+        elif jog != last_jog:
+            # Restrict the jog dial value to the bounds of stations_list
+            jog %= len(stations_list)
+            last_jog = jog
+            logging.debug(url_list[jog])
+            streamer.play(url_list[jog])
 
-        # Avoid unnecessarily high polling
-        time.sleep(0.2)
+        # Idle operation - just keep display updated
+        else:
+            if volume_display:
+                # volume_disp = streamer.volume
+                volume_display = 100
+            else:
+                volume_disp = 0
 
-    # Clean up threads
-    encoders_thread.join()
+            # Add arrows to the display if there is more than one station here
+            if len(stations_list) > 1:
+                display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], True)
+            elif len(stations_list) == 1:
+                display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], False)
+
+    elif state == "shutdown_confirm":
+        logging.debug(f"State, {state}")
+        if state_entry:
+            state_entry = False
+            display_thread.clear()
+            time.sleep(0.1)
+            display_thread.message(
+                line_1="Really shut down?",
+                line_2="<- Press mid button ",
+                line_3="to confirm or",
+                line_4="<- bottom to cancel.")
+
+            # Auto-cancel in 5s
+            scheduler.attach_timer(Back_To_Tuning, 5)
+
+    elif state == "shutdown":
+        logging.debug(f"State, {state}")
+        if state_entry:
+            state_entry = False
+            display_thread.clear()
+            time.sleep(0.1)
+            display_thread.message(
+                line_1="Shutting down...",
+                line_2="Please wait 10 sec",
+                line_3="before disconnecting",
+                line_4="power.")
+            subprocess.run(["sudo", "poweroff"])
+
+    else:
+        # Just in case!
+        state = "tuning"
+
+    Process_UI_Events()
+
+    # Avoid unnecessarily high polling
+    time.sleep(0.2)
+
+# Clean up threads
+encoders_thread.join()
 
 
-if __name__ == "__main__":
-    format = "%(asctime)s: %(message)s"
-    logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
-    logging.getLogger().setLevel(logging.DEBUG)
+# if __name__ == "__main__":
+    # format = "%(asctime)s: %(message)s"
+    # logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+    # logging.getLogger().setLevel(logging.DEBUG)
 
-    logging.debug("VLC media player test...")
+    # logging.info("Staring RadioGlobe...")
 
-    main()
+    # main()
