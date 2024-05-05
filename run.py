@@ -155,6 +155,7 @@ class Streamer:
             player = player.get_media_player()
         else:
             logging.info("Setting MediaPlayer output...")
+
         if device := get_audio(player, device_name):
             player.audio_output_device_set(None, device)
         else:
@@ -162,27 +163,11 @@ class Streamer:
             device = get_audio(player, "Built-in Audio Analog Stereo")
             player.audio_output_device_set(None, device)
 
+    def play(self, url):
+        playlists = set(['pls'])
+        url = url.strip()
+        logging.debug(f"Playing URL {url}")
 
-def main():
-    # PROGRAM START
-    stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
-    city_map = database.build_map(stations_data)
-    encoder_offsets = database.Load_Calibration()
-
-    url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
-    # MediaListPlayer required to play this media list
-    mlp_url = "http://142.4.215.64:8116/listen.pls?sid=1"
-
-    streamer = Streamer()
-
-    playlists = set(['pls'])
-    url = url.strip()
-    logging.debug(f"Playing URL {url}")
-
-    # Play list
-    urls = [url, mlp_url]
-
-    for url in urls:
         p = None
         # We need a different type of media instance for urls containing playlists
         extension = (url.rpartition(".")[2])[:3]
@@ -211,6 +196,56 @@ def main():
             p.audio_set_volume(v)
             time.sleep(2)
         p.stop()
+
+
+def main():
+    # PROGRAM START
+    stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
+    city_map = database.build_map(stations_data)
+    encoder_offsets = database.Load_Calibration()
+
+    url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
+    # MediaListPlayer required to play this media list
+    mlp_url = "http://142.4.215.64:8116/listen.pls?sid=1"
+
+    streamer = Streamer()
+
+    # playlists = set(['pls'])
+    # url = url.strip()
+    # logging.debug(f"Playing URL {url}")
+
+    # # Play list
+    # urls = [url, mlp_url]
+
+    # for url in urls:
+        # p = None
+        # # We need a different type of media instance for urls containing playlists
+        # extension = (url.rpartition(".")[2])[:3]
+        # logging.debug(f"URL extension: {extension}")
+
+        # if extension in playlists:
+            # logging.debug(f"Setting MediaListPlayer: {mlp_url}")
+            # ml = vlc.MediaList()
+            # ml.add_media(mlp_url)
+            # streamer.mlp.set_media_list(ml)
+            # p = streamer.mlp
+        # else:
+            # logging.debug(f"Setting MediaPlayer: {url}")
+            # m = vlc.Media(url)
+            # streamer.mp.set_media(m)
+            # p = streamer.mp
+
+        # print("Playing...")
+        # p.play()
+        # if isinstance(p, vlc.MediaListPlayer):
+            # # Get the media play associated with this MediaListPlayer
+            # p = p.get_media_player()
+
+        # # Increase volume gradually
+        # for v in range(50, 90, 10):
+            # p.audio_set_volume(v)
+            # time.sleep(2)
+        # p.stop()
 
     exit()
 
