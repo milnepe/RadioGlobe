@@ -2,15 +2,8 @@
 import time
 import logging
 import vlc
-import subprocess
-
-
-# Edit these to suit your audio settings
-AUDIO_CARD = 2
-MIXER_CONTROL = "PCM"
-AUDIO_DEVICE = "UE BOOM 2"
-# AUDIO_DEVICE = "Built-in Audio Analog Stereo"
-VOLUME_INCREMENT = 1
+from radio_config import AUDIO_DEVICE
+from radio_config import VOLUME_INCREMENT
 
 
 def get_audio(p, device_name):
@@ -99,10 +92,6 @@ class Streamer:
             self.mp.set_media(m)
             logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
 
-        # if self.mp and self.mp.is_playing():
-            # self.mp.stop()
-        # if self.mlp and self.mlp.is_playing():
-            # self.mlp.stop()
         self.stop()
         self.p.play()
 
@@ -116,29 +105,18 @@ class Streamer:
             p.audio_set_volume(vol)
             self.v = vol
 
-
-
-    # def update_volume(self, cmd: str):
-        # """Set volume up or down"""
-        # volume = self.volume
-        # if cmd == "up":
-            # volume += VOLUME_INCREMENT
-        # else:  # down
-            # volume -= VOLUME_INCREMENT
-        # if volume >= 100:
-            # volume = 100
-        # elif volume <= 0:
-            # volume = 0
-        # if isinstance(self.player, vlc.MediaListPlayer):
-            # # Get the media play associated with this MediaListPlayer
-            # player = self.player.get_media_player()
-        # self.player.audio_set_volume(volume)
-        # # Unfortunately MediaListPlayer doesn't have a volume control so this is a hack
-        # # command = ["amixer", "sset", "-c", "{}".format(AUDIO_CARD), "{}".format(MIXER_CONTROL), "{}%".format(volume)]
-        # # logging.debug(f"Command: {command}")
-        # # subprocess.run(command)
-        # self.volume = volume
-        # logging.debug(f"Setting volume: {volume}%")
+    def update_volume(self, cmd: str):
+        """Set volume up or down"""
+        volume = self.v
+        if cmd == "up":
+            volume += VOLUME_INCREMENT
+        else:  # down
+            volume -= VOLUME_INCREMENT
+        if volume >= 100:
+            volume = 100
+        elif volume <= 0:
+            volume = 0
+        self.set_volume(volume)
 
 
 if __name__ == "__main__":

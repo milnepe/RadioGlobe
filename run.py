@@ -64,7 +64,7 @@ def Process_UI_Events():
 
         elif event[0] == "Volume":
             if event[1] == 1:
-                # streamer.update_volume("up")
+                streamer.update_volume("up")
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
                 rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -72,7 +72,7 @@ def Process_UI_Events():
                 if state == "shutdown_confirm":
                     Back_To_Tuning()
                 else:
-                    # streamer.update_volume("down")
+                    streamer.update_volume("down")
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -171,8 +171,8 @@ while True:
                 state = "playing"
                 state_entry = True
             if volume_display:
-                volume_disp = 100
-                # volume_disp = streamer.volume
+                # volume_disp = 100
+                volume_disp = streamer.v
             else:
                 volume_disp = 0
 
@@ -215,8 +215,8 @@ while True:
         # Idle operation - just keep display updated
         else:
             if volume_display:
-                # volume_disp = streamer.volume
-                volume_display = 100
+                volume_disp = streamer.v
+                # volume_display = 100
             else:
                 volume_disp = 0
 

@@ -5,6 +5,11 @@ format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 logging.getLogger().setLevel(logging.DEBUG)
 
+# Edit these to suit your audio settings
+AUDIO_DEVICE = "UE BOOM 2"
+# AUDIO_DEVICE = "Built-in Audio Analog Stereo"
+VOLUME_INCREMENT = 1
+
 STATIONS_JSON = "stations.json"
 
 DATADIR = "data"
