@@ -148,9 +148,12 @@ class Streamer:
         # Set both players audio output device
         print_audio_devices(self.mp)
         self.set_audio_device(self.mp, AUDIO_DEVICE)
-        self.set_audio_device(self.mlp, AUDIO_DEVICE)
+        # self.set_audio_device(self.mlp, AUDIO_DEVICE)
         self.p = self.mp  # Cache current player
         self.v = 80  # Volume cache
+        logging.debug(f"MediaPlayer player ID: {id(self.mp)}")
+        # logging.debug(f"MediaListPlayer player ID: {id(self.mlp.get_media_player())}")
+        # logging.debug(f"Current player ID: {id(self.p)}")
 
     def set_audio_device(self, player, device_name):
         if isinstance(player, vlc.MediaListPlayer):
@@ -167,10 +170,12 @@ class Streamer:
             player.audio_output_device_set(None, device)
 
     def play(self, url):
+        print("Playing...")
         if self.p and self.p.is_playing():
             self.p.stop()
+        time.sleep(2)  # Important! Allow player to finish
 
-        playlists = set(['m3u', 'pls'])
+        playlists = ('m3u', 'pls')
         url = url.strip()
         logging.debug(f"Playing URL {url}")
 
@@ -180,6 +185,7 @@ class Streamer:
 
         if extension in playlists:
             logging.debug(f"Setting MediaListPlayer: {url}")
+            # self.mlp.set_media_player(self.mp)  # Use MediaPlayer!
             ml = vlc.MediaList()
             ml.add_media(url)
             self.mlp.set_media_list(ml)
@@ -190,17 +196,21 @@ class Streamer:
             self.mp.set_media(m)
             self.p = self.mp
 
-        print("Playing...")
-        self.set_volume(self.v)
+        logging.debug(f"Current player ID: {id(self.mp)}")
         self.p.play()
 
     def set_volume(self, vol):
-        '''Set volume on both players'''
-        p = self.mlp.get_media_player()
-        p.audio_set_volume(vol)
-        
-        self.mp.audio_set_volume(vol)
-        self.v = vol
+        if vol != self.v:
+            if isinstance(self.p, vlc.MediaListPlayer):
+                p = self.mlp.get_media_player()
+                logging.debug(f"MediaListPlayer volume: {p.audio_get_volume()}")
+            else:
+                p = self.p
+                logging.debug(f"MediaPlayer volume: {self.mp.audio_get_volume()}")
+
+            p.audio_set_volume(vol)
+            self.mp.audio_set_volume(vol)
+            self.v = vol
 
 
 def main():
@@ -210,6 +220,7 @@ def main():
     encoder_offsets = database.Load_Calibration()
 
     kiss_url = "http://stream-kiss.planetradio.co.uk/kiss100.mp3"
+    classic_url = "https://media-ice.musicradio.com/ClassicFMMP3.m3u"
     bbc_url = "http://lstn.lv/bbc.m3u8?station=bbc_radio_two&bitrate=320000"
     # MediaListPlayer required to play this media list
     flex_url = "http://142.4.215.64:8116/listen.pls?sid=1"
@@ -217,15 +228,16 @@ def main():
     streamer = Streamer()
 
     # Play list
-    urls = [kiss_url, bbc_url, flex_url]
+    urls = [classic_url, kiss_url, bbc_url, flex_url]
 
     for url in urls:
         streamer.play(url)
+        # time.sleep(10)
         # Increase volume gradually
         for v in range(50, 90, 10):
             streamer.set_volume(v)
             time.sleep(2)
-        streamer.p.stop()
+        # streamer.mp.stop()
 
     exit()
 
