@@ -135,8 +135,8 @@ def Process_UI_Events():
                 pass
 
 
-# AUDIO_DEVICE = "UE BOOM 2"
-AUDIO_DEVICE = "Built-in Audio Analog Stereo"
+AUDIO_DEVICE = "UE BOOM 2"
+# AUDIO_DEVICE = "Built-in Audio Analog Stereo"
 
 
 class Streamer:
