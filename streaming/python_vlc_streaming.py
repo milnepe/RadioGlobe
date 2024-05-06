@@ -38,6 +38,7 @@ class Streamer:
     '''Streamer that handles audio media and playlists'''
 
     def __init__(self, audio="Built-in Audio Analog Stereo"):
+        self.audio = audio
         self.mp = vlc.MediaPlayer()
         self.mlp = vlc.MediaListPlayer()
         # Set both players audio output device
@@ -61,7 +62,7 @@ class Streamer:
             player.audio_output_device_set(None, device)
         else:
             # Use as fallback
-            device = get_audio(player, audio)
+            device = get_audio(player, self.audio)
             player.audio_output_device_set(None, device)
 
     def stop(self):
