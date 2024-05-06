@@ -2,8 +2,6 @@
 import time
 import logging
 import vlc
-from radio_config import AUDIO_DEVICE
-from radio_config import VOLUME_INCREMENT
 
 
 def get_audio(p, device_name):
@@ -39,13 +37,13 @@ def print_audio_devices(p):
 class Streamer:
     '''Streamer that handles audio media and playlists'''
 
-    def __init__(self):
+    def __init__(self, audio="Built-in Audio Analog Stereo"):
         self.mp = vlc.MediaPlayer()
         self.mlp = vlc.MediaListPlayer()
         # Set both players audio output device
         print_audio_devices(self.mp)
-        self.set_audio_device(self.mp, AUDIO_DEVICE)
-        self.set_audio_device(self.mlp, AUDIO_DEVICE)
+        self.set_audio_device(self.mp, audio)
+        self.set_audio_device(self.mlp, audio)
         self.p = self.mp  # Cache current player
         self.v = 80  # Volume cache
         logging.debug(f"MediaPlayer player ID: {id(self.mp)}")
@@ -63,7 +61,7 @@ class Streamer:
             player.audio_output_device_set(None, device)
         else:
             # Use as fallback
-            device = get_audio(player, "Built-in Audio Analog Stereo")
+            device = get_audio(player, audio)
             player.audio_output_device_set(None, device)
 
     def stop(self):
@@ -104,19 +102,6 @@ class Streamer:
             logging.debug(f"Player ID: {id(p)}, Volume: {p.audio_get_volume()}")
             p.audio_set_volume(vol)
             self.v = vol
-
-    def update_volume(self, cmd: str):
-        """Set volume up or down"""
-        volume = self.v
-        if cmd == "up":
-            volume += VOLUME_INCREMENT
-        else:  # down
-            volume -= VOLUME_INCREMENT
-        if volume >= 100:
-            volume = 100
-        elif volume <= 0:
-            volume = 0
-        self.set_volume(volume)
 
 
 if __name__ == "__main__":

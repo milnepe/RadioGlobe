@@ -3,16 +3,20 @@ import threading
 import subprocess
 import logging
 import vlc
-
+import database
 
 from streaming.python_vlc_streaming import Streamer
-import database
-import radio_config
 from display import Display
 from positional_encoders import *
 from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
+
+from radio_config import AUDIO_DEVICE
+from radio_config import STATIONS_JSON
+from radio_config import FUZZINESS
+from radio_config import STICKINESS
+from radio_config import VOLUME_INCREMENT
 
 state = "start"
 volume_display = False
@@ -22,7 +26,21 @@ state_entry = True
 
 
 ui_manager = UI_Manager()
-streamer = Streamer()
+streamer = Streamer(AUDIO_DEVICE)
+
+
+def update_volume(streamer: Streamer, cmd: str):
+    """Set Streamer volume up or down"""
+    volume = streamer.v
+    if cmd == "up":
+        volume += VOLUME_INCREMENT
+    else:  # down
+        volume -= VOLUME_INCREMENT
+    if volume >= 100:
+        volume = 100
+    elif volume <= 0:
+        volume = 0
+    streamer.set_volume(volume)
 
 
 def Back_To_Tuning():
@@ -64,7 +82,7 @@ def Process_UI_Events():
 
         elif event[0] == "Volume":
             if event[1] == 1:
-                streamer.update_volume("up")
+                update_volume(streamer, "up")
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
                 rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -72,7 +90,7 @@ def Process_UI_Events():
                 if state == "shutdown_confirm":
                     Back_To_Tuning()
                 else:
-                    streamer.update_volume("down")
+                    update_volume(streamer, "down")
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
                     rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
@@ -105,19 +123,14 @@ def Process_UI_Events():
             else:
                 pass
 
+
 format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 logging.getLogger().setLevel(logging.DEBUG)
 
 logging.info("Staring RadioGlobe...")
-# def main():
-    # global state
-    # global state_entry
-    # global volume_display
-    # global encoders_thread
-    # global ui_manager
-    # PROGRAM START
-stations_data = database.Load_Stations(radio_config.STATIONS_JSON)
+
+stations_data = database.Load_Stations(STATIONS_JSON)
 city_map = database.build_map(stations_data)
 encoder_offsets = database.Load_Calibration()
 
@@ -146,7 +159,7 @@ while True:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne")
             # Allow time to get network
-            scheduler.attach_timer(Back_To_Tuning, 20)
+            scheduler.attach_timer(Back_To_Tuning, 10)
 
     elif state == "tuning":
         logging.debug(f"State, {state}")
@@ -161,11 +174,11 @@ while True:
             # Look arround and gather station info in the search area
             coords_lat, coords_long = encoders_thread.get_readings()
             logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
-            search_area = database.look_around((coords_lat, coords_long), fuzziness=radio_config.FUZZINESS)
+            search_area = database.look_around((coords_lat, coords_long), fuzziness=FUZZINESS)
             location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area,
                                                                                                       city_map, stations_data)
             if location_name != "":
-                encoders_thread.latch(coords_lat, coords_long, stickiness=radio_config.STICKINESS)
+                encoders_thread.latch(coords_lat, coords_long, stickiness=STICKINESS)
                 logging.debug("Latched...")
                 # Stations found so start playing them otherwise stay tuning
                 state = "playing"
@@ -265,13 +278,3 @@ while True:
 
 # Clean up threads
 encoders_thread.join()
-
-
-# if __name__ == "__main__":
-    # format = "%(asctime)s: %(message)s"
-    # logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
-    # logging.getLogger().setLevel(logging.DEBUG)
-
-    # logging.info("Staring RadioGlobe...")
-
-    # main()
