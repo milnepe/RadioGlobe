@@ -10,7 +10,7 @@ Description=Radioglobe Radio Service
 #ConditionPathExists=/home/USER/RadioGlobe/stations.json
 
 After=network.target bluetooth.target
-Wants=network.target bluetooth.target
+#Wants=network.target bluetooth.target
 
 [Service]
 Type=simple
