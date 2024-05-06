@@ -51,5 +51,6 @@ sudo cp services/radioglobe.service /etc/systemd/user/
 systemctl --user enable pulseaudio
 systemctl --user enable radioglobe.service
 systemctl --user daemon-reload
-systemctl --user restart radioglobe.service
+
+sudo reboot
 
