@@ -48,9 +48,10 @@ fi
 sed -i "s/USER/${USER}/g" services/radioglobe.service
 # Start radioglobe as the default user, NOT root so pulseaudio can manage audio
 sudo cp services/radioglobe.service /etc/systemd/user/
+systemctl --user daemon-reload
 systemctl --user enable pulseaudio
 systemctl --user enable radioglobe.service
-systemctl --user daemon-reload
+systemctl --user start pulseaudio
 
 sudo reboot
 
