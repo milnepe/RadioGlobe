@@ -78,7 +78,6 @@ def Process_UI_Events():
             elif event[1] == -1:
                 # Previous station
                 jog -= 1
-            # print(jog)
 
         elif event[0] == "Volume":
             if event[1] == 1:
@@ -128,7 +127,7 @@ format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 logging.getLogger().setLevel(logging.DEBUG)
 
-logging.info("Staring RadioGlobe...")
+logging.info("Starting RadioGlobe...")
 
 stations_data = database.Load_Stations(STATIONS_JSON)
 city_map = database.build_map(stations_data)
@@ -159,7 +158,7 @@ while True:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne")
             # Allow time to get network
-            scheduler.attach_timer(Back_To_Tuning, 10)
+            scheduler.attach_timer(Back_To_Tuning, 5)
 
     elif state == "tuning":
         logging.debug(f"State, {state}")
@@ -171,7 +170,7 @@ while True:
 
         # Normal operation
         else:
-            # Look arround and gather station info in the search area
+            # Look around and gather station info in the search area
             coords_lat, coords_long = encoders_thread.get_readings()
             logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
             search_area = database.look_around((coords_lat, coords_long), fuzziness=FUZZINESS)
@@ -184,7 +183,6 @@ while True:
                 state = "playing"
                 state_entry = True
             if volume_display:
-                # volume_disp = 100
                 volume_disp = streamer.v
             else:
                 volume_disp = 0
@@ -217,7 +215,7 @@ while True:
             state = "tuning"
             state_entry = True
 
-        # If the jog dial is used, stop the stream and restart with the new url
+        # If the jog dial is used, stop the stream and restart with the new URL
         elif jog != last_jog:
             # Restrict the jog dial value to the bounds of stations_list
             jog %= len(stations_list)
@@ -229,7 +227,6 @@ while True:
         else:
             if volume_display:
                 volume_disp = streamer.v
-                # volume_display = 100
             else:
                 volume_disp = 0
 
