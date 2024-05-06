@@ -5,7 +5,7 @@
 sudo apt install vlc-bin vlc-plugin-base python3-venv python3-dev pulseaudio-module-bluetooth
 # sudo apt install vlc pulseaudio python3-pip python3-smbus python3-dev python3-rpi.gpio
 
-# Create python virtual environment
+# Create python virtual environment and activate it so python packages can be installed in it
 echo "Creating virtual environment..."
 python -m venv venv
 source ./venv/bin/activate
@@ -35,9 +35,21 @@ case $VERSION_CODENAME in
     ;;
 esac
 
+# Remove any old radioglobe service
+FILE=/etc/systemd/system/radioglobe.service
+if [[ -f "$FILE" ]]; then
+    sudo systemctl stop radioglobe.service
+    sudo systemctl disable radioglobe.service
+    sudo systemctl daemon-reload
+    sudo rm $FILE
+fi
+
 # Set paths according to username
-sed -i "s/USER/${USER}/g" services/*.service
-sudo cp services/*.service /etc/systemd/system
-sudo systemctl daemon-reload
-sudo systemctl enable radioglobe.service
-sudo systemctl restart radioglobe.service
+sed -i "s/USER/${USER}/g" services/radioglobe.service
+# Start radioglobe as the default user, NOT root so pulseaudio can manage audio
+sudo cp services/radioglobe.service /etc/systemd/user/
+systemctl --user enable pulseaudio
+systemctl --user enable radioglobe.service
+systemctl --user daemon-reload
+systemctl --user restart radioglobe.service
+
