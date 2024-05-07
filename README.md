@@ -2,9 +2,13 @@
 RadioGlobe is an internet radio player originally by Jude Pullen (Hey Jude), Donald Robson and Peter Milne. A globe is used to locate radio stations by moving a cursor around and scanning for stations in the area around large cities. Once a city is found, you can select playable stations from a list with the jog wheel. 
 
 Full details of how to 3D print and build RadioGlobe were published on Instructables and DesignSpark. It runs on a Raspberry Pi and the Open Source code is written Code is written in Python  and available on GitHub. The music player is based on VLC and used pulseaudio. License is Apache License 2.0
+
 [Instructables build](https://github.com/DesignSparkRS/RadioGlobe)
+
 [DesignSpark articles](https://www.rs-online.com/designspark/how-to-build-a-3d-printed-radio-globe-to-tune-into-radio-stations-from-around-the-world-1)
+
 [GitHub stable repository](https://github.com/DesignSparkRS/RadioGlobe)
+
 [GitHub development repository](https://github.com/milnepe/RadioGlobe)
 
 ![RadioGlobe image](/img/radioglobe.webp)
@@ -21,6 +25,7 @@ If you want to use a BT speaker, you will can configure that with `bluetoothctl`
 ### Step 1 - Raspberry Pi OS Lite
 Get your Raspberry Pi up and running.
 Flash `Raspberry Pi OS Lite Bookworm` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
+
 Note: Use `OS Customisations` to set the hostname, default user, optional WiFi, timezone and SSH access. If you don't do this here, you will have a hard time getting SSH access! 
 
 ### Step 2 - SSH access
@@ -41,7 +46,10 @@ sudo reboot
 ```
 
 ### Step 4 - raspi-config
-Once logged in, open `sudo raspi-config` as root and setup the interfaces and auto-login:
+Once logged in, open `raspi-config` as root and setup the interfaces and auto-login:
+```
+sudo raspi-config
+```
 1. Enable `SPI` in `Interfacing Options` - used by the encoders.
 2. Enable `I2C` in `Interfacing Options` - used by the jog wheel, etc.
 3. Enable `Auto Login` in `System Options`, choose `Console Auto Login` used to enable the sound system
@@ -68,7 +76,7 @@ You can run the installer multiple times if you have any issues.
 cd RadioGlobe
 bash -x install.sh
 ```
-The system will reboot after completing and if all went well RadioGlobe will start with the welcome screen.
+The system will reboot after completing and if all went well RadioGlobe will start with the welcome screen after about 30 seconds.
 
 ### Step 7 - Calibration
 1. When starting for the first time the RadioGlobe encoders need to be calibrated. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines then press and hold the middle button until the LED flashes `GRENN` and the display shows `Calibrated`.
@@ -88,64 +96,102 @@ Make a copy of your `stations.json` file if you have made any custom changes to 
 Follow the above from `Step 5`.
 
 ## Bluetooth Speakers
-Once RadioGlobe is working with powered speakers you can try adding `Bluetooth` speakers or headphones. These can be setup with 'bluetoothctl`:
+Once RadioGlobe is working with powered speakers you can try adding `Bluetooth` speakers or headphones. These can be setup with 'bluetoothctl`.
+Check that pulseaudio is active and running - you may see some failures listed but they can be mostly be ignored: 
+```
+systemctl --user status pulseaudio
+```
+Start bluetoothctl as the default user - the prompt will change to `[bluetooth]#`:
+```
+bluetoothctl
+```
+Turn scanning on - the Pi will start scanning for bluetooth devices:
+```
+scan on
+```
+Now turn on your BT speaker and set it to pairing mode - making sure that no other device is connected to it. It should show up in the list of devices with the MAC address and name of the device, for example:
+```
+...
+[CHG] Device 88:C6:30:1A:22:10 RSSI: -41
+[CHG] Device 88:C6:30:1A:22:10 TxPower: 4
+[CHG] Device 88:C6:30:1A:22:10 Name: UE BOOM 2
+[CHG] Device 88:C6:30:1A:22:10 Alias: UE BOOM 2
+[CHG] Device 88:C6:30:1A:22:10 Class: 0x00240418
+[CHG] Device 88:C6:30:1A:22:10 Icon: audio-headphones
+[CHG] Device 88:C6:30:1A:22:10 Modalias: bluetooth:v000ApFFFFdFFFF
+...
+
+```
+Once you have the DT MAC and name turn off scanning:
+
+```
+scan off
+```
+Now pair the speaker:
+```
+pair 88:C6:30:1A:22:10
+```
+Now trust the device so you don't have to do this again after a reboot:
+```
+trust 88:C6:30:1A:22:10
+```
+Now you should be able to connect to the speaker:
+```
+connect 88:C6:30:1A:22:10
+```
+If the process is successful, the audio should switch to output from your BT speaker!
 
 ## Configuration 
-
-
-
+Configuration settings are in `radio_config.py`. You can change these to suit your setup.
 
 ## Audio
-Audio settings are now in `RadioGlobe/streaming/python_vlc_streaming.py` which uses python-vlc. Audio settings seem to move about with different OS versions so we don't try to detect the audio settings.
-Edit the settings at the top of the file to suit your audio settings. On a default Raspi OS Bookworm the Headphone card is `2` and the asound.conf settings are required to make this the default alsa output device (See `Troubleshooting`) 
-```
-AUDIO_CARD = 2
-MIXER_CONTROL = "PCM"
-```
+Audio settings are now in `RadioGlobe/streaming/python_vlc_streaming.py` which uses python-vlc. This module can handle station URLs that are plain media formats and also media play lists. This was not the case with the older cvlc player.
+
+To take advantage of pulseaudio it is important to have a logged in user and start the RadioGlobe as the default user. This will start pulseaudio in a secure way and allow automatic detection of your output devices.
+
+Audio has changed across the last Debian versions so we recommend `Bookworm` where most of the testing has taken place.
+
+Note that radio stations change their URLs all the time so the URL may be wrong. You can update this by editing the stations.json file. Save a copy first! Some stations go `off-line` in their night time, depending on your timezone. Try back later or you can remove them from stations.json.
 
 ## Troubleshooting
-SSH in to your device or open Terminal on the desktop.
-1. Re-run the installer with -x to see any installation issues:
-```
-$ bash -x install.sh
-```
-2. Check SPI and I2C are enabled in raspi-config - this can be changed by updates!
-3. Check radioglobe.service for clues: `systemctl status radioglobe.service`
-4. No audio output
-The default sound card is usually card 0. This may need setting to a different device depending on your setup.
-List the sound card numbers with:
-```
-$ aplay -l
-**** List of PLAYBACK Hardware Devices ****
-card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-card 1: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
-  Subdevices: 1/1
-  Subdevice #0: subdevice #0
-card 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]
-  Subdevices: 7/8
-  Subdevice #0: subdevice #0
-  Subdevice #1: subdevice #1
-  Subdevice #2: subdevice #2
-  Subdevice #3: subdevice #3
-  Subdevice #4: subdevice #4
-  Subdevice #5: subdevice #5
-  Subdevice #6: subdevice #6
-  Subdevice #7: subdevice #7
-```
+If things are not working the first step is to make sure that your Pi is setup and up-to-date and you have followed the steps above carefully. We recommend to start with a powered speaker connected to the audio jack first, before moving on to Bluetooth speakers, which are more problematic.
 
-To output audio to the headphone socket in this case, set the default to card 2
-Edit or create a file `/etc/asound.conf` or `~/.asound.conf` containing the following settings according to which card you want as default, then reboot:
+1. Check OS release is Bookworm - this is what we have tested on
 ```
-defaults.pcm.card 2
-defaults.pcm.device 2
-```
-Once the default card is set you should hear 'pink noise' by running `speaker-test` which will output to the default card. Use Ctrl-C to exit
+cat /etc/os-release 
+...
+VERSION_CODENAME=bookworm
+...
 
-5. Set debugging on in `radio_config.py` and follow the journal - note there are pulse errors which can be ignored:
 ```
-$ sudo journalctl -u radioglobe.service -f
+2. Check the system is up-to-date - if not go to Step 3.
 ```
-6. Turn it off and on again :) - use `sudo poweroff`
+...
+All packages are up to date.
+```
+3. Check SPI and I2C modules have loaded:
+```
+lsmod | grep spi
+spidev                 16384  0
+spi_bcm2835            20480  0
+
+lsmod | grep i2c
+i2c_dev                16384  2
+i2c_bcm2835            16384  1
+i2c_brcmstb            12288  0
+```
+4. Check that you enabled auto-login in `raspi-config` - see Step 4. If the Pi only boots when you SSH in you probably forgot to do this!
+5. Re-run the install script as the default user and check for any failures:
+```
+bash -x install.sh
+```
+6. The startup script must be in /etc/systemd/user/radioglobe.service so that it can be started as the default user.
+7. Check the journal as default user - there is a lot of logging if it is set to DEBUG in `radio_config.py` which should show up most issues. Don't forget to use the --user param and don't run as root.
+```
+journalctl --user -u radioglobe -f
+```
+8. If all else fails `Turn it off and on again` - use `sudo poweroff` :)
+
+You can always post an issue on GH and we will try to help but we also have other things to do!
+
 
