@@ -1,62 +1,99 @@
 # RadioGlobe
-First, install Raspberry Pi OS Bookworm (recommended) or Bullseye (legacy) onto a 16MB microSD card and make sure you have a working OS.
+RadioGlobe is an internet radio player originally by Jude Pullen (Hey Jude), Donald Robson and Peter Milne. A globe is used to locate radio stations by moving a cursor around and scanning for stations in the area around large cities. Once a city is found, you can select playable stations from a list with the jog wheel. 
 
-If using Raspberry Pi Imager use the configure cog to set SSH ON and set your default user/password. 
+Full details of how to 3D print and build RadioGlobe were published on Instructables and DesignSpark. It runs on a Raspberry Pi and the Open Source code is written Code is written in Python  and available on GitHub. The music player is based on VLC and used pulseaudio. License is Apache License 2.0
+[Instructables build](https://github.com/DesignSparkRS/RadioGlobe)
+[DesignSpark articles](https://www.rs-online.com/designspark/how-to-build-a-3d-printed-radio-globe-to-tune-into-radio-stations-from-around-the-world-1)
+[GitHub stable repository](https://github.com/DesignSparkRS/RadioGlobe)
+[GitHub development repository](https://github.com/milnepe/RadioGlobe)
 
-If flashing the OS manually, you will need to add a couple of configuration files to setup SSH and configure the username / password:
-1. Insert the microSD card containing the Raspberry Pi OS installation into a Mac or PC.
-2. Open the 'BOOT' volume in My Computer (Windows), Files (Ubuntu) or Finder (macOS).
-3. Create a new text file and name it "ssh".  On Windows, don't forget to remove the file extension (.txt).
-4. Alternatively in Linux or macOS cd to the 'BOOT' volume and run `touch ssh`
-5. Add a file named `userconf.txt` containing a single line with username:encrypted-password - for more details see `https://www.raspberrypi.com/documentation/computers/configuration.html#setting-up-a-headless-raspberry-pi`
-6. Unmount the microSD card and insert it into the Raspberry Pi.
-7. Plug the Raspberry Pi into your router using an Ethernet cable and power it on.
-8. Allow it time to fully boot up. Once it has booted, open an SSH session on your PC. (You can use cmd on Windows, or a terminal on MacOS or Linux) run `ssh username@raspberrypi.local` (replace `username` with your default user and `raspberrypi` with your hostname if you changed it).
-
-## Update system
-Once you are in the SSH session update the system and perform a reboot before installing the RadioGlobe software. Fix any issues before proceeding.
-1. Run `sudo apt update`
-2. Run `sudo apt upgrade`
-3. Run `sudo reboot`
-
-Now SSH in again.
+![RadioGlobe image](/img/radioglobe.webp)
 
 ## Installation
-For initial tests we recommend connecting to your network with an Ethernet cable. WiFi can be configured once everything is tested.
+RadioGlobe python packages have been tested on a Raspberry Pi 4 model B with 2MB RAM and a speaker connected to the audio jack. Bluetooth speakers are supported, tested with a UE Boom 2.
 
-The installer supports Bookworm and Bullseye OS versions.
+Most of the installation is handled for you with an installation script `install.sh`. It does the bare minimum to get RadioGlobe up and running. This is in case you have a nonstandard setup. It assumes you have a working system based on Raspberry Pi OS Lite that you can SSH into remotely and can plays audio through the audio jack.
 
-The install script no longer relies on username pi. It will install the Python scripts into your default users home directory and configure the systemd services according to your chosen username. It also now puts all required Python packages in a virtual environment within the RadioGlobe directory.
+SPI and I2C interfaces are required for the electronics and setting auto-login for the default user for use with the audio. You can do this with `raspi-conf`.
 
-From an SSH terminal:
-1. Run `sudo raspi-config`
-2. In 'Interfacing Options' enable SPI and I2C.
-3. Install git: `sudo apt install git`
-4. Make sure you are in your home home directory: `cd ~`
-5. Clone the software by running `git clone https://github.com/DesignSparkrs/RadioGlobe.git`
-6. Change into the RadioGlobe dir `cd RadioGlobe`
-7. Run the install script to install dependencies and setup the services `./install.sh`
-At this point the RadioGlobe should start automatically.
+If you want to use a BT speaker, you will can configure that with `bluetoothctl`.
 
-## Upgrading
-1. From users home directory copy the current installation so you can restore if necessary
+### Step 1 - Raspberry Pi OS Lite
+Get your Raspberry Pi up and running.
+Flash `Raspberry Pi OS Lite Bookworm` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
+Note: Use `OS Customisations` to set the hostname, default user, optional WiFi, timezone and SSH access. If you don't do this here, you will have a hard time getting SSH access! 
+
+### Step 2 - SSH access
+Insert the SD card, power on the system and let the Pi connect to your network, either via an Ethernet cable (Best) or via WiFi. It can take a couple of minutes on first boot.
+Use your routers admin page to find the Raspberry Pi hostname and IP address.
+From your PC / Laptop (Windows / Mac / Linux) open a terminal and login remotely, for example where the default user is `pete` and the hostname is `radioglobe`:
 ```
-$ cd ~
-$ cp RadioGlobe RadioGlobe.old
+ssh pete@radioglobe.local
 ```
-2. Follow installation instructions above. The installer supports Bookworm and Bullseye OS versions.
+[Raspberry Pi Remote Access](https://www.raspberrypi.com/documentation/computers/remote-access.html#introduction-to-remote-access)
 
-## Calibration
-1. When starting for the first time the RadioGlobe encoders need to be calibrated. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines then press and hold the middle button until the LED flashes Green and the display shows "Calibrated".
+### Step 3 - Update system
+Bring your system up-to-date:
+```
+sudo apt update
+sudo apt upgrade
+sudo reboot
+```
+
+### Step 4 - raspi-config
+Once logged in, open `sudo raspi-config` as root and setup the interfaces and auto-login:
+1. Enable `SPI` in `Interfacing Options` - used by the encoders.
+2. Enable `I2C` in `Interfacing Options` - used by the jog wheel, etc.
+3. Enable `Auto Login` in `System Options`, choose `Console Auto Login` used to enable the sound system
+
+### Step 5 - RadioGlobe download
+Install Git and download the RadioGlobe source from GitHub:
+```
+cd ~
+sudo apt install git
+git clone https://github.com/DesignSparkRS/RadioGlobe
+```
+Or the development system:
+```
+git clone https://github.com/milnepe/RadioGlobe
+```
+
+### Step 6 - Run installer
+The installation script `install.sh` will pull in all the software packages (quite a few) and setup a virtual environment for Python (required in Bookworm) and setup systemd services to start RadioGlobe on startup.
+
+The startup template service `services/radioglobe.service` assumes RadioGlobe is installed into the default users home directory. If not you will need to edit the template accordingly.  
+
+You can run the installer multiple times if you have any issues.
+```
+cd RadioGlobe
+bash -x install.sh
+```
+The system will reboot after completing and if all went well RadioGlobe will start with the welcome screen.
+
+### Step 7 - Calibration
+1. When starting for the first time the RadioGlobe encoders need to be calibrated. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines then press and hold the middle button until the LED flashes `GRENN` and the display shows `Calibrated`.
 
 The system will retain the calibration for future reboots or you can calibrate it at any time. 
 
-## WiFi
-Use `raspi-config` from an SSH session to configure WiFi once everything is working.
+### Step 8 - Play
+Once calibrated, move the reticule near to a large city, for example London GB (51.51N, 0.13W). When a city is close, the LED will flash `RED` and the first station should start playing. You can change stations using the jog wheel and set the sound up or down with the `top` and `bottom` buttons. 
 
-1. If you want to use WiFi, go to 'Localisation Options', then 'Enter WLAN Country' where you can select your country.
-   HINT: United Kingdom is GB!  Press Esc to return to the main menu then go to 'Network Options' > 'Wireless LAN' and
-   enter your SSID (network name) and WiFi password.
+### Step 9 - Power off
+It is important to shut the Pi down correctly so that the SD card is not corrupted. Press and hold the `Jog` wheel until the shutdown message appears, the press the `middle` button to shut down. Wait more than 10 seconds before disconnecting the power.
+
+
+## Upgrading
+If you have an existing system based on `Bullseye` or `Bookworm` you can try upgrading. This may not work depending on how much custom config you have on your system.
+Make a copy of your `stations.json` file if you have made any custom changes to this. It can be copied back to the new installation.
+Follow the above from `Step 5`.
+
+## Bluetooth Speakers
+Once RadioGlobe is working with powered speakers you can try adding `Bluetooth` speakers or headphones. These can be setup with 'bluetoothctl`:
+
+## Configuration 
+
+
+
 
 ## Audio
 Audio settings are now in `RadioGlobe/streaming/python_vlc_streaming.py` which uses python-vlc. Audio settings seem to move about with different OS versions so we don't try to detect the audio settings.
