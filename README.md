@@ -141,6 +141,8 @@ connect 88:C6:30:1A:22:10
 ```
 If the process is successful, the audio should switch to output from your BT speaker!
 
+When starting RadioGlobe it is best to have yoyr BT speaker `off` and turn it `on` once RadioGlobe has started up fully.
+
 ## Configuration 
 Configuration settings are in `radio_config.py`. You can change these to suit your setup.
 
