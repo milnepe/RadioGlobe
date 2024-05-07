@@ -66,9 +66,10 @@ class Streamer:
             player.audio_output_device_set(None, device)
 
     def stop(self):
-        if self.mp and self.mp.is_playing():
+        '''Force a stop'''
+        if self.mp:
             self.mp.stop()
-        if self.mlp and self.mlp.is_playing():
+        if self.mlp:
             self.mlp.stop()
 
     def play(self, url):
@@ -91,7 +92,7 @@ class Streamer:
             self.mp.set_media(m)
             logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
 
-        self.stop()
+        self.stop()  # Must stop before moving on
         self.p.play()
 
     def set_volume(self, vol):
