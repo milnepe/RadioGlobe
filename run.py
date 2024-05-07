@@ -12,7 +12,6 @@ from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
 
-from radio_config import AUDIO_DEVICE
 from radio_config import STATIONS_JSON
 from radio_config import FUZZINESS
 from radio_config import STICKINESS
@@ -26,7 +25,7 @@ state_entry = True
 
 
 ui_manager = UI_Manager()
-streamer = Streamer(AUDIO_DEVICE)
+streamer = Streamer()
 
 
 def update_volume(streamer: Streamer, cmd: str):

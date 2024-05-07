@@ -4,25 +4,6 @@ import logging
 import vlc
 
 
-def get_audio(p, device_name):
-    '''Get the audio output device(s) attached by name
-    @Returns audio output device matching name
-
-    For example "UE BOOM 2" for BT speaker
-    or "Built-in Audio Analog Stereo" for speaker connected to audio jack
-    '''
-    if isinstance(p, vlc.MediaListPlayer):
-        p = p.get_media_player()
-    device = p.audio_output_device_enum()
-    while device:
-        if device.contents.description.decode('utf-8') == device_name:
-            logging.debug("Audio output device")
-            logging.debug(f"Name: {device.contents.description.decode('utf-8')}, Device: {device.contents.device.decode('utf-8')}")
-            return device.contents.device
-
-        device = device.contents.next
-
-
 def print_audio_devices(p):
     '''Print the available audio outputs'''
     if isinstance(p, vlc.MediaListPlayer):
@@ -37,33 +18,15 @@ def print_audio_devices(p):
 class Streamer:
     '''Streamer that handles audio media and playlists'''
 
-    def __init__(self, audio="Built-in Audio Analog Stereo"):
-        self.audio = audio
+    def __init__(self):
         self.mp = vlc.MediaPlayer()
         self.mlp = vlc.MediaListPlayer()
-        # Set both players audio output device
         print_audio_devices(self.mp)
-        self.set_audio_device(self.mp, audio)
-        self.set_audio_device(self.mlp, audio)
         self.p = self.mp  # Cache current player
         self.v = 80  # Volume cache
         logging.debug(f"MediaPlayer player ID: {id(self.mp)}")
         logging.debug(f"MediaListPlayer player ID: {id(self.mlp.get_media_player())}")
         logging.debug(f"Current player ID: {id(self.p)}")
-
-    def set_audio_device(self, player, device_name):
-        if isinstance(player, vlc.MediaListPlayer):
-            logging.info("Setting MediaListPlayer output...")
-            player = player.get_media_player()
-        else:
-            logging.info("Setting MediaPlayer output...")
-
-        if device := get_audio(player, device_name):
-            player.audio_output_device_set(None, device)
-        else:
-            # Use as fallback
-            device = get_audio(player, self.audio)
-            player.audio_output_device_set(None, device)
 
     def stop(self):
         '''Force a stop'''
