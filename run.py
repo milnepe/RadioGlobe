@@ -203,7 +203,7 @@ while True:
 
             # Play the top station
             if url_list:
-                logging.debug(url_list[jog])
+                logging.debug(f"Station: {stations_list[jog]}, {url_list[jog]}")
                 streamer.play(url_list[jog])
 
         # Exit back to tuning state if latch has 'come unstuck'
@@ -219,7 +219,7 @@ while True:
             # Restrict the jog dial value to the bounds of stations_list
             jog %= len(stations_list)
             last_jog = jog
-            logging.debug(url_list[jog])
+            logging.debug(f"Station: {stations_list[jog]}, {url_list[jog]}")
             streamer.play(url_list[jog])
 
         # Idle operation - just keep display updated

@@ -84,9 +84,9 @@ def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -
         coords_lat, coords_long = coords
         if coords in city_map:
             cities = city_map[coords]
-            print(f"Ref: {coords}, {cities}")
+            logging.debug(f"Ref: {coords}, {cities}")
             for city in cities:
-                print(f"City: {city}")
+                logging.debug(f"City: {city}")
 
                 if location_name == "":
                     location_name = city
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     city_map = build_map(stations_data)
     for k, v in city_map.items():
         if len(v) > 1:
-            print(k, v)
+            logging.debug(k, v)
 
     search_area = look_around((609, 178), 2)
 
