@@ -64,6 +64,9 @@ class Streamer:
             player.audio_set_volume(volume)
             self.volume = volume
 
+    def get_volume():
+        return self.volume
+
 
 if __name__ == "__main__":
     """venv/bin/python streaming/python_vlc_streaming.py json/london-stations-test.json"""

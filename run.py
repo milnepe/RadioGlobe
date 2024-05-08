@@ -30,7 +30,7 @@ streamer = Streamer()
 
 def update_volume(streamer: Streamer, cmd: str):
     """Set Streamer volume up or down"""
-    volume = streamer.v
+    volume = streamer.get_volume()
     if cmd == "up":
         volume += VOLUME_INCREMENT
     else:  # down
@@ -182,7 +182,7 @@ while True:
                 state = "playing"
                 state_entry = True
             if volume_display:
-                volume_disp = streamer.v
+                volume_disp = streamer.get_volume()
             else:
                 volume_disp = 0
 
@@ -225,7 +225,7 @@ while True:
         # Idle operation - just keep display updated
         else:
             if volume_display:
-                volume_disp = streamer.v
+                volume_disp = streamer.get_volume()
             else:
                 volume_disp = 0
 
