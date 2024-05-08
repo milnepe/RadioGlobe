@@ -17,60 +17,56 @@ def print_audio_devices(p):
 
 class Streamer:
     '''Streamer that handles audio media and playlists'''
-
     def __init__(self):
-        self.mp = vlc.MediaPlayer()
-        self.mlp = vlc.MediaListPlayer()
-        print_audio_devices(self.mp)
-        self.p = self.mp  # Cache current player
-        self.v = 80  # Volume cache
-        logging.debug(f"MediaPlayer player ID: {id(self.mp)}")
-        logging.debug(f"MediaListPlayer player ID: {id(self.mlp.get_media_player())}")
-        logging.debug(f"Current player ID: {id(self.p)}")
+        self.player = None  # Cache current player
+        self.volume = 80  # Volume cache
 
-    def stop(self):
-        '''Force a stop'''
-        if self.mp:
-            self.mp.stop()
-        if self.mlp:
-            self.mlp.stop()
-
-    def play(self, url):
+    def set_player(self, url):
         playlists = ('m3u', 'pls')
         url = url.strip()
-        # We need a different type of media instance for urls containing playlists
         extension = (url.rpartition(".")[2])[:3]
         logging.debug(f"URL extension: {extension}")
 
-        if extension in playlists:
-            self.p = self.mlp  # Cache player
-            # self.mlp.set_media_player(self.mp)  # Use MediaPlayer!
-            ml = vlc.MediaList()
-            ml.add_media(url)
-            self.mlp.set_media_list(ml)
-            logging.debug(f"MediaListPlayer ID: {id(self.p)}, {url}")
-        else:
-            self.p = self.mp
-            m = vlc.Media(url)
-            self.mp.set_media(m)
-            logging.debug(f"MediaPlayer ID: {id(self.p)}, {url}")
-
-        self.stop()  # Must stop before moving on
-        self.p.play()
-
-    def set_volume(self, vol):
-        if self.v != vol:
-            if isinstance(self.p, vlc.MediaListPlayer):
-                p = self.mlp.get_media_player()
+        try:
+            # We need a different type of media instance for urls containing playlists
+            if extension in playlists:
+                self.player = vlc.MediaListPlayer()
+                medialist = vlc.MediaList()
+                medialist.add_media(url)
+                self.player.set_media_list(medialist)
+                logging.debug(f"MediaListPlayer ID: {id(self.player)}, {url}")
             else:
-                p = self.p
-            logging.debug(f"Player ID: {id(p)}, Volume: {p.audio_get_volume()}")
-            p.audio_set_volume(vol)
-            self.v = vol
+                self.player = vlc.MediaPlayer()
+                media = vlc.Media(url)
+                self.player.set_media(media)
+                logging.debug(f"MediaPlayer ID: {id(self.player)}, {url}")
+        except (AttributeError, NameError) as e:
+            logging.debug('%s: %s (%s %s vs LibVLC %s)' % (e.__class__.__name__, e,
+                                                           sys.argv[0], __version__,
+                                                           libvlc_get_version()))
+
+    def stop(self):
+        if self.player:
+            self.player.stop()
+
+    def play(self, url):
+        self.stop()  # Must stop existing player first
+        self.set_player(url)
+        self.player.play()
+
+    def set_volume(self, volume):
+        if self.volume != vol:
+            if isinstance(self.player, vlc.MediaListPlayer):
+                player = self.player.get_media_player()
+            else:
+                player = self.player
+            logging.debug(f"Player ID: {id(player)}, Volume: {player.audio_get_volume()}")
+            player.audio_set_volume(volume)
+            self.volume = volume
 
 
 if __name__ == "__main__":
-    """python python_vlc_streaming.py ../json/london-stations-test.json"""
+    """venv/bin/python streaming/python_vlc_streaming.py json/london-stations-test.json"""
     import sys
     import files
 
