@@ -55,7 +55,7 @@ class Streamer:
         self.player.play()
 
     def set_volume(self, volume):
-        if self.volume != vol:
+        if self.volume != volume:
             if isinstance(self.player, vlc.MediaListPlayer):
                 player = self.player.get_media_player()
             else:
@@ -64,7 +64,7 @@ class Streamer:
             player.audio_set_volume(volume)
             self.volume = volume
 
-    def get_volume():
+    def get_volume(self):
         return self.volume
 
 
