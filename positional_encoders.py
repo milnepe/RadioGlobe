@@ -2,7 +2,7 @@ import time
 import threading
 import spidev
 
-ENCODER_RESOLUTION = 1024
+from radio_config import ENCODER_RESOLUTION
 
 
 class Positional_Encoders (threading.Thread):
@@ -30,7 +30,8 @@ class Positional_Encoders (threading.Thread):
         return [self.latitude_offset, self.longitude_offset]
 
     def get_readings(self) -> tuple:
-        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, (self.longitude + self.longitude_offset) % ENCODER_RESOLUTION
+        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, \
+               (self.longitude + self.longitude_offset) % ENCODER_RESOLUTION
 
     def latch(self, latitude: int, longitude: int, stickiness: int):
         self.latch_stickiness = stickiness
