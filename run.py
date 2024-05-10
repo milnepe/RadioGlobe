@@ -4,6 +4,7 @@ import subprocess
 import logging
 import vlc
 import database
+from coordinates import Coordinate
 
 from streaming.python_vlc_streaming import Streamer
 from display import Display
@@ -12,6 +13,7 @@ from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
 from radio_config import STATIONS_JSON, FUZZINESS, STICKINESS, VOLUME_INCREMENT
+
 
 state = "start"
 volume_display = False
@@ -182,7 +184,7 @@ while True:
             else:
                 volume_disp = 0
 
-            display_thread.update(latitude, longitude,
+            display_thread.update(Coordinate(latitude, longitude),
                                   "Tuning...", volume_disp, "", False)
 
     elif state == "playing":
@@ -227,9 +229,9 @@ while True:
 
             # Add arrows to the display if there is more than one station here
             if len(stations_list) > 1:
-                display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], True)
+                display_thread.update(Coordinate(latitude, longitude), location_name, volume_disp, stations_list[jog], True)
             elif len(stations_list) == 1:
-                display_thread.update(latitude, longitude, location_name, volume_disp, stations_list[jog], False)
+                display_thread.update(Coordinate(latitude, longitude), location_name, volume_disp, stations_list[jog], False)
 
     elif state == "shutdown_confirm":
         logging.debug(f"State, {state}")

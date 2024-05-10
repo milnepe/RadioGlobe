@@ -1,6 +1,7 @@
 import time
 import threading
 import liquidcrystal_i2c
+from coordinates import Coordinate
 
 DISPLAY_I2C_ADDRESS = 0x27
 DISPLAY_I2C_PORT = 1
@@ -39,16 +40,8 @@ class Display (threading.Thread):
         self.buffer[3] = line_4.center(DISPLAY_COLUMNS)
         self.changed = True
 
-    def update(self, north: int, east: int, location: str, volume: int, station: str, arrows: bool):
-        if north >= 0:
-            self.buffer[0] = ("{:5.2f}N, ").format(north)
-        else:
-            self.buffer[0] = ("{:5.2f}S, ").format(abs(north))
-
-        if east >= 0:
-            self.buffer[0] += ("{:6.2f}E").format(east)
-        else:
-            self.buffer[0] += ("{:6.2f}W").format(abs(east))
+    def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
+        self.buffer[0] = str(coords)
 
         self.buffer[0] = self.buffer[0].center(DISPLAY_COLUMNS)
         self.buffer[1] = location.center(DISPLAY_COLUMNS)
@@ -84,9 +77,10 @@ if __name__ == "__main__":
     try:
         display_thread = Display(1, "Display")
         display_thread.start()
-        display_thread.update(51.45, -2.59, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
+        bristol = Coordinate(51.45, -2.59)
+        display_thread.update(bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
         time.sleep(5)
-        display_thread.update(0, 0, "Clearing in 2s...", 0, "", False)
+        display_thread.update(Coordinate(0, 0), "Clearing in 2s...", 0, "", False)
         time.sleep(2)
         display_thread.clear()
 
