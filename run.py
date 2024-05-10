@@ -11,11 +11,7 @@ from positional_encoders import *
 from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
-
-from radio_config import STATIONS_JSON
-from radio_config import FUZZINESS
-from radio_config import STICKINESS
-from radio_config import VOLUME_INCREMENT
+from radio_config import STATIONS_JSON, FUZZINESS, STICKINESS, VOLUME_INCREMENT
 
 state = "start"
 volume_display = False

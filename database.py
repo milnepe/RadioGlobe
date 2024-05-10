@@ -1,11 +1,10 @@
 import json
 import os.path
 import logging
-import radio_config
-from positional_encoders import ENCODER_RESOLUTION
+from radio_config import DATADIR, STATIONS_JSON, ENCODER_RESOLUTION, OFFSETS_JSON
 
 
-os.makedirs(radio_config.DATADIR, exist_ok=True)
+os.makedirs(DATADIR, exist_ok=True)
 
 
 def Load_Stations(stations_json: str) -> dict:
@@ -30,6 +29,7 @@ def build_map(stations_data: dict) -> dict:
         # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
         latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
         longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
+        logging.debug(f"{location}, {latitude}, {longitude}")
 
         location_list = []
         city_coords = (latitude, longitude)
@@ -107,14 +107,14 @@ def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -
 
 def Save_Calibration(latitude: int, longitude: int):
     offsets = [latitude, longitude]
-    with open(radio_config.OFFSETS_JSON, "w") as offsets_file:
+    with open(OFFSETS_JSON, "w") as offsets_file:
         offsets_file.write(json.dumps(offsets))
-        logging.debug(f"{radio_config.OFFSETS_JSON} saved...")
+        logging.debug(f"{OFFSETS_JSON} saved...")
 
 
 def Load_Calibration():
     try:
-        with open(radio_config.OFFSETS_JSON, "r") as offsets_file:
+        with open(OFFSETS_JSON, "r") as offsets_file:
             offsets = json.load(offsets_file)
     except Exception:
         offsets = [0, 0]
@@ -129,11 +129,11 @@ if __name__ == "__main__":
     logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
     logging.getLogger().setLevel(logging.DEBUG)
 
-    stations_data = Load_Stations(radio_config.STATIONS_JSON)
+    stations_data = Load_Stations(STATIONS_JSON)
     city_map = build_map(stations_data)
     for k, v in city_map.items():
         if len(v) > 1:
-            logging.debug(k, v)
+            logging.debug(f"{k}, {v}")
 
     search_area = look_around((609, 178), 2)
 
