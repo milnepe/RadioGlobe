@@ -7,4 +7,5 @@ pygments==2.19.1
 pytest==8.4.0
 python-vlc==3.0.21203
 rpi-lgpio==0.6
+smbus==1.1.post2
 spidev==3.7

@@ -93,6 +93,7 @@ dependencies = [
     { name = "lgpio" },
     { name = "python-vlc" },
     { name = "rpi-lgpio" },
+    { name = "smbus" },
     { name = "spidev" },
 ]
 
@@ -106,6 +107,7 @@ requires-dist = [
     { name = "lgpio", specifier = ">=0.2.2.0" },
     { name = "python-vlc", specifier = ">=3.0.21203" },
     { name = "rpi-lgpio", specifier = ">=0.6" },
+    { name = "smbus", specifier = ">=1.1.post2" },
     { name = "spidev", specifier = ">=3.7" },
 ]
 
@@ -123,6 +125,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/6e/6d/7b6cb0def16abda6a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/a9/06b843528e47ded0dd276537e9c56e7aec7c841b3b2749274e7d8121dab5/rpi_lgpio-0.6-py3-none-any.whl", hash = "sha256:0930b6e0ffbfbeee9366fbfa5038d29a7606be96a5229d570b1f81be8f776777", size = 11880 },
 ]
+
+[[package]]
+name = "smbus"
+version = "1.1.post2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/5c/70e14aa4f0c586efc017e1d1aa6e2f7921eefc7602fc2d03368ff912aa91/smbus-1.1.post2.tar.gz", hash = "sha256:f96d345e0aa10053a8a4917634f1dc37ba1f656fa5cace7629b71777e90855c6", size = 104988 }
 
 [[package]]
 name = "spidev"
