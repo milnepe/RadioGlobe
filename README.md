@@ -197,4 +197,36 @@ journalctl --user -u radioglobe -f
 
 You can always post an issue on GitHub and we will try to help but we also have other things to do!
 
-
+## Developing with UV (on Linux) - please use the UV docs for other platforms
+1. [Install UV](https://docs.astral.sh/uv/getting-started/installation/) on your development host
+2. Clone the repo:
+```
+git clone https://github.com/milnepe/RadioGlobe.git
+```
+3. Checkout your own branch:
+```
+cd RadioGlobe
+git checkout -b mybranch
+```
+4. Create a virtual environment - this must be compatible with the version of python on the RPi:
+```
+uv venv --python 3.11
+source .venv/bin/activate
+```
+5. Initialise the project:
+```
+uv init --no-workspace
+```
+6. Add dependencies:
+```
+uv add --dev pytest
+uv add python-vlc
+uv add lgpio rpi-lgpio
+uv pip install "git+https://github.com/pl31/python-liquidcrystal_i2c.git"
+uv add spidev smbus
+```
+7. Test UV:
+```
+uv run hello.py 
+Hello from radioglobe!
+```
