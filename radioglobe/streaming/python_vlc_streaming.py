@@ -2,6 +2,7 @@
 import time
 import logging
 import vlc
+import sys
 
 
 def print_audio_devices(p):
@@ -40,19 +41,20 @@ class Streamer:
                 media = vlc.Media(url)
                 self.player.set_media(media)
                 logging.debug(f"MediaPlayer ID: {id(self.player)}, {url}")
-        except (AttributeError, NameError) as e:
-            logging.debug('%s: %s (%s %s vs LibVLC %s)' % (e.__class__.__name__, e,
-                                                           sys.argv[0], e.__class__.__version__,
-                                                           e.__class__.libvlc_get_version()))
+        except Exception as e:
+            logging.debug(f"Media player error {e}")
 
     def stop(self):
         if self.player:
             self.player.stop()
 
     def play(self, url):
-        self.stop()  # Must stop existing player first
-        self.set_player(url)
-        self.player.play()
+        try:
+            self.stop()  # Must stop existing player first
+            self.set_player(url)
+            self.player.play()
+        except Exception as e:
+            logging.debug(f"Play error: {e}")
 
     def set_volume(self, volume):
         if self.volume != volume:
