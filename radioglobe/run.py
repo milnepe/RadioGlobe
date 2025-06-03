@@ -1,14 +1,15 @@
 import time
-import threading
+# import threading
 import subprocess
 import logging
-import vlc
+# import vlc
 import database
 from coordinates import Coordinate
 
 from streaming.python_vlc_streaming import Streamer
 from display import Display
-from positional_encoders import *
+# from positional_encoders import *
+import positional_encoders as pe
 from ui_manager import UI_Manager
 from rgb_led import RGB_LED
 from scheduler import Scheduler
@@ -131,7 +132,7 @@ city_map = database.build_map(stations_data)
 encoder_offsets = database.Load_Calibration()
 
 # Positional encoders - used to select latitude and longitude
-encoders_thread = Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
+encoders_thread = pe.Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
 encoders_thread.start()
 
 display_thread = Display(3, "Display")

@@ -42,8 +42,8 @@ class Streamer:
                 logging.debug(f"MediaPlayer ID: {id(self.player)}, {url}")
         except (AttributeError, NameError) as e:
             logging.debug('%s: %s (%s %s vs LibVLC %s)' % (e.__class__.__name__, e,
-                                                           sys.argv[0], __version__,
-                                                           libvlc_get_version()))
+                                                           sys.argv[0], e.__class__.__version__,
+                                                           e.__class__.libvlc_get_version()))
 
     def stop(self):
         if self.player:

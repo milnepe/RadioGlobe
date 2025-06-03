@@ -19,7 +19,7 @@ def get_audio(p, device_name):
     '''Get the audio output device(s) attached by name
     @Returns audio output device matching name
 
-    For example "UE BOOM 2" for BT speaker
+    For example "UE BOOM 2" for BT speaker
     or "Built-in Audio Analog Stereo" for speaker connected to audio jack
     '''
     device = p.audio_output_device_enum()
