@@ -34,7 +34,7 @@ class Streamer:
             if extension in playlists:
                 self.player = vlc.MediaListPlayer()
                 medialist = vlc.MediaList()
-                medialist.add_media([url])
+                medialist.add_media(url)
                 self.player.set_media_list(medialist)
                 self.player.set_media_player(vlc.MediaPlayer())
                 logging.debug(f"MediaListPlayer ID: {id(self.player)}, {url}")
@@ -75,7 +75,9 @@ class Streamer:
 
 
 if __name__ == "__main__":
-    """venv/bin/python streaming/python_vlc_streaming.py json/london-stations-test.json"""
+    """
+    /opt/radioglobe/venv/bin/python radioglobe/streaming/python_vlc_streaming.py stations/london-stations-test.json
+    """
     import sys
     import files
 
