@@ -16,7 +16,7 @@ sudo mkdir $RADIOGLOBE_DIR
 sudo chown radioglobe:radioglobe $RADIOGLOBE_DIR
 python -m venv $RADIOGLOBE_DIR/venv
 source $RADIOGLOBE_DIR/venv/bin/activate
-cp RadioGlobe/requirements.txt $RADIOGLOBE_DIR/
+cp requirements.txt $RADIOGLOBE_DIR/
 pip install -r $RADIOGLOBE_DIR/requirements.txt
 
 # Check python dependencies are correctly installed in venv
