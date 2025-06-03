@@ -25,7 +25,8 @@ class Streamer:
     def set_player(self, url):
         playlists = ('m3u', 'pls')
         url = url.strip()
-        extension = (url.rpartition(".")[2])[:3]
+        #extension = (url.rpartition(".")[2])[:3]
+        extension = url.lower().rpartition(".")[2]
         logging.debug(f"URL extension: {extension}")
 
         try:
@@ -33,16 +34,19 @@ class Streamer:
             if extension in playlists:
                 self.player = vlc.MediaListPlayer()
                 medialist = vlc.MediaList()
-                medialist.add_media(url)
+                medialist.add_media([url])
                 self.player.set_media_list(medialist)
+                self.player.set_media_player(vlc.MediaPlayer())
                 logging.debug(f"MediaListPlayer ID: {id(self.player)}, {url}")
             else:
                 self.player = vlc.MediaPlayer()
                 media = vlc.Media(url)
                 self.player.set_media(media)
                 logging.debug(f"MediaPlayer ID: {id(self.player)}, {url}")
+            if hasattr(self.player, 'audio_set_volume'):
+                self.player.audio_set_volume(self.volume)
         except Exception as e:
-            logging.debug(f"Media player error {e}")
+            logging.error(f"Media player error {e}")
 
     def stop(self):
         if self.player:
