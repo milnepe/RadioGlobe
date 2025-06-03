@@ -1,7 +1,7 @@
 [project]
 name = "radioglobe"
 version = "0.1.0"
-description = "Add your description here"
+description = "RadioGlobe is an internet radio player originally by Jude Pullen (Hey Jude), Donald Robson and Peter Milne."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
