@@ -75,6 +75,10 @@ done < $RADIOGLOBE_DIR/requirements.txt
 #     ;;
 # esac
 
+# Copy files to working dir
+echo "Copying to /opt/radioglobe..."
+cp -r radioglobe/* /opt/radioglobe/
+
 # Remove any old radioglobe service
 FILE=/etc/systemd/system/radioglobe.service
 if [[ -f "$FILE" ]]; then
@@ -85,7 +89,7 @@ if [[ -f "$FILE" ]]; then
 fi
 
 # Set paths according to username
-sed -i "s/USER/${USER}/g" services/radioglobe.service
+#sed -i "s/USER/${USER}/g" services/radioglobe.service
 # Start radioglobe as the default user, NOT root so pulseaudio can manage audio
 sudo cp services/radioglobe.service /etc/systemd/user/
 systemctl --user daemon-reload
