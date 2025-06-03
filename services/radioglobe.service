@@ -15,8 +15,8 @@ After=network.target bluetooth.target
 [Service]
 Type=simple
 
-User=radioglobe
-Group=radioglobe
+#User=radioglobe
+#Group=radioglobe
 
 #WorkingDirectory=/home/USER/RadioGlobe
 WorkingDirectory=/opt/radioglobe
