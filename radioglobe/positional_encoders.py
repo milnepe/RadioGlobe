@@ -2,7 +2,7 @@ import time
 import threading
 import spidev
 
-from radio_config import ENCODER_RESOLUTION
+ENCODER_RESOLUTION = 1024
 
 
 class Positional_Encoders(threading.Thread):
@@ -114,3 +114,23 @@ class Positional_Encoders(threading.Thread):
                         continue
 
             time.sleep(0.2)
+
+if __name__ == "__main__":
+    encoder_offsets = (0, 0)  # Default offsets for latitude and longitude
+
+    # Positional encoders - used to select latitude and longitude
+    encoders_thread = Positional_Encoders(
+        2, "Encoders", encoder_offsets[0], encoder_offsets[1]
+    )
+    encoders_thread.start()
+
+    try:
+        while True:
+            time.sleep(1)
+            coords_lat, coords_long = encoders_thread.get_readings()
+            print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+    except KeyboardInterrupt:
+        print("Stopping encoder thread...")
+        encoders_thread.join()
+        print("Encoder thread stopped.")
+        encoders_thread.close()
