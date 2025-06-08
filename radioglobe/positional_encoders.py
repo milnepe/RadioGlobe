@@ -5,8 +5,7 @@ import spidev
 from radio_config import ENCODER_RESOLUTION
 
 
-class Positional_Encoders (threading.Thread):
-
+class Positional_Encoders(threading.Thread):
     def __init__(self, threadID, name, latitude_offset=0, longitude_offset=0):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -30,8 +29,9 @@ class Positional_Encoders (threading.Thread):
         return [self.latitude_offset, self.longitude_offset]
 
     def get_readings(self) -> tuple:
-        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, \
-               (self.longitude + self.longitude_offset) % ENCODER_RESOLUTION
+        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, (
+            self.longitude + self.longitude_offset
+        ) % ENCODER_RESOLUTION
 
     def latch(self, latitude: int, longitude: int, stickiness: int):
         self.latch_stickiness = stickiness
@@ -54,12 +54,12 @@ class Positional_Encoders (threading.Thread):
         computed_parity = 0
         while reading_without_parity_bit:
             # XOR with the first bit
-            computed_parity ^= (reading_without_parity_bit & 0b1)
+            computed_parity ^= reading_without_parity_bit & 0b1
 
             # Shift the bits right
             reading_without_parity_bit >>= 1
 
-        return (parity_bit == computed_parity)
+        return parity_bit == computed_parity
 
     def read_spi(self):
         BUS = 0
@@ -99,12 +99,16 @@ class Positional_Encoders (threading.Thread):
                     self.longitude = readings[1]
                 else:
                     # Check to see if the latch should 'come unstuck'
-                    lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
+                    lat_difference = (
+                        abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
+                    )
                     if lat_difference > self.latch_stickiness:
                         self.latch_stickiness = None
                         continue
 
-                    lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
+                    lon_difference = (
+                        abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
+                    )
                     if lon_difference > self.latch_stickiness:
                         self.latch_stickiness = None
                         continue

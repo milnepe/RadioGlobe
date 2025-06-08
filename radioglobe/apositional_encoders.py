@@ -4,80 +4,68 @@ import spidev
 ENCODER_RESOLUTION = 1024  # 10 bits for each axis, so 1024 positions per axis
 
 
-class Positional_Encoders:
+# Example encoder read function (replace with your encoder's read protocol)
+def read_encoder(spi):
+    # For example, read 2 bytes from the encoder
+    # Dummy example: send 0xFFFF and get back a 16-bit position value
+    resp = spi.xfer2([0xFF, 0xFF])
+    value = ((resp[0] << 8) | resp[1]) & 0x3FFF  # 14-bit value
+    return value
 
-    def __init__(self, latitude_offset=0, longitude_offset=0):
-        self.latch_stickiness = None
-        self.latitude = 0
-        self.longitude = 0
-        self.latitude_offset = latitude_offset
-        self.longitude_offset = longitude_offset
 
-        # Enable SPI
-        self.spi = spidev.SpiDev()
+class EncoderReader:
+    def __init__(self, lat_spi_bus, lat_spi_device, lon_spi_bus, lon_spi_device):
+        # Setup SPI for latitude encoder
+        self.lat_spi = spidev.SpiDev()
+        self.lat_spi.open(lat_spi_bus, lat_spi_device)
+        # self.lat_spi.max_speed_hz = 1000000  # Adjust as needed
+        self.lat_spi.max_speed_hz = 5000  # Adjust as needed
+        self.lat_spi.mode = 1
 
-    def zero(self):
-        self.latitude_offset = (ENCODER_RESOLUTION // 2) - self.latitude
-        self.longitude_offset = (ENCODER_RESOLUTION // 2) - self.longitude
-        return [self.latitude_offset, self.longitude_offset]
+        # Setup SPI for longitude encoder
+        self.lon_spi = spidev.SpiDev()
+        self.lon_spi.open(lon_spi_bus, lon_spi_device)
+        # self.lon_spi.max_speed_hz = 1000000  # Adjust as needed
+        self.lon_spi.max_speed_hz = 5000  # Adjust as needed
+        self.lon_spi.mode = 1
 
-    def get_readings(self) -> tuple:
-        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, \
-               (self.longitude + self.longitude_offset) % ENCODER_RESOLUTION
+        # State
+        self.last_lat = 0
+        self.last_lon = 0
 
-    def latch(self, latitude: int, longitude: int, stickiness: int):
-        self.latch_stickiness = stickiness
-        self.latitude = (latitude - self.latitude_offset) % ENCODER_RESOLUTION
-        self.longitude = (longitude - self.longitude_offset) % ENCODER_RESOLUTION
+        # Offsets for lat/lon encoders
+        self.lat_offset = 0
+        self.lon_offset = 0
 
-    def is_latched(self):
-        return self.latch_stickiness is not None
+    def read_lat(self):
+        return read_encoder(self.lat_spi)
 
-    def check_parity(self, reading: int):
-        reading_without_parity_bit = reading >> 1
-        parity_bit = reading & 0b1
+    def read_lon(self):
+        return read_encoder(self.lon_spi)
 
-        computed_parity = 0
-        while reading_without_parity_bit:
-            computed_parity ^= (reading_without_parity_bit & 0b1)
-            reading_without_parity_bit >>= 1
+    def close(self):
+        self.lat_spi.close()
+        self.lon_spi.close()
 
-        return parity_bit == computed_parity
 
-    def read_spi(self):
-        BUS = 0
-        readings = []
+async def monitor_encoders(reader: EncoderReader, poll_interval=0.2):
+    """Async generator that yields (lat, lon) whenever values change."""
+    reader.last_lat = (ENCODER_RESOLUTION // 2) - reader.last_lat
+    reader.last_lon = (ENCODER_RESOLUTION // 2) - reader.last_lon
+    yield (reader.last_lat, reader.last_lon)
 
-        for device in [0, 1]:
-            self.spi.open(BUS, device)
-            self.spi.max_speed_hz = 5000
-            self.spi.mode = 1
-            reading = self.spi.readbytes(2)
-            self.spi.close()
+    while True:
+        await asyncio.sleep(poll_interval)
 
-            raw_reading = (reading[0] << 8) | reading[1]
+        lat = (reader.read_lat() + reader.lat_offset) % ENCODER_RESOLUTION
+        lon = (reader.read_lon() + reader.lon_offset) % ENCODER_RESOLUTION
 
-            if self.check_parity(raw_reading):
-                readings.append(raw_reading >> 6)
-            else:
-                return None
-
-        return readings
-
-    async def run(self):
-        print("Starting positional encoders...")
-        while True:
-            readings = self.read_spi()
-            if readings:
-                readings[0] = ENCODER_RESOLUTION - readings[0]  # invert latitude
-                if self.latch_stickiness is None:
-                    self.latitude = readings[0]
-                    self.longitude = readings[1]
-                else:
-                    lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
-                    lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
-
-                    if lat_difference > self.latch_stickiness or lon_difference > self.latch_stickiness:
-                        self.latch_stickiness = None
-                        continue
-            await asyncio.sleep(0.2)
+        if (
+            lat >= reader.last_lat + 60
+            or lat <= reader.last_lat - 60
+            or lon >= reader.last_lon + 60
+            or lon <= reader.last_lon - 60
+        ):
+            reader.last_lat = lat
+            reader.last_lon = lon
+            yield (lat, lon)

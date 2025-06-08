@@ -29,14 +29,16 @@ CALIBRATE_HOLD_TIME = 5
 
 class UI_Manager:
     def __init__(self):
-        self.button_manager = Button_Manager([("Jog_push", 27), ("Top", 5), ("Mid", 6), ("Low", 12), ("Shutdown", 26)])
+        self.button_manager = Button_Manager(
+            [("Jog_push", 27), ("Top", 5), ("Mid", 6), ("Low", 12), ("Shutdown", 26)]
+        )
 
         self.dial = Dial(10, "Jog")
         self.dial.start()
 
     # def __del__(self):
-        # del(self.button_manager)
-        # del(self.dial)
+    # del(self.button_manager)
+    # del(self.dial)
 
     def update(self, receiving_queue: list):
         # Get control events

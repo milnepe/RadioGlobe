@@ -1,4 +1,5 @@
 """Global settings"""
+
 import logging
 
 format = "%(asctime)s: %(message)s"

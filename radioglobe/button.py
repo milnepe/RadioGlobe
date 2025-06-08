@@ -3,7 +3,7 @@ import threading
 import RPi.GPIO as GPIO
 
 
-class Button (threading.Thread):
+class Button(threading.Thread):
     def __init__(self, threadID, name, gpio_pin):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -15,10 +15,12 @@ class Button (threading.Thread):
         # BCM pin numbering!
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pin, direction=GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self.start_timer, bouncetime=150)
+        GPIO.add_event_detect(
+            self.pin, GPIO.FALLING, callback=self.start_timer, bouncetime=150
+        )
 
     # def __del__(self):
-        # GPIO.cleanup()
+    # GPIO.cleanup()
 
     def start_timer(self, arg):
         time.sleep(0.1)
@@ -57,7 +59,7 @@ class Button_Manager:
     def __init__(self, name_and_pin_tuples: list):
         self.buttons = []
 
-        for (name, pin) in name_and_pin_tuples:
+        for name, pin in name_and_pin_tuples:
             index = len(self.buttons)
             self.buttons.append(Button(index, name, pin))
 
@@ -79,7 +81,9 @@ class Button_Manager:
 
 
 if __name__ == "__main__":
-    button_manager = Button_Manager([("Jog_push", 27), ("Top", 5), ("Mid", 6), ("Low", 12), ("Shutdown", 26)])
+    button_manager = Button_Manager(
+        [("Jog_push", 27), ("Top", 5), ("Mid", 6), ("Low", 12), ("Shutdown", 26)]
+    )
     button_events = []
 
     while True:

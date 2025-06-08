@@ -6,7 +6,7 @@ RELOAD = 1
 CALLBACK = 2
 
 
-class Scheduler (threading.Thread):
+class Scheduler(threading.Thread):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -45,7 +45,9 @@ class Scheduler (threading.Thread):
                 if self.time >= self.timers[timer][EXPIRY]:
                     self.timers[timer][CALLBACK]()
                     if self.timers[timer][RELOAD]:
-                        self.timers[timer][EXPIRY] = self.time + self.timers[timer][RELOAD]
+                        self.timers[timer][EXPIRY] = (
+                            self.time + self.timers[timer][RELOAD]
+                        )
                     else:
                         self.timers.__delitem__(timer)
                         num_timers -= 1
@@ -53,6 +55,7 @@ class Scheduler (threading.Thread):
 
 
 if __name__ == "__main__":
+
     def print_one_shot():
         print("One shot")
 

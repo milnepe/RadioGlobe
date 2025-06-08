@@ -7,18 +7,18 @@ GREEN_PIN = 23
 BLUE_PIN = 24
 
 COLOURS = {
-  "OFF":      None,
-  "RED":      [RED_PIN],
-  "GREEN":    [GREEN_PIN],
-  "BLUE":     [BLUE_PIN],
-  "CYAN":     [GREEN_PIN,  BLUE_PIN],
-  "MAGENTA":  [RED_PIN,   BLUE_PIN],
-  "YELLOW":   [RED_PIN,   GREEN_PIN],
-  "WHITE":    [RED_PIN,   GREEN_PIN,  BLUE_PIN]
+    "OFF": None,
+    "RED": [RED_PIN],
+    "GREEN": [GREEN_PIN],
+    "BLUE": [BLUE_PIN],
+    "CYAN": [GREEN_PIN, BLUE_PIN],
+    "MAGENTA": [RED_PIN, BLUE_PIN],
+    "YELLOW": [RED_PIN, GREEN_PIN],
+    "WHITE": [RED_PIN, GREEN_PIN, BLUE_PIN],
 }
 
 
-class RGB_LED (threading.Thread):
+class RGB_LED(threading.Thread):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -26,7 +26,9 @@ class RGB_LED (threading.Thread):
 
         # BCM pin numbering!
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup([RED_PIN, GREEN_PIN, BLUE_PIN], direction=GPIO.OUT, initial=GPIO.HIGH)
+        GPIO.setup(
+            [RED_PIN, GREEN_PIN, BLUE_PIN], direction=GPIO.OUT, initial=GPIO.HIGH
+        )
 
         self.state = 1
         self.colour_0 = "OFF"
@@ -37,9 +39,11 @@ class RGB_LED (threading.Thread):
         self.timer = None
 
     # def __del__(self):
-        # GPIO.cleanup()
+    # GPIO.cleanup()
 
-    def set_static(self, colour=None, timeout_sec=None, restore_previous_on_timeout=False):
+    def set_static(
+        self, colour=None, timeout_sec=None, restore_previous_on_timeout=False
+    ):
         if timeout_sec:
             if self.timer:
                 return
@@ -64,8 +68,13 @@ class RGB_LED (threading.Thread):
         if pins is not None:
             GPIO.output(pins, GPIO.HIGH)
 
-    def set_blink(self, colour_0=None, colour_1="OFF", timeout_sec=None,
-                  restore_previous_on_timeout=False):
+    def set_blink(
+        self,
+        colour_0=None,
+        colour_1="OFF",
+        timeout_sec=None,
+        restore_previous_on_timeout=False,
+    ):
         if timeout_sec:
             if self.timer:
                 return

@@ -1,13 +1,14 @@
-'''Find and Test attached audio devices with python-vlc
-   https://www.olivieraubert.net/vlc/python-ctypes/doc/vlc-module.html
-'''
+"""Find and Test attached audio devices with python-vlc
+https://www.olivieraubert.net/vlc/python-ctypes/doc/vlc-module.html
+"""
+
 import vlc
 import time
 import logging
 
 
 def print_audio_devices(p):
-    '''Print the available audio outputs'''
+    """Print the available audio outputs"""
     device = p.audio_output_device_enum()
     while device:
         logging.info(f"Name: {device.contents.description.decode('utf-8')}")
@@ -16,28 +17,30 @@ def print_audio_devices(p):
 
 
 def get_audio(p, device_name):
-    '''Get the audio output device(s) attached by name
+    """Get the audio output device(s) attached by name
     @Returns audio output device matching name
 
     For example "UE BOOM 2" for BT speaker
     or "Built-in Audio Analog Stereo" for speaker connected to audio jack
-    '''
+    """
     device = p.audio_output_device_enum()
     while device:
-        if device.contents.description.decode('utf-8') == device_name:
-            logging.debug(f"Audio: {device.contents.description.decode('utf-8')}, {device.contents.device.decode('utf-8')}")
+        if device.contents.description.decode("utf-8") == device_name:
+            logging.debug(
+                f"Audio: {device.contents.description.decode('utf-8')}, {device.contents.device.decode('utf-8')}"
+            )
             return device.contents.device
 
         device = device.contents.next
 
 
 if __name__ == "__main__":
-    '''Test your audio output
+    """Test your audio output
 
     If you have a "UE BOOM 2" BT speaker attached it will play through that as first choice,
     but will "fallback" to a speaker attached to the built-in audio jack.
 
-    run: python test.py'''
+    run: python test.py"""
 
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")

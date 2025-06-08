@@ -1,13 +1,16 @@
 import time
+
 # import threading
 import subprocess
 import logging
+
 # import vlc
 import database
 from coordinates import Coordinate
 
 from streaming.python_vlc_streaming import Streamer
 from display import Display
+
 # from positional_encoders import *
 import positional_encoders as pe
 from ui_manager import UI_Manager
@@ -82,7 +85,9 @@ def Process_UI_Events():
                 update_volume(streamer, "up")
                 volume_display = True
                 scheduler.attach_timer(Clear_Volume_Display, 3)
-                rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
+                rgb_led.set_static(
+                    "BLUE", timeout_sec=0.5, restore_previous_on_timeout=True
+                )
             elif event[1] == -1:
                 if state == "shutdown_confirm":
                     Back_To_Tuning()
@@ -90,7 +95,9 @@ def Process_UI_Events():
                     update_volume(streamer, "down")
                     volume_display = True
                     scheduler.attach_timer(Clear_Volume_Display, 3)
-                    rgb_led.set_static("BLUE", timeout_sec=0.5, restore_previous_on_timeout=True)
+                    rgb_led.set_static(
+                        "BLUE", timeout_sec=0.5, restore_previous_on_timeout=True
+                    )
 
         elif event[0] == "Random":
             logging.info("Toggle jog mode - not implemented")
@@ -103,13 +110,13 @@ def Process_UI_Events():
             # Zero the positional encoders
             offsets = encoders_thread.zero()
             database.Save_Calibration(offsets[0], offsets[1])
-            rgb_led.set_static("GREEN", timeout_sec=0.5, restore_previous_on_timeout=True)
+            rgb_led.set_static(
+                "GREEN", timeout_sec=0.5, restore_previous_on_timeout=True
+            )
             logging.info("Calibrated")
             display_thread.message(
-                line_1="",
-                line_2="Calibrated!",
-                line_3="",
-                line_4="")
+                line_1="", line_2="Calibrated!", line_3="", line_4=""
+            )
 
             time.sleep(1)
 
@@ -132,7 +139,9 @@ city_map = database.build_map(stations_data)
 encoder_offsets = database.Load_Calibration()
 
 # Positional encoders - used to select latitude and longitude
-encoders_thread = pe.Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
+encoders_thread = pe.Positional_Encoders(
+    2, "Encoders", encoder_offsets[0], encoder_offsets[1]
+)
 encoders_thread.start()
 
 display_thread = Display(3, "Display")
@@ -154,7 +163,8 @@ while True:
                 line_1="Radio Globe",
                 line_2="Made for DesignSpark",
                 line_3="Jude Pullen, Donald",
-                line_4="Robson, Pete Milne")
+                line_4="Robson, Pete Milne",
+            )
             # Allow time to get network
             scheduler.attach_timer(Back_To_Tuning, 5)
 
@@ -171,9 +181,12 @@ while True:
             # Look around and gather station info in the search area
             coords_lat, coords_long = encoders_thread.get_readings()
             logging.debug(f"Coordinates: {coords_lat}, {coords_long}")
-            search_area = database.look_around((coords_lat, coords_long), fuzziness=FUZZINESS)
-            location_name, latitude, longitude, stations_list, url_list = database.get_found_stations(search_area,
-                                                                                                      city_map, stations_data)
+            search_area = database.look_around(
+                (coords_lat, coords_long), fuzziness=FUZZINESS
+            )
+            location_name, latitude, longitude, stations_list, url_list = (
+                database.get_found_stations(search_area, city_map, stations_data)
+            )
             if location_name != "":
                 encoders_thread.latch(coords_lat, coords_long, stickiness=STICKINESS)
                 logging.debug("Latched...")
@@ -185,8 +198,9 @@ while True:
             else:
                 volume_disp = 0
 
-            display_thread.update(Coordinate(latitude, longitude),
-                                  "Tuning...", volume_disp, "", False)
+            display_thread.update(
+                Coordinate(latitude, longitude), "Tuning...", volume_disp, "", False
+            )
 
     elif state == "playing":
         # Entry - setup
@@ -230,9 +244,21 @@ while True:
 
             # Add arrows to the display if there is more than one station here
             if len(stations_list) > 1:
-                display_thread.update(Coordinate(latitude, longitude), location_name, volume_disp, stations_list[jog], True)
+                display_thread.update(
+                    Coordinate(latitude, longitude),
+                    location_name,
+                    volume_disp,
+                    stations_list[jog],
+                    True,
+                )
             elif len(stations_list) == 1:
-                display_thread.update(Coordinate(latitude, longitude), location_name, volume_disp, stations_list[jog], False)
+                display_thread.update(
+                    Coordinate(latitude, longitude),
+                    location_name,
+                    volume_disp,
+                    stations_list[jog],
+                    False,
+                )
 
     elif state == "shutdown_confirm":
         logging.debug(f"State, {state}")
@@ -244,7 +270,8 @@ while True:
                 line_1="Really shut down?",
                 line_2="<- Press mid button ",
                 line_3="to confirm or",
-                line_4="<- bottom to cancel.")
+                line_4="<- bottom to cancel.",
+            )
 
             # Auto-cancel in 5s
             scheduler.attach_timer(Back_To_Tuning, 5)
@@ -259,7 +286,8 @@ while True:
                 line_1="Shutting down...",
                 line_2="Please wait 10 sec",
                 line_3="before disconnecting",
-                line_4="power.")
+                line_4="power.",
+            )
             subprocess.run(["sudo", "poweroff"])
 
     else:

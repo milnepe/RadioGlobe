@@ -3,7 +3,7 @@ import threading
 import RPi.GPIO as GPIO
 
 
-class Dial (threading.Thread):
+class Dial(threading.Thread):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
@@ -15,7 +15,7 @@ class Dial (threading.Thread):
         self.direction = 0
 
     # def __del__(self):
-        # GPIO.cleanup()
+    # GPIO.cleanup()
 
     def get_direction(self):
         # Pickup the direction and zero it, so we only get it once

@@ -6,6 +6,7 @@ import signal
 from pathlib import Path
 import json
 import re
+
 # import requests
 # from requests.exceptions import Timeout
 import concurrent.futures
@@ -20,8 +21,11 @@ def set_volume(volume: int) -> int:
     global mixer_name
 
     if not mixer_name:
-        get_control = subprocess.run(['amixer', 'scontrols'], stdout=subprocess.PIPE)
-        control_match = re.match(r"Simple mixer control \'(.*)\'", str(get_control.stdout, encoding="utf-8").rstrip())
+        get_control = subprocess.run(["amixer", "scontrols"], stdout=subprocess.PIPE)
+        control_match = re.match(
+            r"Simple mixer control \'(.*)\'",
+            str(get_control.stdout, encoding="utf-8").rstrip(),
+        )
         if control_match:
             mixer_name = control_match.group(1)
     # a value between 0 and 100
@@ -36,30 +40,30 @@ def set_volume(volume: int) -> int:
 
 
 # def check_url(url: str) -> bool:
-    # """
-    # Returns True if URL is good else False
-    # Note: Needs further work - does't return for some urls
-    # """
-    # try:
-        # response = requests.get(url, timeout=0.1)
-    # except Timeout as e:
-        # logging.debug("URL Timeout, %s, %s", url, e)
-    # except Exception as e:
-        # logging.debug("URL Error, %s, %s", url, e)
-    # else:
-        # if response.status_code == requests.codes.ok:
-            # return True
-    # return False
+# """
+# Returns True if URL is good else False
+# Note: Needs further work - does't return for some urls
+# """
+# try:
+# response = requests.get(url, timeout=0.1)
+# except Timeout as e:
+# logging.debug("URL Timeout, %s, %s", url, e)
+# except Exception as e:
+# logging.debug("URL Error, %s, %s", url, e)
+# else:
+# if response.status_code == requests.codes.ok:
+# return True
+# return False
 
 
 def launch(audio: str, url: str) -> int:
     """Play url returning the vlc pid"""
     logging.debug("Launching audio: %s, %s", audio, url)
-    radio = subprocess.Popen(['cvlc', '--aout', audio, url])
+    radio = subprocess.Popen(["cvlc", "--aout", audio, url])
     return radio.pid
 
 
-class Streamer ():
+class Streamer:
     """A streaming audio player using vlc's command line"""
 
     def __init__(self, audio, url):
@@ -103,16 +107,16 @@ if __name__ == "__main__":
     # logging.getLogger().setLevel(logging.DEBUG)
 
     stations_file = sys.argv[1]
-    audio = 'alsa'  # or pulse
+    audio = "alsa"  # or pulse
     clip_duration = 10
 
-    with Path(stations_file).open(mode='r', encoding='utf8') as f:
+    with Path(stations_file).open(mode="r", encoding="utf8") as f:
         stations = json.load(f)
 
     set_volume(50)
 
     # Get list of urls
-    url_list = [url['url'].strip() for k, v in stations.items() for url in v['urls']]
+    url_list = [url["url"].strip() for k, v in stations.items() for url in v["urls"]]
     urls = list(set(url_list))  # De-duped list
     top5 = urls[:5]
     logging.info("%s", top5)

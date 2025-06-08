@@ -9,12 +9,14 @@ DISPLAY_COLUMNS = 20
 DISPLAY_ROWS = 4
 
 
-class Display (threading.Thread):
+class Display(threading.Thread):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(DISPLAY_I2C_ADDRESS, DISPLAY_I2C_PORT, numlines=DISPLAY_ROWS)
+        self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(
+            DISPLAY_I2C_ADDRESS, DISPLAY_I2C_PORT, numlines=DISPLAY_ROWS
+        )
         self.buffer = ["" for row in range(0, DISPLAY_ROWS)]
         self.changed = False
 
@@ -40,7 +42,9 @@ class Display (threading.Thread):
         self.buffer[3] = line_4.center(DISPLAY_COLUMNS)
         self.changed = True
 
-    def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
+    def update(
+        self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool
+    ):
         self.buffer[0] = str(coords)
 
         self.buffer[0] = self.buffer[0].center(DISPLAY_COLUMNS)
@@ -56,7 +60,7 @@ class Display (threading.Thread):
 
         if arrows:
             # Trim/pad the station name to fit arrows at each side of the display
-            station = station[:(DISPLAY_COLUMNS - 4)]
+            station = station[: (DISPLAY_COLUMNS - 4)]
             padding = DISPLAY_COLUMNS - 4 - len(station)
             start_padding = padding // 2
             end_padding = padding - start_padding
@@ -78,7 +82,9 @@ if __name__ == "__main__":
         display_thread = Display(1, "Display")
         display_thread.start()
         bristol = Coordinate(51.45, -2.59)
-        display_thread.update(bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
+        display_thread.update(
+            bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True
+        )
         time.sleep(5)
         display_thread.update(Coordinate(0, 0), "Clearing in 2s...", 0, "", False)
         time.sleep(2)
