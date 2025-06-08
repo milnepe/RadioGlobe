@@ -124,10 +124,19 @@ if __name__ == "__main__":
     )
     encoders_thread.start()
 
+    STICKINESS = 10  # Example stickiness value, adjust as needed
     try:
+        coords_lat, coords_long = encoders_thread.get_readings()
+        print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+
+        encoders_thread.zero()  # Zero the encoders to set offsets
+        print(f"Encoder offsets set to: {encoders_thread.latitude_offset}, "
+              f"{encoders_thread.longitude_offset}")
+
         while True:
-            time.sleep(1)
+            time.sleep(1)  # Polling interval to allow enough time for updates
             coords_lat, coords_long = encoders_thread.get_readings()
+            encoders_thread.latch(coords_lat, coords_long, stickiness=STICKINESS)
             print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
     except KeyboardInterrupt:
         print("Stopping encoder thread...")
