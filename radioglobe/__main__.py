@@ -14,7 +14,7 @@ async def some_process(lat, lon, city_map, stations_data, fuzziness=2):
     stations = database.get_found_stations(search_area, city_map, stations_data)
     # print(f"Found stations: {stations}")
     await asyncio.sleep(2)  # Simulate some work
-    # return search_area
+    return stations
 
 
 # Example consumer coroutine
@@ -34,7 +34,9 @@ async def main():
     try:
         async for lat, lon in monitor_encoders(reader):
             print(f"Lat: {lat}, Lon: {lon}")
-            area = await some_process(lat, lon, cities, stations, 6)
+            result = await some_process(lat, lon, cities, stations, 6)
+            # if cities:
+            #     break
 
             # if location_name != "":
             #     reader.latch(latitude, longitude, stickiness=STICKINESS)
