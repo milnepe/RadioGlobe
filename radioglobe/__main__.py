@@ -1,72 +1,43 @@
 import asyncio
-# import spidev
+import database
 
-from apositional_encoders import EncoderReader, monitor_encoders
-# # Example encoder read function (replace with your encoder's read protocol)
-# def read_encoder(spi):
-#     # For example, read 2 bytes from the encoder
-#     # Dummy example: send 0xFFFF and get back a 16-bit position value
-#     resp = spi.xfer2([0xFF, 0xFF])
-#     value = ((resp[0] << 8) | resp[1]) & 0x3FFF  # 14-bit value
-#     return value
+# from coordinates import Coordinate
+from radio_config import STATIONS_JSON
 
-# class EncoderReader:
-#     def __init__(self, lat_spi_bus, lat_spi_device, lon_spi_bus, lon_spi_device):
-#         # Setup SPI for latitude encoder
-#         self.lat_spi = spidev.SpiDev()
-#         self.lat_spi.open(lat_spi_bus, lat_spi_device)
-#         # self.lat_spi.max_speed_hz = 1000000  # Adjust as needed
-#         self.lat_spi.max_speed_hz = 5000  # Adjust as needed
+from apositional_encoders import Positional_Encoders, monitor_encoders
 
-#         # Setup SPI for longitude encoder
-#         self.lon_spi = spidev.SpiDev()
-#         self.lon_spi.open(lon_spi_bus, lon_spi_device)
-#         # self.lon_spi.max_speed_hz = 1000000  # Adjust as needed
-#         self.lat_spi.max_speed_hz = 5000  # Adjust as needed
 
-#         # State
-#         self.last_lat = None
-#         self.last_lon = None
-
-#     def read_lat(self):
-#         return read_encoder(self.lat_spi)
-
-#     def read_lon(self):
-#         return read_encoder(self.lon_spi)
-
-#     def close(self):
-#         self.lat_spi.close()
-#         self.lon_spi.close()
-
-# async def monitor_encoders(reader: EncoderReader, poll_interval=0.01):
-#     """Async generator that yields (lat, lon) whenever values change."""
-#     reader.last_lat = reader.read_lat()
-#     reader.last_lon = reader.read_lon()
-#     yield (reader.last_lat, reader.last_lon)
-
-#     while True:
-#         await asyncio.sleep(poll_interval)
-
-#         lat = reader.read_lat()
-#         lon = reader.read_lon()
-
-#         if lat != reader.last_lat or lon != reader.last_lon:
-#             reader.last_lat = lat
-#             reader.last_lon = lon
-#             yield (lat, lon)
+async def some_process(lat, lon, fuzziness=5):
+    print("Starting some process...")
+    # search_area = database.look_around((lat, lon), fuzziness=fuzziness)
+    await asyncio.sleep(1)  # Simulate some work
+    # return search_area
 
 
 # Example consumer coroutine
 async def main():
-    reader = EncoderReader(
-        lat_spi_bus=0, lat_spi_device=0, lon_spi_bus=0, lon_spi_device=1
-    )
+    # STICKINESS = 3  # Example stickiness value, adjust as needed
+    print("Initializing positional encoders...")
+    reader = Positional_Encoders()
+
+    # stations_data = database.Load_Stations(STATIONS_JSON)
+    # city_map = database.build_map(stations_data)
+    # print(city_map)
+    # # encoder_offsets = database.Load_Calibration()
 
     try:
         async for lat, lon in monitor_encoders(reader):
             print(f"Lat: {lat}, Lon: {lon}")
-    finally:
-        reader.close()
+            area = await some_process(lat, lon)
+            # print(f"Search area: {area}")
+            # location_name, latitude, longitude, stations_list, url_list = (
+            # database.get_found_stations(area, city_map, stations_data)
+            # )
+        # if location_name != "":
+        #     reader.latch(latitude, longitude, stickiness=STICKINESS)
+        #     print("Latched...")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 if __name__ == "__main__":
