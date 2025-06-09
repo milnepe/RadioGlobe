@@ -35,13 +35,9 @@ def build_map(stations_data: dict) -> dict:
         )
         logging.debug(f"{location}, {latitude}, {longitude}")
 
-        location_list = []
         city_coords = (latitude, longitude)
         if city_coords not in cities_index:
-            location_list.append(location)
-            cities_index[city_coords] = location_list
-        else:
-            cities_index[city_coords].append(location)
+            cities_index[city_coords] = location
 
     return cities_index
 
@@ -82,38 +78,45 @@ def look_around(origin: tuple, fuzziness: int) -> list:
 def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -> tuple:
     """Get station info found within search area
     Can return more than one locations worth of urls depending on fuzziness"""
-    location = ""
     location_name = ""
     stations_list = []
     url_list = []
+    cities = []
     # Check the search area.  Saving the first location name encountered
     # and all radio stations in the area, in order encountered
     for coords in search_area:
-        coords_lat, coords_long = coords
         if coords in city_map:
-            cities = city_map[coords]
-            logging.debug(f"Ref: {coords}, {cities}")
-            for city in cities:
-                logging.debug(f"City: {city}")
+            city = city_map[coords]
+            logging.debug(f"Coords: {coords}, City: {city}")
+            if city not in cities:
+                cities.append(city)
+            # logging.debug(f"Found coords: {coords}")
+            # Get the city name for the coordinates
+        #     cities = city_map[coords]
+        #     logging.debug(f"Ref: {coords}, {cities}")
+        #     for city in cities:
+        #         logging.debug(f"City: {city}")
 
-                if location_name == "":
-                    location_name = city
+        #         if location_name != "":
+        #             location_name = city
 
-                for station in stations_data[city]["urls"]:
-                    station_name = station["name"]
-                    if station_name not in stations_list:
-                        stations_list.append(station_name)
-                        url_list.append(station["url"])
+        #         for station in stations_data[city]["urls"]:
+        #             station_name = station["name"]
+        #             if station_name not in stations_list:
+        #                 stations_list.append(station_name)
+        #                 url_list.append(station["url"])
 
         # Provide 'helper' coordinates
-        latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
-        longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
+        # latitude = round((360 * coords_lat / ENCODER_RESOLUTION - 180), 2)
+        # longitude = round((360 * coords_long / ENCODER_RESOLUTION - 180), 2)
 
+    # logging.debug(
+    #     f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}"
+    # )
+    # return location_name, latitude, longitude, stations_list, url_list
     logging.debug(
-        f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}"
-    )
-    return location_name, latitude, longitude, stations_list, url_list
-
+        f"Cities found: {cities}")
+    return cities
 
 def Save_Calibration(latitude: int, longitude: int):
     offsets = [latitude, longitude]
@@ -145,6 +148,6 @@ if __name__ == "__main__":
         if len(v) > 1:
             logging.debug(f"{k}, {v}")
 
-    search_area = look_around((609, 178), 2)
+    search_area = look_around((420, 842), 2)
 
     result = get_found_stations(search_area, city_map, stations_data)
