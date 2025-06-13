@@ -45,9 +45,7 @@ class Scheduler(threading.Thread):
                 if self.time >= self.timers[timer][EXPIRY]:
                     self.timers[timer][CALLBACK]()
                     if self.timers[timer][RELOAD]:
-                        self.timers[timer][EXPIRY] = (
-                            self.time + self.timers[timer][RELOAD]
-                        )
+                        self.timers[timer][EXPIRY] = self.time + self.timers[timer][RELOAD]
                     else:
                         self.timers.__delitem__(timer)
                         num_timers -= 1

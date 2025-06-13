@@ -27,12 +27,8 @@ def build_map(stations_data: dict) -> dict:
     cities_index = {}
     for location in stations_data:
         # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
-        latitude = round(
-            (stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360
-        )
-        longitude = round(
-            (stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360
-        )
+        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
+        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
         logging.debug(f"{location}, {latitude}, {longitude}")
 
         city_coords = (latitude, longitude)
@@ -61,12 +57,8 @@ def look_around(origin: tuple, fuzziness: int) -> list:
     for layer in range(0, fuzziness):
         for y in range(0, ODD_NUMBERS[layer]):
             for x in range(0, ODD_NUMBERS[layer]):
-                coord_x = (
-                    latitude + x - (ODD_NUMBERS[layer] // 2)
-                ) % ENCODER_RESOLUTION
-                coord_y = (
-                    longitude + y - (ODD_NUMBERS[layer] // 2)
-                ) % ENCODER_RESOLUTION
+                coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
+                coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
                 exp_coords = (coord_x, coord_y)
                 if exp_coords not in search_area:
                     search_area.append(exp_coords)
@@ -114,9 +106,9 @@ def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -
     #     f"Found stations: {location_name}, {latitude}, {longitude}, {stations_list}"
     # )
     # return location_name, latitude, longitude, stations_list, url_list
-    logging.debug(
-        f"Cities found: {cities}")
+    logging.debug(f"Cities found: {cities}")
     return cities
+
 
 def Save_Calibration(latitude: int, longitude: int):
     offsets = [latitude, longitude]

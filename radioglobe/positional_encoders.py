@@ -99,29 +99,24 @@ class Positional_Encoders(threading.Thread):
                     self.longitude = readings[1]
                 else:
                     # Check to see if the latch should 'come unstuck'
-                    lat_difference = (
-                        abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
-                    )
+                    lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
                     if lat_difference > self.latch_stickiness:
                         self.latch_stickiness = None
                         continue
 
-                    lon_difference = (
-                        abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
-                    )
+                    lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
                     if lon_difference > self.latch_stickiness:
                         self.latch_stickiness = None
                         continue
 
             time.sleep(0.2)
 
+
 if __name__ == "__main__":
     encoder_offsets = (0, 0)  # Default offsets for latitude and longitude
 
     # Positional encoders - used to select latitude and longitude
-    encoders_thread = Positional_Encoders(
-        2, "Encoders", encoder_offsets[0], encoder_offsets[1]
-    )
+    encoders_thread = Positional_Encoders(2, "Encoders", encoder_offsets[0], encoder_offsets[1])
     encoders_thread.start()
 
     STICKINESS = 10  # Example stickiness value, adjust as needed
@@ -130,8 +125,10 @@ if __name__ == "__main__":
         print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
         encoders_thread.zero()  # Zero the encoders to set offsets
-        print(f"Encoder offsets set to: {encoders_thread.latitude_offset}, "
-              f"{encoders_thread.longitude_offset}")
+        print(
+            f"Encoder offsets set to: {encoders_thread.latitude_offset}, "
+            f"{encoders_thread.longitude_offset}"
+        )
 
         while True:
             time.sleep(1)  # Polling interval to allow enough time for updates

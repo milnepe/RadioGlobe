@@ -42,9 +42,7 @@ class Display(threading.Thread):
         self.buffer[3] = line_4.center(DISPLAY_COLUMNS)
         self.changed = True
 
-    def update(
-        self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool
-    ):
+    def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
         self.buffer[0] = str(coords)
 
         self.buffer[0] = self.buffer[0].center(DISPLAY_COLUMNS)
@@ -82,9 +80,7 @@ if __name__ == "__main__":
         display_thread = Display(1, "Display")
         display_thread.start()
         bristol = Coordinate(51.45, -2.59)
-        display_thread.update(
-            bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True
-        )
+        display_thread.update(bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
         time.sleep(5)
         display_thread.update(Coordinate(0, 0), "Clearing in 2s...", 0, "", False)
         time.sleep(2)

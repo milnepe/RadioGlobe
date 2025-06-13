@@ -1,5 +1,8 @@
+"""
+Asyncio version of LED module
+"""
 import time
-import threading
+# import threading
 import RPi.GPIO as GPIO
 
 RED_PIN = 22
@@ -18,12 +21,8 @@ COLOURS = {
 }
 
 
-class RGB_LED(threading.Thread):
-    def __init__(self, threadID, name):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-
+class RGB_LED():
+    def __init__(self):
         # BCM pin numbering!
         GPIO.setmode(GPIO.BCM)
         GPIO.setup([RED_PIN, GREEN_PIN, BLUE_PIN], direction=GPIO.OUT, initial=GPIO.HIGH)
@@ -126,7 +125,7 @@ class RGB_LED(threading.Thread):
 
 if __name__ == "__main__":
     led = RGB_LED(1, "LED")
-    led.start()
+    # led.start()
 
     try:
         while True:

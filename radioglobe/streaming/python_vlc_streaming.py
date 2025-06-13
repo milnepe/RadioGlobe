@@ -69,9 +69,7 @@ class Streamer:
                 player = self.player.get_media_player()
             else:
                 player = self.player
-            logging.debug(
-                f"Player ID: {id(player)}, Volume: {player.audio_get_volume()}"
-            )
+            logging.debug(f"Player ID: {id(player)}, Volume: {player.audio_get_volume()}")
             player.audio_set_volume(volume)
             self.volume = volume
 
