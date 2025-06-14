@@ -63,7 +63,7 @@ def look_around(origin: tuple, fuzziness: int) -> list:
                 if exp_coords not in search_area:
                     search_area.append(exp_coords)
 
-    logging.debug(f"Search area: {search_area}")
+    # logging.debug(f"Search area: {search_area}")
     return search_area
 
 
@@ -78,10 +78,10 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
     for coords in search_area:
         if coords in city_map:
             city = city_map[coords]
-            logging.debug(f"Coords: {coords}, City: {city}")
+            # logging.debug(f"Coords: {coords}, City: {city}")
             if city not in cities:
                 cities.append(city)
-    logging.debug(f"Cities found: {cities}")
+    # logging.debug(f"Cities found: {cities}")
     return cities
 
 
@@ -97,6 +97,24 @@ def get_first_station(city: str, stations: dict) -> tuple:
         return None  # No stations available
     first_station = urls[0]
     return first_station["name"], first_station["url"]
+
+
+def get_all_urls(city: str, stations: dict) -> list[str]:
+    urls_list = []
+    for key in stations:
+        if city.lower() == key.lower():
+            urls = stations[key].get("urls", [])
+            urls_list.extend([entry['url'] for entry in urls if 'url' in entry])
+    return urls_list
+
+
+def get_station_urls(city, stations):
+    for key in stations:
+        if city.lower() == key.lower():  # Exact match, case-insensitive
+            urls = stations[key].get("urls", [])
+            return [(entry['name'], entry['url']) for entry in urls if 'name' in entry and 'url' in entry]
+    return []  # No match found
+
 
 
 def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -> tuple:

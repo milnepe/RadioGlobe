@@ -34,7 +34,7 @@ async def main():
     TODO: Convert cities found into a list of stations
     """
     # Override settings file
-    STICKINESS = 1
+    STICKINESS = 2
     FUZZINESS = 5
     POLLING_SEC = 0.5
 
@@ -77,8 +77,7 @@ async def main():
         city_list = await get_cities(*readings, cities, FUZZINESS)
         # Skip this bit if it's latched
         if not encoders.is_latched():
-            # If we find a some cities in the area, latch on to the first one
-            # in the list
+            # If we find a some cities in the area, latch on to the first one in the list
             if city_list:
                 encoders.latch(*readings, STICKINESS)
                 # Async blink in another thread so we don't block
@@ -86,13 +85,13 @@ async def main():
                 await blink
                 # Get first city in list then lookup first station for that city
                 first_city = city_list[0]
-                station_info = database.get_first_station(first_city, stations)
-
-        if city_list:
-            print(f"Found: {city_list[0]} Station: {station_info}")
+                # station_info = database.get_first_station(first_city, stations)
+                # Get all the stations info for the city we found
+                station_info = database.get_station_urls(first_city, stations)
+                print(f"Found: {city_list[0]} Station: {station_info}")
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t
-        print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
+        # print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
 
 
 if __name__ == "__main__":
