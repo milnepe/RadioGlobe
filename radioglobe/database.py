@@ -29,7 +29,7 @@ def build_map(stations_data: dict) -> dict:
         # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
         latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
         longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
-        logging.debug(f"{location}, {latitude}, {longitude}")
+        # logging.debug(f"{location}, {latitude}, {longitude}")
 
         city_coords = (latitude, longitude)
         if city_coords not in cities_index:
@@ -83,6 +83,20 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
                 cities.append(city)
     logging.debug(f"Cities found: {cities}")
     return cities
+
+
+def get_first_station(city: str, stations: dict) -> tuple:
+    """
+    Get the first station name and url for a given city,country string
+    """
+    station_info = stations.get(city)
+    if not station_info:
+        return None  # City not found
+    urls = station_info.get("urls")
+    if not urls:
+        return None  # No stations available
+    first_station = urls[0]
+    return first_station["name"], first_station["url"]
 
 
 def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -> tuple:

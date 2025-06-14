@@ -58,9 +58,10 @@ async def main():
 
     print("Loading stations data...")
     stations = database.Load_Stations(STATIONS_JSON)
+    # print(stations)
     print("Building city map...")
     cities = database.build_map(stations)
-    print(cities)
+    # print(cities)
 
     # # encoder_offsets = database.Load_Calibration()
 
@@ -69,6 +70,7 @@ async def main():
 
     # Display the encoder values periodically
     city_list = []
+    station_info = None
     while True:
         start_t = time.monotonic()
         readings = encoders.get_readings()
@@ -82,8 +84,12 @@ async def main():
                 # Async blink in another thread so we don't block
                 blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
                 await blink
+                # Get first city in list then lookup first station for that city
+                first_city = city_list[0]
+                station_info = database.get_first_station(first_city, stations)
+
         if city_list:
-            print(f"Found: {city_list[0]}")
+            print(f"Found: {city_list[0]} Station: {station_info}")
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t
         print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
