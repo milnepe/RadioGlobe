@@ -6,6 +6,7 @@ from rgb_led_async import led_init, blink_led
 # from coordinates import Coordinate
 from radio_config import STATIONS_JSON
 from positional_encoders_async import Positional_Encoders
+from streaming.streaming_cvlc import StreamerCVLC
 
 
 async def reader(encoders: Positional_Encoders):
@@ -36,7 +37,7 @@ async def main():
     # Override settings file
     STICKINESS = 2
     FUZZINESS = 5
-    POLLING_SEC = 0.5
+    POLLING_SEC = 1
 
     # Create led instance
     led = await led_init()
@@ -49,6 +50,9 @@ async def main():
     encoders.zero()
     # NOTE: Should return (512, 512) for origin
     initial_readings = encoders.get_readings()
+
+    # Initialise a streamer
+    streamer = None
 
     # Start by setting the latch so we can see when it unlatches
     # This overrides the setting in the config
@@ -89,6 +93,8 @@ async def main():
                 # Get all the stations info for the city we found
                 station_info = database.get_station_urls(first_city, stations)
                 print(f"Found: {city_list[0]} Station: {station_info}")
+                name, url = station_info[0]
+                print(f"First station: {name}, URL: {url}")
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t
         # print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
