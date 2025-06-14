@@ -1,6 +1,7 @@
 # Thanks to Peter Milne!
 import subprocess
 import logging
+import threading
 
 
 class StreamerCVLC:
@@ -11,30 +12,36 @@ class StreamerCVLC:
         self.audio = audio
         self.url = url
         self.process = None
+        self._stop_event = threading.Event()
 
     def play(self):
-        try:
-            logging.info("Launching VLC for URL: %s", self.url)
-            self.process = subprocess.Popen(
-                ["cvlc", "--intf", "dummy", "--aout", self.audio, self.url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            logging.info("Streamer started with PID %s", self.process.pid)
-        except Exception as e:
-            logging.info("Error launching Streamer: %s", e)
-            self.process = None
+        while not self._stop_event.is_set():
+            try:
+                logging.info("Launching VLC for URL: %s", self.url)
+                self.process = subprocess.Popen(
+                    ["cvlc", "--intf", "dummy", "--aout", self.audio, self.url],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                logging.info("Streamer started with PID %s", self.process.pid)
+
+                # Wait for process to complete or be stopped
+                while self.process.poll() is None and not self._stop_event.is_set():
+                    self._stop_event.wait(1)  # check every second
+
+            except Exception as e:
+                logging.info("Error launching Streamer: %s", e)
+                self.process = None
+                break  # Exit loop on error
 
     def stop(self):
-        """Stop the VLC process."""
+        self._stop_event.set()
         if self.process is None:
             logging.info("No Streamer process to stop")
             return
 
         if self.process.poll() is not None:
-            logging.info(
-                "Streamer process already exited with code %s", self.process.returncode
-            )
+            logging.info("Streamer process already exited with code %s", self.process.returncode)
             self.process = None
             return
 
@@ -45,9 +52,7 @@ class StreamerCVLC:
                 self.process.wait(timeout=5)
                 logging.info("Streamer PID %s terminated cleanly", self.process.pid)
             except subprocess.TimeoutExpired:
-                logging.info(
-                    "Streamer PID %s did not terminate, killing", self.process.pid
-                )
+                logging.info("Streamer PID %s did not terminate, killing", self.process.pid)
                 self.process.kill()  # send SIGKILL if needed
                 self.process.wait()
                 logging.info("Streamer PID %s killed", self.process.pid)
