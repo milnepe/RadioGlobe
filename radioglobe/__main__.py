@@ -1,6 +1,7 @@
 import asyncio
 import time
 import database
+from rgb_led_async import led_init, blink_led
 
 # from coordinates import Coordinate
 from radio_config import STATIONS_JSON
@@ -37,6 +38,9 @@ async def main():
     FUZZINESS = 5
     POLLING_SEC = 0.5
 
+    # Create led instance
+    led = await led_init()
+
     # Initialise encoders
     print("Starting up encoders...")
     encoders = Positional_Encoders()
@@ -48,7 +52,7 @@ async def main():
 
     # Start by setting the latch so we can see when it unlatches
     # This overrides the setting in the config
-    encoders.latch(*initial_readings, STICKINESS)
+    # encoders.latch(*initial_readings, STICKINESS)
     print(initial_readings)
     # time.sleep(2)
 
@@ -64,14 +68,21 @@ async def main():
     asyncio.create_task(reader(encoders))
 
     # Display the encoder values periodically
+    city_list = []
     while True:
         start_t = time.monotonic()
         readings = encoders.get_readings()
         city_list = await get_cities(*readings, cities, FUZZINESS)
-        # If we find a some cities in the area, latch on to the first one
-        # in the list
+        # Skip this bit if it's latched
+        if not encoders.is_latched():
+            # If we find a some cities in the area, latch on to the first one
+            # in the list
+            if city_list:
+                encoders.latch(*readings, STICKINESS)
+                # Async blink in another thread so we don't block
+                blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
+                await blink
         if city_list:
-            encoders.latch(*readings)
             print(f"Found: {city_list[0]}")
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t

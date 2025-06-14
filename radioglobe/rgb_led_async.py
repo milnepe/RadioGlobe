@@ -3,6 +3,7 @@ Asyncio version of LED module
 """
 
 import time
+import asyncio
 
 # import threading
 import RPi.GPIO as GPIO
@@ -21,6 +22,27 @@ COLOURS = {
     "YELLOW": [RED_PIN, GREEN_PIN],
     "WHITE": [RED_PIN, GREEN_PIN, BLUE_PIN],
 }
+
+
+async def led_init():
+    print("Testing LEDs...")
+    led = RGB_LED()
+    led.set_static("RED")
+    await asyncio.sleep(1)
+    led.set_static("GREEN")
+    await asyncio.sleep(1)
+    led.set_static("BLUE")
+    await asyncio.sleep(1)
+    led.set_static("OFF")
+    return led
+
+
+def blink_led(led, colour, duration):
+    print("Led ON")
+    led.set_static(colour)
+    time.sleep(duration)
+    led.set_static("OFF")
+    print("Led OFF")
 
 
 class RGB_LED:
