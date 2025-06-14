@@ -1,27 +1,56 @@
 import asyncio
+import time
 import database
 
 # from coordinates import Coordinate
 from radio_config import STATIONS_JSON
+from positional_encoders_async import Positional_Encoders
 
-from positional_encoders_async import Positional_Encoders, monitor_encoders
+
+async def reader(encoders: Positional_Encoders):
+    print("Starting reader...")
+    while True:
+        # Get a new pair of readings
+        encoders.update()
+        # Don't poll too quickly to allow for next reading
+        await asyncio.sleep(0.2)  # 200 ms
 
 
-async def some_process(lat, lon, city_map, stations_data, fuzziness=2):
-    print("Starting some process...")
+async def get_cities(lat, lon, city_map, fuzziness=2) -> list:
+    # Get the search area for the current position
     search_area = database.look_around((lat, lon), fuzziness=fuzziness)
     # print(f"Search area for ({lat}, {lon}): {search_area}")
-    stations = database.get_found_stations(search_area, city_map, stations_data)
-    # print(f"Found stations: {stations}")
-    await asyncio.sleep(2)  # Simulate some work
-    return stations
+    # Get any cities found for this location
+    cities = database.get_found_cities(search_area, city_map)
+    # await asyncio.sleep(0)
+    return cities
 
 
-# Example consumer coroutine
 async def main():
-    # STICKINESS = 3  # Example stickiness value, adjust as needed
-    print("Initializing positional encoders...")
-    reader = Positional_Encoders()
+    """
+    Returns the cities found when the reticule is moved
+    NOTE: Start with the reticule set to the origin
+    TODO: Convert cities found into a list of stations
+    """
+    # Override settings file
+    STICKINESS = 1
+    FUZZINESS = 5
+    POLLING_SEC = 0.5
+
+    # Initialise encoders
+    print("Starting up encoders...")
+    encoders = Positional_Encoders()
+    # Note the globe should be set to the origin when starting main
+    encoders.update()
+    encoders.zero()
+    # NOTE: Should return (512, 512) for origin
+    initial_readings = encoders.get_readings()
+
+    # Start by setting the latch so we can see when it unlatches
+    # This overrides the setting in the config
+    encoders.latch(*initial_readings, STICKINESS)
+    print(initial_readings)
+    # time.sleep(2)
 
     print("Loading stations data...")
     stations = database.Load_Stations(STATIONS_JSON)
@@ -31,18 +60,17 @@ async def main():
 
     # # encoder_offsets = database.Load_Calibration()
 
-    try:
-        async for lat, lon in monitor_encoders(reader):
-            print(f"Lat: {lat}, Lon: {lon}")
-            result = await some_process(lat, lon, cities, stations, 6)
-            # if cities:
-            #     break
+    # Start reading the encoders continuosly in background
+    asyncio.create_task(reader(encoders))
 
-            # if location_name != "":
-            #     reader.latch(latitude, longitude, stickiness=STICKINESS)
-            #     print("Latched...")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    # Display the encoder values periodically
+    while True:
+        start_t = time.monotonic()
+        readings = encoders.get_readings()
+        await get_cities(*readings, cities, FUZZINESS)
+        await asyncio.sleep(POLLING_SEC)
+        elapst_t = time.monotonic() - start_t
+        print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
 
 
 if __name__ == "__main__":

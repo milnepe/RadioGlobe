@@ -67,6 +67,24 @@ def look_around(origin: tuple, fuzziness: int) -> list:
     return search_area
 
 
+def get_found_cities(search_area: list, city_map: dict) -> list:
+    """
+    Get station info found within search area
+    Can return more than one locations worth of urls depending on fuzziness
+    """
+    cities = []
+    # Check the search area.  Saving the first location name encountered
+    # and all radio stations in the area, in order encountered
+    for coords in search_area:
+        if coords in city_map:
+            city = city_map[coords]
+            logging.debug(f"Coords: {coords}, City: {city}")
+            if city not in cities:
+                cities.append(city)
+    logging.debug(f"Cities found: {cities}")
+    return cities
+
+
 def get_found_stations(search_area: list, city_map: dict, stations_data: dict) -> tuple:
     """Get station info found within search area
     Can return more than one locations worth of urls depending on fuzziness"""

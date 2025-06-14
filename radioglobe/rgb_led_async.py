@@ -1,7 +1,9 @@
 """
 Asyncio version of LED module
 """
+
 import time
+
 # import threading
 import RPi.GPIO as GPIO
 
@@ -21,7 +23,7 @@ COLOURS = {
 }
 
 
-class RGB_LED():
+class RGB_LED:
     def __init__(self):
         # BCM pin numbering!
         GPIO.setmode(GPIO.BCM)
