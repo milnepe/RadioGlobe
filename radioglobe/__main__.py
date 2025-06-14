@@ -67,7 +67,12 @@ async def main():
     while True:
         start_t = time.monotonic()
         readings = encoders.get_readings()
-        await get_cities(*readings, cities, FUZZINESS)
+        city_list = await get_cities(*readings, cities, FUZZINESS)
+        # If we find a some cities in the area, latch on to the first one
+        # in the list
+        if city_list:
+            encoders.latch(*readings)
+            print(f"Found: {city_list[0]}")
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t
         print(f"Coords: {readings} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
