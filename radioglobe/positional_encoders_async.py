@@ -28,7 +28,12 @@ class Positional_Encoders:
             self.longitude + self.longitude_offset
         ) % ENCODER_RESOLUTION
 
-    def latch(self, latitude: int, longitude: int, stickiness: int):
+    def latch(self, latitude: int, longitude: int, stickiness: int = 2):
+        """
+        Stickiness affects how sensitive the encoders are to change.
+        The raw readings jitter alot so this clamps the values depending
+        on the stickiness: same vales are 1 or 2
+        """
         self.latch_stickiness = stickiness
 
         # Need to convert the latched values to take account of the offset, or it would
@@ -36,10 +41,11 @@ class Positional_Encoders:
         self.latitude = (latitude - self.latitude_offset) % ENCODER_RESOLUTION
         self.longitude = (longitude - self.longitude_offset) % ENCODER_RESOLUTION
 
-    def is_latched(self):
-        if self.latch_stickiness is not None:
-            return True
-        return False
+    def is_latched(self) -> bool:
+        """
+        Returns true if the encoders are latched, otherwise false
+        """
+        return bool(self.latch_stickiness)
 
     def check_parity(self, reading: int):
         # The parity bit is bit 0 (note the reading is most-significant-bit first)
@@ -115,9 +121,3 @@ async def monitor_encoders(reader: Positional_Encoders, poll_interval=0.2):
         # readings = reader.read_spi()
         reader.update()
         yield reader.get_readings()
-
-
-if __name__ == '__main__':
-    ps = Positional_Encoders()
-
-    asyncio.run(monitor_encoders(ps))
