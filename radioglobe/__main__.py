@@ -4,7 +4,7 @@ import database
 # from coordinates import Coordinate
 from radio_config import STATIONS_JSON
 
-from apositional_encoders import Positional_Encoders, monitor_encoders
+from positional_encoders_async import Positional_Encoders, monitor_encoders
 
 
 async def some_process(lat, lon, city_map, stations_data, fuzziness=2):

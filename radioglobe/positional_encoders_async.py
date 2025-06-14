@@ -115,3 +115,9 @@ async def monitor_encoders(reader: Positional_Encoders, poll_interval=0.2):
         # readings = reader.read_spi()
         reader.update()
         yield reader.get_readings()
+
+
+if __name__ == '__main__':
+    ps = Positional_Encoders()
+
+    asyncio.run(monitor_encoders(ps))
