@@ -1,6 +1,7 @@
 """
 Test reading the encoders as a background task asynchronously
 """
+
 import asyncio
 import time
 from positional_encoders_async import Positional_Encoders
@@ -39,5 +40,6 @@ async def main():
         elapst_t = time.monotonic() - start_t
         print(f"Coords: {readings} Latched: {ps.is_latched()} t={elapst_t:.1f}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

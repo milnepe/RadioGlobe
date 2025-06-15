@@ -43,10 +43,12 @@ async def second_thing():
     await asyncio.sleep(2)
     print("Finished second thing...")
 
+
 async def blinker(led, colour, duration):
-        blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
-        await blink
-        
+    blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
+    await blink
+
+
 async def main():
     # Create led instance
     led = await led_init()

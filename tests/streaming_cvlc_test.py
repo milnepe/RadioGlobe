@@ -1,6 +1,7 @@
 """
 Test harness for async cvlc streamer
 """
+
 import asyncio
 import time
 import database
@@ -108,7 +109,7 @@ async def main():
                     streamer.stop()
                     # Wait for thread to finish cleanly
                     await streamer_task
-                
+
                 # Now start a new streamer in its own thread
                 streamer = StreamerCVLC(AUDIO_SERVICE, url)
                 streamer_task = asyncio.create_task(asyncio.to_thread(streamer.play))
