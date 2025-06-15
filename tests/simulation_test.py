@@ -52,49 +52,6 @@ class Encoder:
             await asyncio.sleep(0.05)  # Poll frequently, but don't hog CPU
 
 
-class Button:
-    def __init__(self, pin, name, queue=None):
-        self.pin = pin
-        self.name = name
-        self.queue = queue
-        # In a real implementation, set up GPIO input and event detection.
-        logging.info(f"Button '{name}' initialized on pin {pin}")
-
-    async def monitor(self):
-        # This is where you'd read the actual GPIO pin.
-        # Use RPi.GPIO's add_event_detect with bouncetime for debouncing
-        # and then loop.call_soon_threadsafe to deliver the event.
-        logging.info(f"Monitoring Button '{self.name}' on pin {self.pin}...")
-        while True:
-            if self.queue:
-                if (asyncio.get_event_loop().time() * 1000) % (
-                    3000 + self.pin * 100
-                ) < 50:  # Simulate button press
-                    await self.queue.put(("button_press", self.pin, self.name))
-                    logging.debug(f"Simulated button press: {self.name}")
-            await asyncio.sleep(0.05)  # Poll frequently for simulation
-
-
-class Display:
-    def __init__(self):
-        logging.info("Display initialized.")
-
-    async def update_display(self, message):
-        # Simulate display update (e.g., I2C communication to an LCD)
-        logging.info(f"Display update: {message}")
-        await asyncio.sleep(0.1)  # Simulate I/O time
-
-
-class AudioPlayer:
-    def __init__(self):
-        logging.info("Audio Player initialized.")
-
-    async def play_sound(self, sound_file):
-        # Simulate playing an audio file
-        logging.info(f"Playing sound: {sound_file}")
-        await asyncio.sleep(0.5)  # Simulate audio playback time
-
-
 # --- Event Handlers (Business Logic) ---
 
 
@@ -104,13 +61,6 @@ async def handle_encoder_event(event_data, display, audio_player):
     await display.update_display(f"Enc{encoder_id}: {value} {direction}")
     if value % 10 == 0:
         await audio_player.play_sound("click.wav")
-
-
-async def handle_button_event(event_data, display, audio_player):
-    button_pin, button_name = event_data[1], event_data[2]
-    logging.info(f"Button '{button_name}' (Pin {button_pin}) pressed!")
-    await display.update_display(f"Btn {button_name} pressed!")
-    await audio_player.play_sound("beep.wav")
 
 
 # --- Main Application Logic ---
@@ -123,7 +73,8 @@ async def event_processor(event_queue, display, audio_player):
         if event_type == "encoder_turn":
             await handle_encoder_event(("encoder_turn", *data), display, audio_player)
         elif event_type == "button_press":
-            await handle_button_event(("button_press", *data), display, audio_player)
+            logging.info("Handling button event...")
+            # await handle_button_event(("button_press", *data), display, audio_player)
         # Add more event types as needed
         event_queue.task_done()
 
@@ -135,8 +86,8 @@ async def main():
     event_queue = asyncio.Queue()
 
     # Initialize hardware components
-    display = Display()
-    audio_player = AudioPlayer()
+    # display = Display()
+    # audio_player = AudioPlayer()
 
     encoders = [
         Encoder(pin_a=17, pin_b=18, button_pin=27, queue=event_queue),
@@ -144,22 +95,22 @@ async def main():
         Encoder(pin_a=5, pin_b=6, button_pin=13, queue=event_queue),
     ]
 
-    buttons = [
-        Button(pin=4, name="Menu Button", queue=event_queue),
-        Button(pin=22, name="Select Button", queue=event_queue),
-        Button(pin=10, name="Back Button", queue=event_queue),
-    ]
+    # buttons = [
+    #     Button(pin=4, name="Menu Button", queue=event_queue),
+    #     Button(pin=22, name="Select Button", queue=event_queue),
+    #     Button(pin=10, name="Back Button", queue=event_queue),
+    # ]
 
     # Create tasks for monitoring each hardware component
     monitor_tasks = []
     for encoder in encoders:
         monitor_tasks.append(asyncio.create_task(encoder.monitor()))
-    for button in buttons:
-        monitor_tasks.append(asyncio.create_task(button.monitor()))
+    # for button in buttons:
+    #     monitor_tasks.append(asyncio.create_task(button.monitor()))
 
     # Create a task for processing events from the queue
-    processor_task = asyncio.create_task(event_processor(event_queue, display, audio_player))
-
+    # processor_task = asyncio.create_task(event_processor(event_queue, display, audio_player))
+    processor_task = asyncio.create_task(event_processor(event_queue))
     # Add a global shutdown handler
     stop_event = asyncio.Event()
 
@@ -168,15 +119,10 @@ async def main():
         stop_event.set()
 
     loop = asyncio.get_running_loop()
-    if (
-        sys.platform != "win32"
-    ):  # Windows doesn't support add_signal_handler for SIGTERM/SIGINT directly
-        loop.add_signal_handler(signal.SIGINT, signal_handler)
-        loop.add_signal_handler(signal.SIGTERM, signal_handler)
-    else:
-        # On Windows, Ctrl+C generates a KeyboardInterrupt.
-        # We can catch this with a try-except around asyncio.run()
-        pass
+
+    # Add signal handlers for shutdown
+    loop.add_signal_handler(signal.SIGINT, signal_handler)
+    loop.add_signal_handler(signal.SIGTERM, signal_handler)
 
     try:
         # Wait for the stop event to be set (e.g., by signal handler)
