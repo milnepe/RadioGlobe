@@ -26,7 +26,7 @@ class Streamer:
         self.volume = 80  # Volume cache
 
     def set_player(self, url):
-        playlists = ("m3u", "pls")
+        playlists = ("m3u", "pls", "m3u8")
         url = url.strip()
         # extension = (url.rpartition(".")[2])[:3]
         extension = url.lower().rpartition(".")[2]
@@ -52,8 +52,11 @@ class Streamer:
             logging.error(f"Media player error {e}")
 
     def stop(self):
-        if self.player:
-            self.player.stop()
+        try:
+            if self.player:
+                self.player.stop()
+        except Exception as e:
+            logging.error(f"Stop error: {e}")
 
     def play(self, url):
         try:
@@ -61,7 +64,7 @@ class Streamer:
             self.set_player(url)
             self.player.play()
         except Exception as e:
-            logging.debug(f"Play error: {e}")
+            logging.error(f"Play error: {e}")
 
     def set_volume(self, volume):
         if self.volume != volume:
