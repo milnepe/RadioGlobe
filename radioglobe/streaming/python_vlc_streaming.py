@@ -27,10 +27,10 @@ class Streamer:
 
     def set_player(self, url):
         playlists = ("m3u", "pls", "m3u8")
-        url = url.strip()
-        # extension = (url.rpartition(".")[2])[:3]
+        # url = url.strip()
+        # # extension = (url.rpartition(".")[2])[:3]
         extension = url.lower().rpartition(".")[2]
-        logging.debug(f"URL extension: {extension}")
+        # logging.debug(f"URL extension: {extension}")
 
         try:
             # We need a different type of media instance for urls containing playlists
