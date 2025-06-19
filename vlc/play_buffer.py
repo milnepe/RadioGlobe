@@ -99,14 +99,14 @@ class StreamProviderDir(object):
         It reads the current file in the list and returns the binary data
         In this example it reads from file, but it could have downloaded data from an url
         """
-        print(f"reading file [{self._index}] ", end='')
+        print(f"reading file [{self._index}] ", end="")
 
         if self._index == len(self._media_files):
             print("file list is over")
-            return b''
+            return b""
 
         print(f"{self._media_files[self._index]}")
-        with open(self._media_files[self._index], 'rb') as stream:
+        with open(self._media_files[self._index], "rb") as stream:
             data = stream.read()
 
         self._index = self._index + 1
@@ -117,6 +117,7 @@ class StreamProviderDir(object):
 # HERE THERE ARE THE CALLBACKS USED BY THE MEDIA CREATED IN THE "MAIN"
 # a callback in its simplest form is a python function decorated with the specific @vlc.CallbackDecorators.*
 
+
 @vlc.CallbackDecorators.MediaOpenCb
 def media_open_cb(opaque, data_pointer, size_pointer):
     print("OPEN", opaque, data_pointer, size_pointer)
@@ -126,7 +127,7 @@ def media_open_cb(opaque, data_pointer, size_pointer):
     stream_provider.open()
 
     data_pointer.contents.value = opaque
-    size_pointer.value = 1 ** 64 - 1
+    size_pointer.value = 1**64 - 1
 
     return 0
 
@@ -170,17 +171,13 @@ def media_close_cb(opaque):
 
 
 # MAIN
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-            description='play files found in specified media folder (in alphabetic order)',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-            'media_folder',
-            help='where to find files to play')
-    parser.add_argument(
-            '--extension',
-            default='ts',
-            help='file extension of the files to play')
+        description="play files found in specified media folder (in alphabetic order)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("media_folder", help="where to find files to play")
+    parser.add_argument("--extension", default="ts", help="file extension of the files to play")
     args = parser.parse_args()
 
     # helper object acting as media data provider
@@ -198,11 +195,8 @@ if __name__ == '__main__':
 
     # setup the callbacks for the media
     media = instance.media_new_callbacks(
-            media_open_cb,
-            media_read_cb,
-            media_seek_cb,
-            media_close_cb,
-            stream_provider_ptr)
+        media_open_cb, media_read_cb, media_seek_cb, media_close_cb, stream_provider_ptr
+    )
     player = media.player_new_from_media()
 
     # play/stop

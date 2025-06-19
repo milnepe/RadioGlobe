@@ -44,7 +44,11 @@ class AsyncStationPlayer:
 
         # Try to extract from .m3u
         elif url.endswith(".m3u") or url.endswith(".m3u8") or "#extm3u" in content:
-            lines = [line.strip() for line in content.splitlines() if line.strip() and not line.startswith("#")]
+            lines = [
+                line.strip()
+                for line in content.splitlines()
+                if line.strip() and not line.startswith("#")
+            ]
             if lines:
                 return await self.resolve_playlist(lines[0], depth + 1)
 

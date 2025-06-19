@@ -18,6 +18,7 @@ import vlc
 import time
 import io
 
+
 def parse_pls(pls_url):
     try:
         response = requests.get(pls_url, timeout=5)
@@ -26,16 +27,17 @@ def parse_pls(pls_url):
         config = configparser.ConfigParser()
         config.read_file(io.StringIO(pls_text))
 
-        if config.has_section('playlist'):
-            for option in config.options('playlist'):
-                if option.startswith('file'):
-                    stream_url = config.get('playlist', option)
+        if config.has_section("playlist"):
+            for option in config.options("playlist"):
+                if option.startswith("file"):
+                    stream_url = config.get("playlist", option)
                     print(f"✅ Found stream in .pls: {stream_url}")
                     return stream_url
         print("⚠️ No valid stream URL found in .pls.")
     except Exception as e:
         print(f"❌ Failed to fetch or parse .pls: {e}")
     return None
+
 
 def play_stream(stream_url):
     instance = vlc.Instance()
@@ -51,6 +53,7 @@ def play_stream(stream_url):
     except KeyboardInterrupt:
         print("🛑 Stopping...")
         player.stop()
+
 
 # === Main Execution ===
 # Try with a .pls first
