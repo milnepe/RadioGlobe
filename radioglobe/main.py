@@ -7,19 +7,14 @@ from database import load_stations
 from database import build_cities_index
 from database import look_around
 from database import get_first_station_info
+from database import get_all_station_info
 
 
-# stations = [
-#     ("WKSU Public Radio", "http://stream.wksu.org/wksu1.mp3.128"),
-#     ("WCPN Public Radio", "http://audio1.ideastream.org/wcpn128.mp3"),
-# ]
-
-
-async def find_all_cities(points, cities):
+async def find_all_cities(coords, cities):
     """
     Returns all cities that match with points
     """
-    return [cities[pt] for pt in points if pt in cities]
+    return [cities[coord] for coord in coords if coord in cities]
 
 
 class AudioPlayer:
@@ -50,13 +45,16 @@ class App:
         self.dial = AsyncDialWithButton()
         self.audio_player = AudioPlayer()
         self.encoders = PositionalEncoders()
-        # self.stations = stations
         self.stations = None
+        self.cities = None
         self.current_index = 0
         self.mode = "normal"
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
+        if not self.stations:
+            print("⚠️ No stations available.")
+            return
         self.current_index = (self.current_index + direction) % len(self.stations)
         name, url = self.stations[self.current_index]
         print(f"📻 Tuning to: {name}")
@@ -81,18 +79,15 @@ class App:
         cities_idx = build_cities_index(stations_info)
         print(cities_idx)
 
-        # self.dial.start()
+        self.dial.start()
 
-        task = asyncio.create_task(self.encoders.run())
-
-        # name, url = self.stations[self.current_index]
-        # print(f"📻 Starting with: {name}")
-        # self.audio_player.play(url)
+        asyncio.create_task(self.encoders.run())
 
         try:
             await asyncio.sleep(0.5)
-            coords_lat, coords_long = self.encoders.get_readings()
-            print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+            # Get current coordinates
+            coords = self.encoders.get_readings()
+            print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
 
             self.encoders.zero()
             print(
@@ -102,32 +97,39 @@ class App:
             while True:
                 await asyncio.sleep(0.1)
 
-                coord = self.encoders.get_readings()
-                # Get a list of coordinates that are close to the current coordinates
-                # The size of the area is determined by the FUZZINESS value
-                coords = look_around(coord, FUZZINESS)
-                # Get any cities that match with the look around coords
-                matches = await find_all_cities(coords, cities_idx)
+                coords = self.encoders.get_readings()
+                # Get a list of coordinates that surround the current coordinates
+                # The size of the look arround zone is determined by the FUZZINESS value
+                zone = look_around(coords, FUZZINESS)
+                # Get any cities that match with in the look arround zone
+                matches = await find_all_cities(zone, cities_idx)
                 if not self.encoders.is_latched():
-                    print(coord)
-                    # Set the latch to hold onto any matched cities until the reticule moves again
-                    # Sensitivity is determined by the STICKINESS value
+                    print(coords)
+
                     if matches:
-                        self.encoders.latch(*coord, stickiness=STICKINESS)
-                        city = matches[0]  # First match
+                        # Set the latch to hold onto any matched cities until the reticule moves again
+                        # Sensitivity is determined by the STICKINESS value
+                        self.encoders.latch(*coords, stickiness=STICKINESS)
+                        self.cities = matches
                         print(f"Matching cities: {matches} {self.encoders.is_latched()}")
-                        name, url = get_first_station_info(stations_info, city)
+
+                        # Play first station for first matched city
+                        name, url = get_first_station_info(stations_info, self.cities[0])
                         print(f"📻 Tuning to: {name}")
                         self.audio_player.play(url)
 
-                # direction = self.dial.get_direction()
-                # if direction != 0:
-                #     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
-                #     self.next_station(direction)
+                        # Get the rest of the stations for current city
+                        self.stations = get_all_station_info(stations_info, self.cities[0])
 
-                # if self.dial.get_button():
-                #     print("🖲️ Button pressed!")
-                #     self.switch_mode()
+                # Select stations using dial
+                direction = self.dial.get_direction()
+                if direction != 0:
+                    print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
+                    self.next_station(direction)
+
+                if self.dial.get_button():
+                    print("🖲️ Button pressed!")
+                    self.switch_mode()
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")

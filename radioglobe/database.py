@@ -80,6 +80,14 @@ def get_first_station_info(stations, city_country):
     return None, None
 
 
+def get_all_station_info(stations, city_country):
+    station_info = stations.get(city_country)
+    if not station_info or "urls" not in station_info:
+        return []
+
+    return [(entry["name"], entry["url"]) for entry in station_info["urls"]]
+
+
 def get_found_cities(search_area: list, city_map: dict) -> list:
     """
     Get station info found within search area
