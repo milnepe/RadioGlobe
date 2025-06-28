@@ -6,12 +6,13 @@ from positional_encoders_async import PositionalEncoders
 from database import load_stations
 from database import build_cities_index
 from database import look_around
+from database import get_first_station_info
 
 
-stations = [
-    ("WKSU Public Radio", "http://stream.wksu.org/wksu1.mp3.128"),
-    ("WCPN Public Radio", "http://audio1.ideastream.org/wcpn128.mp3"),
-]
+# stations = [
+#     ("WKSU Public Radio", "http://stream.wksu.org/wksu1.mp3.128"),
+#     ("WCPN Public Radio", "http://audio1.ideastream.org/wcpn128.mp3"),
+# ]
 
 async def find_all_cities(points, cities):
     """
@@ -48,7 +49,8 @@ class App:
         self.dial = AsyncDialWithButton()
         self.audio_player = AudioPlayer()
         self.encoders = PositionalEncoders()
-        self.stations = stations
+        # self.stations = stations
+        self.stations = None
         self.current_index = 0
         self.mode = "normal"
 
@@ -71,19 +73,20 @@ class App:
         FUZZINESS = 3
 
         # Load the stations information into memory
-        stations_idx = load_stations("perth-stations-test.json")
-        print(stations_idx)
+        # stations_info = load_stations("perth-stations-test.json")
+        stations_info = load_stations("stations.json")
+        print(stations_info)
 
-        cities_idx = build_cities_index(stations_idx)
+        cities_idx = build_cities_index(stations_info)
         print(cities_idx)
 
-        self.dial.start()
+        # self.dial.start()
 
         task = asyncio.create_task(self.encoders.run())
 
-        name, url = self.stations[self.current_index]
-        print(f"📻 Starting with: {name}")
-        self.audio_player.play(url)
+        # name, url = self.stations[self.current_index]
+        # print(f"📻 Starting with: {name}")
+        # self.audio_player.play(url)
 
         try:
             await asyncio.sleep(0.5)
@@ -107,17 +110,21 @@ class App:
                     # Set the latch to hold onto any matched cities until the reticule moves again
                     # Sensitivity is determined by the STICKINESS value 
                     if matches:
-                        print(f"Matching cities: {matches[0]} {self.encoders.is_latched()}")
                         self.encoders.latch(*coord, stickiness=STICKINESS)
+                        city = matches[0]  # First match
+                        print(f"Matching cities: {matches} {self.encoders.is_latched()}")
+                        name, url = get_first_station_info(stations_info, city)
+                        print(f"📻 Tuning to: {name}")
+                        self.audio_player.play(url)
 
-                direction = self.dial.get_direction()
-                if direction != 0:
-                    print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
-                    self.next_station(direction)
+                # direction = self.dial.get_direction()
+                # if direction != 0:
+                #     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
+                #     self.next_station(direction)
 
-                if self.dial.get_button():
-                    print("🖲️ Button pressed!")
-                    self.switch_mode()
+                # if self.dial.get_button():
+                #     print("🖲️ Button pressed!")
+                #     self.switch_mode()
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")

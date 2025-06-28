@@ -72,6 +72,14 @@ def look_around(origin: tuple, fuzziness: int) -> list:
     return search_area
 
 
+def get_first_station_info(stations, city_country):
+    station_info = stations.get(city_country)
+    if station_info and 'urls' in station_info and station_info['urls']:
+        first_station = station_info['urls'][0]
+        return first_station['name'], first_station['url']
+    return None, None
+
+
 def get_found_cities(search_area: list, city_map: dict) -> list:
     """
     Get station info found within search area
