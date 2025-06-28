@@ -5,12 +5,19 @@ from dial_button_async import AsyncDialWithButton
 from positional_encoders_async import PositionalEncoders
 from database import load_stations
 from database import build_cities_index
+from database import look_around
 
 
 stations = [
     ("WKSU Public Radio", "http://stream.wksu.org/wksu1.mp3.128"),
     ("WCPN Public Radio", "http://audio1.ideastream.org/wcpn128.mp3"),
 ]
+
+async def find_all_cities(points, cities):
+    """
+    Returns all cities that match with points
+    """
+    return [cities[pt] for pt in points if pt in cities]
 
 
 class AudioPlayer:
@@ -61,6 +68,7 @@ class App:
     async def run(self):
         """Main app loop."""
         STICKINESS = 10
+        FUZZINESS = 3
 
         # Load the stations information into memory
         stations_idx = load_stations("perth-stations-test.json")
@@ -88,9 +96,19 @@ class App:
             while True:
                 await asyncio.sleep(0.1)
 
-                coords_lat, coords_long = self.encoders.get_readings()
-                self.encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
-                print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+                coord = self.encoders.get_readings()
+                # Get a list of coordinates that are close to the current coordinates
+                # The size of the area is determined by the FUZZINESS value
+                coords = look_around(coord, FUZZINESS)
+                # Get any cities that match with the look around coords
+                matches = await find_all_cities(coords, cities_idx)
+                if not self.encoders.is_latched():
+                    print(coord)
+                    # Set the latch to hold onto any matched cities until the reticule moves again
+                    # Sensitivity is determined by the STICKINESS value 
+                    if matches:
+                        print(f"Matching cities: {matches[0]} {self.encoders.is_latched()}")
+                        self.encoders.latch(*coord, stickiness=STICKINESS)
 
                 direction = self.dial.get_direction()
                 if direction != 0:
