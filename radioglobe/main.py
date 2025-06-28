@@ -1,6 +1,7 @@
 import asyncio
 import vlc
 from dial_button_async import AsyncDialWithButton
+from positional_encoders_async import PositionalEncoders
 
 
 stations = [
@@ -36,6 +37,7 @@ class App:
     def __init__(self):
         self.dial = AsyncDialWithButton()
         self.audio_player = AudioPlayer()
+        self.encoders = PositionalEncoders()
         self.stations = stations
         self.current_index = 0
         self.mode = "normal"
@@ -55,12 +57,23 @@ class App:
 
     async def run(self):
         """Main app loop."""
+        STICKINESS = 10
         self.dial.start()
+
+        task = asyncio.create_task(self.encoders.run())
+
         name, url = self.stations[self.current_index]
         print(f"📻 Starting with: {name}")
         self.audio_player.play(url)
 
         try:
+            await asyncio.sleep(0.5)
+            coords_lat, coords_long = self.encoders.get_readings()
+            print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+
+            self.encoders.zero()
+            print(f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}")
+
             while True:
                 await asyncio.sleep(0.1)
 
@@ -72,6 +85,10 @@ class App:
                 if self.dial.get_button():
                     print("🖲️ Button pressed!")
                     self.switch_mode()
+
+                coords_lat, coords_long = self.encoders.get_readings()
+                self.encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
+                print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")
