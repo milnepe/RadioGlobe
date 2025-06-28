@@ -4,7 +4,7 @@ Test reading the encoders as a background task asynchronously
 
 import asyncio
 import time
-from positional_encoders_async import Positional_Encoders
+from positional_encoders_async_alt import Positional_Encoders
 
 
 async def reader(encoders: Positional_Encoders):
