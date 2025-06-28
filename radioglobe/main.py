@@ -1,7 +1,10 @@
 import asyncio
 import vlc
+
 from dial_button_async import AsyncDialWithButton
 from positional_encoders_async import PositionalEncoders
+from database import load_stations
+from database import build_cities_index
 
 
 stations = [
@@ -58,6 +61,14 @@ class App:
     async def run(self):
         """Main app loop."""
         STICKINESS = 10
+
+        # Load the stations information into memory
+        stations_idx = load_stations("perth-stations-test.json")
+        print(stations_idx)
+
+        cities_idx = build_cities_index(stations_idx)
+        print(cities_idx)
+
         self.dial.start()
 
         task = asyncio.create_task(self.encoders.run())
@@ -77,6 +88,10 @@ class App:
             while True:
                 await asyncio.sleep(0.1)
 
+                coords_lat, coords_long = self.encoders.get_readings()
+                self.encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
+                print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+
                 direction = self.dial.get_direction()
                 if direction != 0:
                     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
@@ -85,10 +100,6 @@ class App:
                 if self.dial.get_button():
                     print("🖲️ Button pressed!")
                     self.switch_mode()
-
-                coords_lat, coords_long = self.encoders.get_readings()
-                self.encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
-                print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")

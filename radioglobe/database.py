@@ -1,14 +1,16 @@
 import json
 import os.path
 import logging
-from radio_config import DATADIR, STATIONS_JSON, ENCODER_RESOLUTION, OFFSETS_JSON
+from radio_config import DATADIR, ENCODER_RESOLUTION, OFFSETS_JSON
 
 
 os.makedirs(DATADIR, exist_ok=True)
 
 
-def Load_Stations(stations_json: str) -> dict:
-    """Return dictionary of stations from stations file"""
+def load_stations(stations_json: str) -> dict:
+    """
+    Return a dictionary of stations from stations file
+    """
     stations_dict = {}
     try:
         with open(stations_json, "r", encoding="utf8") as stations_file:
@@ -20,10 +22,12 @@ def Load_Stations(stations_json: str) -> dict:
     return stations_dict
 
 
-def build_map(stations_data: dict) -> dict:
-    """Map each encoder location to list of cities (Stations DB key) for that location.
-    Each location can have one or more cites eg:
-    {(609, 178): ['Riverside,US-CA', 'San Bernardino,US-CA'], ...}"""
+def build_cities_index(stations_data: dict) -> dict:
+    """
+    Builds an index of cities for each grid square of the globe
+    Each index can have one or more cites eg:
+    {(609, 178): ['Riverside,US-CA', 'San Bernardino,US-CA'], ...}
+    """
     cities_index = {}
     for location in stations_data:
         # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
@@ -35,6 +39,7 @@ def build_map(stations_data: dict) -> dict:
         if city_coords not in cities_index:
             cities_index[city_coords] = location
 
+    logging.info("Built cities index...")
     return cities_index
 
 
