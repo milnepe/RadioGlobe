@@ -80,7 +80,10 @@ class PositionalEncoders:
                     lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
                     lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
 
-                    if lat_difference > self.latch_stickiness or lon_difference > self.latch_stickiness:
+                    if (
+                        lat_difference > self.latch_stickiness
+                        or lon_difference > self.latch_stickiness
+                    ):
                         self.latch_stickiness = None
                         continue
 

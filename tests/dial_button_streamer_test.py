@@ -11,7 +11,7 @@ stations = [
 
 class AudioPlayer:
     def __init__(self):
-        self.instance = vlc.Instance('--input-repeat=-1')
+        self.instance = vlc.Instance("--input-repeat=-1")
         self.player = self.instance.media_player_new()
         self.current_url = None
 
@@ -28,6 +28,7 @@ class AudioPlayer:
     def stop(self):
         if self.player.is_playing():
             self.player.stop()
+
 
 class App:
     def __init__(self):
@@ -68,6 +69,7 @@ class App:
             print("👋 Exiting...")
             self.audio_player.stop()
             await self.dial.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(App().run())

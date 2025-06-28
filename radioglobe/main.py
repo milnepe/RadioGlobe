@@ -14,6 +14,7 @@ from database import get_first_station_info
 #     ("WCPN Public Radio", "http://audio1.ideastream.org/wcpn128.mp3"),
 # ]
 
+
 async def find_all_cities(points, cities):
     """
     Returns all cities that match with points
@@ -23,7 +24,7 @@ async def find_all_cities(points, cities):
 
 class AudioPlayer:
     def __init__(self):
-        self.instance = vlc.Instance('--input-repeat=-1')
+        self.instance = vlc.Instance("--input-repeat=-1")
         self.player = self.instance.media_player_new()
         self.current_url = None
 
@@ -94,7 +95,9 @@ class App:
             print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
             self.encoders.zero()
-            print(f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}")
+            print(
+                f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
+            )
 
             while True:
                 await asyncio.sleep(0.1)
@@ -108,7 +111,7 @@ class App:
                 if not self.encoders.is_latched():
                     print(coord)
                     # Set the latch to hold onto any matched cities until the reticule moves again
-                    # Sensitivity is determined by the STICKINESS value 
+                    # Sensitivity is determined by the STICKINESS value
                     if matches:
                         self.encoders.latch(*coord, stickiness=STICKINESS)
                         city = matches[0]  # First match
