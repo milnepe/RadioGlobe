@@ -2,6 +2,7 @@ import asyncio
 import random
 import RPi.GPIO as GPIO
 
+
 class RGBLed:
     COLOURS = {
         "red": (1, 0, 0),
@@ -12,11 +13,7 @@ class RGBLed:
     }
 
     def __init__(self, red_pin=22, green_pin=23, blue_pin=24):
-        self.pins = {
-            "red": red_pin,
-            "green": green_pin,
-            "blue": blue_pin
-        }
+        self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
         GPIO.setmode(GPIO.BCM)
         for pin in self.pins.values():
             GPIO.setup(pin, GPIO.OUT)
@@ -74,6 +71,7 @@ async def main():
         except asyncio.CancelledError:
             print("Worker stopped.")
         led.cleanup()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

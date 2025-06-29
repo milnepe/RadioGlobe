@@ -66,6 +66,16 @@ class App:
         print(f"📻 Tuning to: {name}")
         self.audio_player.play(url)
 
+    def next_city(self, direction):
+        """Navigate to the next or previous city."""
+        if not self.cities:
+            print("⚠️ No cities available.")
+            return
+        self.current_index = (self.current_index + direction) % len(self.cities)
+        print(self.cities)
+        name = self.cities[self.current_index]
+        print(f"📻 Changed city: {name}")
+
     def switch_mode(self):
         """Toggle between application modes."""
         self.mode = "city" if self.mode == "station" else "station"
@@ -142,6 +152,8 @@ class App:
                     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
                     if self.mode == "station":
                         self.next_station(direction)
+                    elif self.mode == "city":
+                        self.next_city(direction)
 
                 if self.dial.get_button():
                     asyncio.create_task(led_task(led, led_running, "red", 0.2))
