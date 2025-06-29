@@ -1,5 +1,6 @@
 import asyncio
 import vlc
+import RPi.GPIO as GPIO
 
 from dial_button_async import AsyncDialWithButton
 
@@ -7,6 +8,9 @@ from positional_encoders_async import PositionalEncoders
 
 from rgb_led_async import RGBLed
 from rgb_led_async import led_task
+
+from buttons_async import AsyncButton
+from buttons_async import AsyncButtonManager
 
 from database import load_stations
 from database import build_cities_index
@@ -54,6 +58,8 @@ class App:
         self.cities = None
         self.current_index = 0
         self.mode = "station"
+        self.button_manager = None
+
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -102,6 +108,17 @@ class App:
         # worker_task = asyncio.create_task(worker(led, led_running))
 
         asyncio.create_task(self.encoders.run())
+
+        # 🔌 Set up buttons
+        button_events = []
+        self.button_manager = AsyncButtonManager([
+            ("Jog_push", 27),
+            ("Top", 5),
+            ("Mid", 6),
+            ("Low", 12),
+            ("Shutdown", 26)
+        ], loop=asyncio.get_running_loop())
+        asyncio.create_task(self.button_manager.poll_buttons(button_events))
 
         try:
             await asyncio.sleep(0.5)
@@ -159,6 +176,21 @@ class App:
                     asyncio.create_task(led_task(led, led_running, "red", 0.2))
                     print("🖲️ Button pressed!")
                     self.switch_mode()
+
+                # 🆕 Process button events
+                while button_events:
+                    button_name, time_held = button_events.pop(0)
+                    print(f"🔘 Button event: {button_name} held for {time_held}s")
+
+                    # Example: handle shutdown
+                    if button_name == "Shutdown" and time_held > 2:
+                        print("⚠️ Shutdown initiated.")
+                        self.audio_player.stop()
+                        await self.dial.stop()
+                        GPIO.cleanup()
+                        return
+
+                    self.button_manager.clear(button_name)
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")
