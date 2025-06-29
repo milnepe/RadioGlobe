@@ -53,7 +53,7 @@ class App:
         self.stations = None
         self.cities = None
         self.current_index = 0
-        self.mode = "normal"
+        self.mode = "station"
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -68,7 +68,7 @@ class App:
 
     def switch_mode(self):
         """Toggle between application modes."""
-        self.mode = "alt" if self.mode == "normal" else "normal"
+        self.mode = "city" if self.mode == "station" else "station"
         print(f"🌀 Mode switched to: {self.mode}")
         # Future mode-based behavior can go here
 
@@ -140,7 +140,8 @@ class App:
                 if direction != 0:
                     asyncio.create_task(led_task(led, led_running, "blue", 0.1))
                     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
-                    self.next_station(direction)
+                    if self.mode == "station":
+                        self.next_station(direction)
 
                 if self.dial.get_button():
                     asyncio.create_task(led_task(led, led_running, "red", 0.2))
