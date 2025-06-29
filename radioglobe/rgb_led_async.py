@@ -1,164 +1,79 @@
-"""
-Asyncio version of LED module
-"""
-
-import time
 import asyncio
-
-# import threading
+import random
 import RPi.GPIO as GPIO
 
-RED_PIN = 22
-GREEN_PIN = 23
-BLUE_PIN = 24
+class RGBLed:
+    COLOURS = {
+        "red": (1, 0, 0),
+        "green": (0, 1, 0),
+        "blue": (0, 0, 1),
+        "white": (1, 1, 1),
+        "off": (0, 0, 0),
+    }
 
-COLOURS = {
-    "OFF": None,
-    "RED": [RED_PIN],
-    "GREEN": [GREEN_PIN],
-    "BLUE": [BLUE_PIN],
-    "CYAN": [GREEN_PIN, BLUE_PIN],
-    "MAGENTA": [RED_PIN, BLUE_PIN],
-    "YELLOW": [RED_PIN, GREEN_PIN],
-    "WHITE": [RED_PIN, GREEN_PIN, BLUE_PIN],
-}
-
-
-async def led_init():
-    print("Testing LEDs...")
-    led = RGB_LED()
-    led.set_static("RED")
-    await asyncio.sleep(1)
-    led.set_static("GREEN")
-    await asyncio.sleep(1)
-    led.set_static("BLUE")
-    await asyncio.sleep(1)
-    led.set_static("OFF")
-    return led
-
-
-def blink_led(led, colour, duration):
-    print("Led ON")
-    led.set_static(colour)
-    time.sleep(duration)
-    led.set_static("OFF")
-    print("Led OFF")
-
-
-class RGB_LED:
-    def __init__(self):
-        # BCM pin numbering!
+    def __init__(self, red_pin=22, green_pin=23, blue_pin=24):
+        self.pins = {
+            "red": red_pin,
+            "green": green_pin,
+            "blue": blue_pin
+        }
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup([RED_PIN, GREEN_PIN, BLUE_PIN], direction=GPIO.OUT, initial=GPIO.HIGH)
+        for pin in self.pins.values():
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, GPIO.LOW)
 
-        self.state = 1
-        self.colour_0 = "OFF"
-        self.colour_1 = "OFF"
-        self.colour_0_mem = None
-        self.colour_1_mem = None
+    def set_color(self, color_name):
+        color = self.COLOURS.get(color_name.lower(), (0, 0, 0))
+        GPIO.output(self.pins["red"], GPIO.HIGH if color[0] else GPIO.LOW)
+        GPIO.output(self.pins["green"], GPIO.HIGH if color[1] else GPIO.LOW)
+        GPIO.output(self.pins["blue"], GPIO.HIGH if color[2] else GPIO.LOW)
 
-        self.timer = None
+    def off(self):
+        self.set_color("off")
 
-    # def __del__(self):
-    # GPIO.cleanup()
-
-    def set_static(self, colour=None, timeout_sec=None, restore_previous_on_timeout=False):
-        if timeout_sec:
-            if self.timer:
-                return
-
-            self.timer = timeout_sec + 0.5
-            if restore_previous_on_timeout:
-                self.colour_0_mem = self.colour_0
-                self.colour_1_mem = self.colour_1
-            else:
-                self.colour_0_mem = None
-                self.colour_1_mem = None
-
-        self.colour_0 = colour
-        self.colour_1 = colour
-
-        pins = COLOURS[colour]
-
-        # All pins off (perhaps momentarily)
-        GPIO.output([RED_PIN, GREEN_PIN, BLUE_PIN], GPIO.LOW)
-
-        # Write required pins high
-        if pins is not None:
-            GPIO.output(pins, GPIO.HIGH)
-
-    def set_blink(
-        self,
-        colour_0=None,
-        colour_1="OFF",
-        timeout_sec=None,
-        restore_previous_on_timeout=False,
-    ):
-        if timeout_sec:
-            if self.timer:
-                return
-
-            self.timer = timeout_sec + 0.5
-            if restore_previous_on_timeout:
-                self.colour_0_mem = self.colour_0
-                self.colour_1_mem = self.colour_1
-            else:
-                self.colour_0_mem = None
-                self.colour_1_mem = None
-
-        self.colour_0 = colour_0
-        self.colour_1 = colour_1
-
-    def run(self):
-        while True:
-            if self.state == 0:
-                self.state = 1
-                pins = COLOURS[self.colour_1]
-            else:
-                self.state = 0
-                pins = COLOURS[self.colour_0]
-
-            # All pins off (perhaps momentarily)
-            GPIO.output([RED_PIN, GREEN_PIN, BLUE_PIN], GPIO.LOW)
-
-            # Write required pins high
-            if pins is not None:
-                GPIO.output(pins, GPIO.HIGH)
-
-            # Flash/wait period
-            time.sleep(0.5)
-
-            # Turn off the light when the timer expires
-            if self.timer:
-                self.timer -= 0.5
-
-                if self.timer <= 0:
-                    self.timer = None
-                    if self.colour_0_mem:
-                        self.colour_0 = self.colour_0_mem
-                        self.colour_0_mem = None
-                    else:
-                        self.colour_0 = "OFF"
-
-                    if self.colour_1_mem:
-                        self.colour_1 = self.colour_1_mem
-                        self.colour_1_mem = None
-                    else:
-                        self.colour_1 = "OFF"
+    def cleanup(self):
+        self.off()
+        GPIO.cleanup()
 
 
-if __name__ == "__main__":
-    led = RGB_LED(1, "LED")
-    # led.start()
+async def led_task(led: RGBLed, led_running: asyncio.Event, color: str, duration: float):
+    if led_running.is_set():
+        print("LED task already running, skipping.")
+        return
+    led_running.set()
+    print(f"LED ON ({color}) for {duration}s")
+    led.set_color(color)
+    await asyncio.sleep(duration)
+    led.off()
+    print("LED OFF")
+    led_running.clear()
+
+
+async def worker(led: RGBLed, led_running: asyncio.Event):
+    colors = ["red", "green", "blue", "white"]
+    while True:
+        sleep_time = random.uniform(1, 2)
+        await asyncio.sleep(sleep_time)
+        color = random.choice(colors)
+        print(f"Worker woke up — triggering LED: {color}")
+        if not led_running.is_set():
+            asyncio.create_task(led_task(led, led_running, color, 0.5))
+
+
+async def main():
+    led = RGBLed()
+    led_running = asyncio.Event()
+    worker_task = asyncio.create_task(worker(led, led_running))
 
     try:
-        while True:
-            led.set_blink("YELLOW", "BLUE")
-            time.sleep(5)
+        await asyncio.sleep(15)  # Run for 15 seconds
+    finally:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            print("Worker stopped.")
+        led.cleanup()
 
-            for colour in COLOURS:
-                led.set_static(colour)
-                time.sleep(0.5)
-    except Exception:
-        GPIO.cleanup()
-        exit()
+if __name__ == "__main__":
+    asyncio.run(main())

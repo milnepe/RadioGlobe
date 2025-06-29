@@ -2,7 +2,12 @@ import asyncio
 import vlc
 
 from dial_button_async import AsyncDialWithButton
+
 from positional_encoders_async import PositionalEncoders
+
+from rgb_led_async import RGBLed
+from rgb_led_async import led_task
+
 from database import load_stations
 from database import build_cities_index
 from database import look_around
@@ -56,6 +61,7 @@ class App:
             print("⚠️ No stations available.")
             return
         self.current_index = (self.current_index + direction) % len(self.stations)
+        print(self.stations)
         name, url = self.stations[self.current_index]
         print(f"📻 Tuning to: {name}")
         self.audio_player.play(url)
@@ -74,12 +80,16 @@ class App:
         # Load the stations information into memory
         # stations_info = load_stations("perth-stations-test.json")
         stations_info = load_stations("stations.json")
-        print(stations_info)
+        # print(stations_info)
 
         cities_idx = build_cities_index(stations_info)
-        print(cities_idx)
+        # print(cities_idx)
 
         self.dial.start()
+
+        led = RGBLed()
+        led_running = asyncio.Event()
+        # worker_task = asyncio.create_task(worker(led, led_running))
 
         asyncio.create_task(self.encoders.run())
 
@@ -107,6 +117,10 @@ class App:
                     print(coords)
 
                     if matches:
+                        # Flash LED to signal match
+                        if not led_running.is_set():
+                            asyncio.create_task(led_task(led, led_running, "green", 0.5))
+
                         # Set the latch to hold onto any matched cities until the reticule moves again
                         # Sensitivity is determined by the STICKINESS value
                         self.encoders.latch(*coords, stickiness=STICKINESS)
@@ -124,10 +138,12 @@ class App:
                 # Select stations using dial
                 direction = self.dial.get_direction()
                 if direction != 0:
+                    asyncio.create_task(led_task(led, led_running, "blue", 0.1))
                     print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
                     self.next_station(direction)
 
                 if self.dial.get_button():
+                    asyncio.create_task(led_task(led, led_running, "red", 0.2))
                     print("🖲️ Button pressed!")
                     self.switch_mode()
 
