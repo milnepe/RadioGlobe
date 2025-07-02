@@ -1,6 +1,6 @@
 import asyncio
 import vlc
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO  # type: ignore
 
 from dial_async import AsyncDial
 from positional_encoders_async import PositionalEncoders
