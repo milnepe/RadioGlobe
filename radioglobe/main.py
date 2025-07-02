@@ -2,20 +2,19 @@ import asyncio
 import vlc
 import RPi.GPIO as GPIO
 
-from dial_button_async import AsyncDialWithButton
-
+from dial_async import AsyncDial
 from positional_encoders_async import PositionalEncoders
 
 from rgb_led_async import RGBLed
 from rgb_led_async import led_task
-
-from buttons_async import AsyncButtonManager
 
 from database import load_stations
 from database import build_cities_index
 from database import look_around
 from database import get_first_station_info
 from database import get_all_station_info
+
+from buttons_async import AsyncButtonManager
 
 
 async def find_all_cities(coords, cities):
@@ -42,6 +41,19 @@ class AudioPlayer:
         self.player.play()
         print(f"🔊 Playing: {url}")
 
+    def change_volume(self, delta, min_volume=10, max_volume=100):
+        """Adjust volume by delta, clamped between min and max."""
+        current_volume = self.player.audio_get_volume()
+        new_volume = max(min_volume, min(max_volume, current_volume + delta))
+        self.player.audio_set_volume(new_volume)
+        print(f"🔉 Volume changed: {current_volume} -> {new_volume}")
+
+    def change_volume_level(self, level: int):
+        """Set volume off."""
+        current_volume = self.player.audio_get_volume()
+        self.player.audio_set_volume(level)
+        print(f"🔉 Volume changed: {current_volume} -> {level}")
+
     def stop(self):
         """Stop playback if something is playing."""
         if self.player.is_playing():
@@ -50,14 +62,13 @@ class AudioPlayer:
 
 class App:
     def __init__(self):
-        self.dial = AsyncDialWithButton()
+        self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
         self.encoders = PositionalEncoders()
         self.stations = None
         self.cities = None
         self.current_index = 0
         self.mode = "station"
-        self.button_manager = None
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -100,23 +111,60 @@ class App:
         # print(cities_idx)
 
         self.dial.start()
+        self.encoders.start()
 
         led = RGBLed()
         led_running = asyncio.Event()
-        # worker_task = asyncio.create_task(worker(led, led_running))
 
-        asyncio.create_task(self.encoders.run())
+        # Button stuff
+        async def handle_short_jog():
+            print("🖲️ Button short press!")
+            self.switch_mode()
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
-        # 🔌 Set up buttons
-        # loop = asyncio.get_running_loop()
+        async def handle_long_jog():
+            print("🏃 Jog button long press: start continuous jog")
+            await asyncio.sleep(0.2)
 
-        # button_manager = AsyncButtonManager(
-        #     [("Jog_push", 27), ("Top", 5), ("Mid", 6), ("Low", 12), ("Shutdown", 26)],
-        #     loop
-        # )
+        async def handle_short_shutdown():
+            print("🧯 Shutdown short press: ignored")
+            await asyncio.sleep(0.05)
 
-        # button_events = asyncio.Queue()
-        # asyncio.create_task(button_manager.poll_buttons(button_events))
+        async def handle_long_shutdown():
+            print("🛑 Shutdown long press: shutting down system!")
+
+        async def handle_short_top():
+            print("🖲️ Button short press! Increasing volume.")
+            self.audio_player.change_volume(10, min_volume=10, max_volume=100)
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+
+        async def handle_long_top():
+            print("🖲️ Button long press! Set volume on")
+            self.audio_player.change_volume_level(80)
+            asyncio.create_task(led_task(led, led_running, "green", 0.2))
+
+        async def handle_short_bottom():
+            print("🖲️ Button short press! Lowering volume.")
+            self.audio_player.change_volume(-10, min_volume=10, max_volume=100)
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+
+        async def handle_long_bottom():
+            print("🖲️ Button long press! Set volume off")
+            self.audio_player.change_volume_level(0)
+            asyncio.create_task(led_task(led, led_running, "red", 0.2))
+
+        loop = asyncio.get_running_loop()
+
+        button_definitions = [
+            ("Jog", 27, handle_short_jog, handle_long_jog),
+            ("Top", 5, handle_short_top, handle_long_top),
+            ("Bottom", 12, handle_short_bottom, handle_long_bottom),
+            ("Shutdown", 26, handle_short_shutdown, handle_long_shutdown),
+        ]
+
+        button_manager = AsyncButtonManager(button_definitions, loop)
+        await button_manager.start()
+        asyncio.create_task(button_manager.handle_events())
 
         try:
             await asyncio.sleep(0.5)
@@ -139,7 +187,7 @@ class App:
                 # Get any cities that match with in the look arround zone
                 matches = await find_all_cities(zone, cities_idx)
                 if not self.encoders.is_latched():
-                    print(coords)
+                    # print(coords)
 
                     if matches:
                         # Flash LED to signal match
@@ -154,13 +202,13 @@ class App:
 
                         # Play first station for first matched city
                         name, url = get_first_station_info(stations_info, self.cities[0])
-                        print(f"📻 Tuning to: {name}")
+                        print(f"📻 Tuning to: {self.cities[0]} {name}")
                         self.audio_player.play(url)
 
                         # Get the rest of the stations for current city
                         self.stations = get_all_station_info(stations_info, self.cities[0])
 
-                # Select stations using dial
+                # Modal selection of stations of city using dial
                 direction = self.dial.get_direction()
                 if direction != 0:
                     asyncio.create_task(led_task(led, led_running, "blue", 0.1))
@@ -170,21 +218,13 @@ class App:
                     elif self.mode == "city":
                         self.next_city(direction)
 
-                if self.dial.get_button():
-                    asyncio.create_task(led_task(led, led_running, "red", 0.2))
-                    print("🖲️ Button pressed!")
-                    self.switch_mode()
-
-                # # 🆕 Process button events
-                # name, press_type = await button_events.get()
-                # asyncio.create_task(led_task(led, led_running, "red", 0.2))
-                # print(f"{name}: {press_type} press")
-
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")
         finally:
             self.audio_player.stop()
             await self.dial.stop()
+            await self.encoders.stop()
+            GPIO.cleanup()
 
 
 if __name__ == "__main__":
