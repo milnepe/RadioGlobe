@@ -1,5 +1,7 @@
 import asyncio
 import vlc
+import subprocess
+
 import RPi.GPIO as GPIO  # type: ignore
 
 from dial_async import AsyncDial
@@ -118,62 +120,55 @@ class App:
 
         # Button stuff
         async def handle_short_jog():
-            print("🖲️ Button short press!")
+            print("🖲️ Jog button short press! Change mode")
             self.switch_mode()
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_long_jog():
-            print("🏃 Jog button long press: start continuous jog")
+            print("🖲️ Jog button long press: None")
             await asyncio.sleep(0.2)
 
-        async def handle_short_shutdown():
-            print("🧯 Shutdown short press: ignored")
-            await asyncio.sleep(0.05)
-
-        async def handle_long_shutdown():
-            print("🛑 Shutdown long press: shutting down system!")
-
         async def handle_short_top():
-            print("🖲️ Button short press! Increasing volume.")
+            print("🖲️ Top button short press! Increasing volume.")
             self.audio_player.change_volume(10, min_volume=10, max_volume=100)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_long_top():
-            print("🖲️ Button long press! Set volume on")
+            print("🖲️ Top button long press! Set volume on")
             self.audio_player.change_volume_level(80)
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_short_bottom():
-            print("🖲️ Button short press! Lowering volume.")
+            print("🖲️ Bottom button short press! Lowering volume.")
             self.audio_player.change_volume(-10, min_volume=10, max_volume=100)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_long_bottom():
-            print("🖲️ Button long press! Set volume off")
+            print("🖲️ Bottom button long press! Set volume off")
             self.audio_player.change_volume_level(0)
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
 
         async def handle_short_mid():
-            print("🖲️ Button mid short press! Calibrating.")
+            print("🖲️ Mid button mid short press! Calibrating.")
             self.encoders.zero()
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
             print(
                 f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
 
-        # async def handle_long_mid():
-        #     print("🖲️ Button long press! Set volume off")
-        #     self.audio_player.change_volume_level(0)
-        #     asyncio.create_task(led_task(led, led_running, "red", 0.2))
+        async def handle_long_mid():
+            print("🔴 Shutdown initiated! Powering off...")
+            asyncio.create_task(led_task(led, led_running, "red", 0.2))
+            await asyncio.sleep(2)  # Optional delay before shutdown for visibility
+            subprocess.run(["sudo", "poweroff"])
 
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ("Jog", 27, handle_short_jog, handle_long_jog),
+            ("Jog", 27, handle_short_jog, None),
             ("Top", 5, handle_short_top, handle_long_top),
-            ("Mid", 6, handle_short_mid, None),
+            ("Mid", 6, handle_short_mid, handle_long_mid),
             ("Bottom", 12, handle_short_bottom, handle_long_bottom),
-            ("Shutdown", 26, handle_short_shutdown, handle_long_shutdown),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
