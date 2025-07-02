@@ -16,7 +16,7 @@ class PositionalEncoders:
         self.spi = spidev.SpiDev()
 
         # Used to safely stop the task
-        self._running = True
+        self._task = None
 
     def zero(self):
         self.latitude_offset = (ENCODER_RESOLUTION // 2) - self.latitude
@@ -66,8 +66,9 @@ class PositionalEncoders:
                 return None
         return readings
 
-    async def run(self):
-        while self._running:
+    async def run_encoder(self):
+        # while self._running:
+        while self._task:
             readings = self.read_spi()
 
             if readings:
@@ -89,15 +90,21 @@ class PositionalEncoders:
 
             await asyncio.sleep(0.2)
 
-    def stop(self):
-        self._running = False
+    def start(self):
+        self._task = asyncio.create_task(self.run_encoder())
+
+    # def stop(self):
+    #     self._running = False
+    async def stop(self):
+        if self._task:
+            await self._task.cancel()
 
 
 async def main():
     encoder_offsets = (0, 0)
     encoders = PositionalEncoders(encoder_offsets[0], encoder_offsets[1])
+    encoders.start()
 
-    task = asyncio.create_task(encoders.run())
     STICKINESS = 10
 
     try:
@@ -117,8 +124,7 @@ async def main():
     except KeyboardInterrupt:
         print("Stopping encoder task...")
     finally:
-        encoders.stop()
-        await task
+        await encoders.stop()
         print("Encoder task stopped.")
 
 
