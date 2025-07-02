@@ -153,11 +153,25 @@ class App:
             self.audio_player.change_volume_level(0)
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
 
+        async def handle_short_mid():
+            print("🖲️ Button mid short press! Calibrating.")
+            self.encoders.zero()
+            asyncio.create_task(led_task(led, led_running, "green", 0.2))
+            print(
+                f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
+            )
+
+        # async def handle_long_mid():
+        #     print("🖲️ Button long press! Set volume off")
+        #     self.audio_player.change_volume_level(0)
+        #     asyncio.create_task(led_task(led, led_running, "red", 0.2))
+
         loop = asyncio.get_running_loop()
 
         button_definitions = [
             ("Jog", 27, handle_short_jog, handle_long_jog),
             ("Top", 5, handle_short_top, handle_long_top),
+            ("Mid", 6, handle_short_mid, None),
             ("Bottom", 12, handle_short_bottom, handle_long_bottom),
             ("Shutdown", 26, handle_short_shutdown, handle_long_shutdown),
         ]
@@ -172,10 +186,10 @@ class App:
             coords = self.encoders.get_readings()
             print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
 
-            self.encoders.zero()
-            print(
-                f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
-            )
+            # self.encoders.zero()
+            # print(
+            #     f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
+            # )
 
             while True:
                 await asyncio.sleep(0.1)
