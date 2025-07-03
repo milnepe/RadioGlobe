@@ -1,5 +1,5 @@
 import asyncio
-import spidev
+import spidev  # type: ignore
 
 ENCODER_RESOLUTION = 1024
 

@@ -1,5 +1,5 @@
 import asyncio
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO  # type: ignore
 import time
 import inspect
 

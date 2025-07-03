@@ -1,6 +1,6 @@
 import asyncio
 import random
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO  # type: ignore
 
 
 class RGBLed:
