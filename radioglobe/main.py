@@ -64,8 +64,9 @@ class App:
             return
         self.current_index = (self.current_index + direction) % len(self.cities)
         print(self.cities)
-        name = self.cities[self.current_index]
-        print(f"📻 Changed city: {name}")
+        self.city = self.cities[self.current_index]
+        print(f"📻 Changed city: {self.city}")
+        self.display.update((10, 10), self.city, 0, self.station, False)
 
     def switch_mode(self):
         """Toggle between application modes."""

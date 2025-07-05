@@ -67,7 +67,7 @@ class Display:
         bar_length = (volume * DISPLAY_COLUMNS) // 100
         self.buffer[2] = "-" * bar_length + " " * (DISPLAY_COLUMNS - bar_length)
 
-        if arrows:
+        if arrows and station:
             station = station[: DISPLAY_COLUMNS - 4]
             padding = DISPLAY_COLUMNS - 4 - len(station)
             station = " " * (padding // 2) + station + " " * (padding - padding // 2)

@@ -93,11 +93,14 @@ class PositionalEncoders:
     def start(self):
         self._task = asyncio.create_task(self.run_encoder())
 
-    # def stop(self):
-    #     self._running = False
     async def stop(self):
         if self._task:
-            await self._task.cancel()
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+
 
 
 async def main():
