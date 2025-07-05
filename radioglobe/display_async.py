@@ -68,7 +68,7 @@ class Display:
         self.buffer[2] = "-" * bar_length + " " * (DISPLAY_COLUMNS - bar_length)
 
         if arrows and station:
-            station = station[: DISPLAY_COLUMNS - 4]
+            station = str(station)[: DISPLAY_COLUMNS - 4]
             padding = DISPLAY_COLUMNS - 4 - len(station)
             station = " " * (padding // 2) + station + " " * (padding - padding // 2)
             station = "< " + station + " >"
