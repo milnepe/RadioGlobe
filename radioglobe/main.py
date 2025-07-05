@@ -41,6 +41,7 @@ class App:
         self.station = None
         self.cities = None
         self.city = None
+        self.url = None
         self.current_index = 0
         self.mode = "station"
         self.volume = None
@@ -52,10 +53,10 @@ class App:
             return
         self.current_index = (self.current_index + direction) % len(self.stations)
         print(self.stations)
-        self.station, url = self.stations[self.current_index]
+        self.station, self.url = self.stations[self.current_index]
         print(f"📻 Tuning to: {self.station}")
         self.display.update((10, 10), self.city, 0, self.station, False)
-        self.audio_player.play(url)
+        self.audio_player.play(self.url)
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
@@ -204,11 +205,11 @@ class App:
 
                         # Play first station for first matched city
                         self.city = self.cities[0]
-                        self.station, url = get_first_station_info(stations_info, self.city)
+                        self.station, self.url = get_first_station_info(stations_info, self.city)
                         print(f"📻 Tuning to: {self.city} {self.station}")
                         self.display.update((10, 10), self.city, 0, self.station, True)
                         # await asyncio.sleep(0)
-                        self.audio_player.play(url)
+                        self.audio_player.play(self.url)
 
                         # Get the rest of the stations for current city
                         self.stations = get_all_station_info(stations_info, self.cities[0])
