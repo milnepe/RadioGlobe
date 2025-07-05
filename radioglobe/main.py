@@ -96,9 +96,13 @@ class App:
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
-            self.display.update((10, 10), self.city, volume, self.station, True)
+            if len(self.cities) > 1:
+                arrows = True
+            else:
+                arrows = False
+            self.display.update((10, 10), self.city, volume, self.station, arrows)
             await asyncio.sleep(0.5)
-            self.display.update((10, 10), self.city, 0, self.station, True)
+            self.display.update((10, 10), self.city, 0, self.station, arrows)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))         
 
         async def handle_short_jog():
