@@ -107,9 +107,10 @@ class App:
         async def update_volume_level(level):
             """Volume and display helper"""
             volume = self.audio_player.change_volume_level(level)
-            self.display.update((10, 10), self.city, volume, self.station, False)
+            coords = get_coords()
+            self.display.update(coords, self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
-            self.display.update((10, 10), self.city, 0, self.station, False)
+            self.display.update(coords, self.city, 0, self.station, False)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():

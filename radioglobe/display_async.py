@@ -77,9 +77,9 @@ class Display:
         self.buffer[3] = station.center(DISPLAY_COLUMNS)
 
         self.changed.set()
-        logging.info(
-            f"Display updated: coords={coords}, location='{location}', volume={volume}, station='{station}', arrows={arrows}"
-        )
+        # logging.debug(
+        #     f"Display updated: coords={coords}, location='{location}', volume={volume}, station='{station}', arrows={arrows}"
+        # )
 
 
 async def main():
