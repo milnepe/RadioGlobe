@@ -64,6 +64,8 @@ class Display:
         self.buffer[1] = location.center(DISPLAY_COLUMNS)
 
         # Volume bar
+        if not volume:
+            volume = 0
         bar_length = (volume * DISPLAY_COLUMNS) // 100
         self.buffer[2] = "-" * bar_length + " " * (DISPLAY_COLUMNS - bar_length)
 

@@ -44,7 +44,7 @@ class App:
         self.url = None
         self.current_index = 0
         self.mode = "station"
-        self.volume = None
+        self.volume = 50
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -96,10 +96,14 @@ class App:
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
-            # if len(self.cities) > 1:
-            #     arrows = True
-            # else:
-            #     arrows = False
+            self.display.update((10, 10), self.city, volume, self.station, False)
+            await asyncio.sleep(0.5)
+            self.display.update((10, 10), self.city, 0, self.station, False)
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+
+        async def update_volume_level(level):
+            """Volume and display helper"""
+            volume = self.audio_player.change_volume_level(level)
             self.display.update((10, 10), self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
             self.display.update((10, 10), self.city, 0, self.station, False)
@@ -120,10 +124,7 @@ class App:
 
         async def handle_long_top():
             print("🖲️ Top button long press! Set volume on")
-            self.audio_player.change_volume_level(80)
-            self.volume = self.audio_player.get_current_volume()
-            self.display.update((10, 10), self.city, self.volume, self.station, True)
-            asyncio.create_task(led_task(led, led_running, "green", 0.2))
+            await update_volume_level(80)
 
         async def handle_short_bottom():
             print("🖲️ Bottom button short press! Lowering volume.")
@@ -131,10 +132,7 @@ class App:
 
         async def handle_long_bottom():
             print("🖲️ Bottom button long press! Set volume off")
-            self.audio_player.change_volume_level(0)
-            self.volume = self.audio_player.get_current_volume()
-            self.display.update((10, 10), self.city, self.volume, self.station, True)
-            asyncio.create_task(led_task(led, led_running, "red", 0.2))
+            await update_volume_level(0)
 
         async def handle_short_mid():
             print("🖲️ Mid button mid short press! Calibrating.")
