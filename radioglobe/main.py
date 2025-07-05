@@ -96,13 +96,13 @@ class App:
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
-            if len(self.cities) > 1:
-                arrows = True
-            else:
-                arrows = False
-            self.display.update((10, 10), self.city, volume, self.station, arrows)
+            # if len(self.cities) > 1:
+            #     arrows = True
+            # else:
+            #     arrows = False
+            self.display.update((10, 10), self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
-            self.display.update((10, 10), self.city, 0, self.station, arrows)
+            self.display.update((10, 10), self.city, 0, self.station, False)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))         
 
         async def handle_short_jog():
@@ -204,9 +204,8 @@ class App:
                         self.city = self.cities[0]
                         self.station, url = get_first_station_info(stations_info, self.city)
                         print(f"📻 Tuning to: {self.city} {self.station}")
-                        self.volume = self.audio_player.get_current_volume()
-                        self.display.update((10, 10), self.city, self.volume, self.station, True)
-                        await asyncio.sleep(0)
+                        self.display.update((10, 10), self.city, 0, self.station, True)
+                        # await asyncio.sleep(0)
                         self.audio_player.play(url)
 
                         # Get the rest of the stations for current city
