@@ -7,7 +7,7 @@
 # sudo apt install vlc-bin vlc-plugin-base python3-venv python3-dev pulseaudio-module-bluetooth
 # sudo apt install vlc pulseaudio python3-pip python3-smbus python3-dev python3-rpi.gpio
 echo "Installing OS dependencies..."
-sudo apt install vlc-bin vlc-plugin-base python3-dev pulseaudio-module-bluetooth
+sudo apt install vlc-bin vlc-plugin-base python3-dev pulseaudio-module-bluetooth jq
 
 # Create python virtual environment and activate it so python packages can be installed in it
 echo "Creating virtual environment..."
@@ -80,12 +80,16 @@ echo "Copying scripts to /opt/radioglobe..."
 cp -r radioglobe/* /opt/radioglobe/
 
 # Fix NaN enties in stations file
-echo "Fixing NaN enties in stations file"
+echo "Fixing NaN enties in stations file..."
 sed -i 's/: NaN/: "No Name"/g' stations/stations.json
 
 # Copy stations file
 echo "Copying stations file..."
 cp stations/stations.json /opt/radioglobe/
+
+# Validate stations.json
+echo "Validating stations file..."
+cat stations/stations.json | jq empty
 
 # Remove any old radioglobe service
 echo "Stopping any existing services..."
