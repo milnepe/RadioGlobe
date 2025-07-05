@@ -28,6 +28,7 @@ class AudioPlayer:
         new_volume = max(min_volume, min(max_volume, current_volume + delta))
         self.player.audio_set_volume(new_volume)
         print(f"🔉 Volume changed: {current_volume} -> {new_volume}")
+        return new_volume
 
     def change_volume_level(self, level: int):
         """Set volume off."""
