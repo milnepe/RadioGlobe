@@ -93,6 +93,14 @@ class App:
         led_running = asyncio.Event()
 
         # Button stuff
+        async def update_volume(delta):
+            """Volume and display helper"""
+            volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
+            self.display.update((10, 10), self.city, volume, self.station, True)
+            await asyncio.sleep(0.5)
+            self.display.update((10, 10), self.city, 0, self.station, True)
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))         
+
         async def handle_short_jog():
             print("🖲️ Jog button short press! Change mode")
             self.switch_mode()
@@ -104,11 +112,7 @@ class App:
 
         async def handle_short_top():
             print("🖲️ Top button short press! Increasing volume.")
-            volume = self.audio_player.change_volume(10, min_volume=10, max_volume=100)
-            self.display.update((10, 10), self.city, volume, self.station, True)
-            await asyncio.sleep(1)
-            self.display.update((10, 10), self.city, 0, self.station, True)
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+            await update_volume(10)
 
         async def handle_long_top():
             print("🖲️ Top button long press! Set volume on")
@@ -119,11 +123,7 @@ class App:
 
         async def handle_short_bottom():
             print("🖲️ Bottom button short press! Lowering volume.")
-            volume = self.audio_player.change_volume(-10, min_volume=10, max_volume=100)
-            self.display.update((10, 10), self.city, volume, self.station, True)
-            await asyncio.sleep(1)
-            self.display.update((10, 10), self.city, 0, self.station, True)
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+            await update_volume(-10)
 
         async def handle_long_bottom():
             print("🖲️ Bottom button long press! Set volume off")
