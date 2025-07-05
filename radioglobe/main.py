@@ -141,6 +141,8 @@ class App:
             print(
                 f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
+            self.display.update((0, 0), "Calibrated", 0, "", False)
+            await asyncio.sleep(0.5)
 
         async def handle_long_mid():
             print("🔴 Shutdown initiated! Powering off...")
