@@ -170,23 +170,12 @@ class App:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne",
             )
-            # self.display.clear()
             await asyncio.sleep(5)
-            # await asyncio.sleep(0.5)
-            # Get current coordinates
-            # coords = self.encoders.get_readings()
-            lat, lon = self.encoders.get_readings()
-            self.display.update(
-                (lat, lon), "Bristol, United Kingdom", 45, "BBC Radio Bristol", True
-            )
-            await asyncio.sleep(0)
-            # print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
-            print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
-            # self.encoders.zero()
-            # print(
-            #     f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
-            # )
+            lat, lon = self.encoders.get_readings()
+            self.display.update((0, 0), "Calibrate", 0, "", False)
+            await asyncio.sleep(0)
+            print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
             while True:
                 await asyncio.sleep(0.1)
