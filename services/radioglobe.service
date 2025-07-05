@@ -22,7 +22,7 @@ Type=simple
 WorkingDirectory=/opt/radioglobe
 
 # Start python script in virtual environment
-ExecStart=/opt/radioglobe/venv/bin/python run.py
+ExecStart=/opt/radioglobe/venv/bin/python main.py
 
 # Can be enabled if app crashes
 #Restart=always
