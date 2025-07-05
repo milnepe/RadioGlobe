@@ -4,6 +4,9 @@
 # The script assumes the repo is cloned to the radioglobe home directory
 # and it is executed from within the ~/RadioGlobe dir
 
+# Logging:
+#journalctl --user-unit=radioglobe.service -b -f
+
 # sudo apt install vlc-bin vlc-plugin-base python3-venv python3-dev pulseaudio-module-bluetooth
 # sudo apt install vlc pulseaudio python3-pip python3-smbus python3-dev python3-rpi.gpio
 echo "Installing OS dependencies..."
