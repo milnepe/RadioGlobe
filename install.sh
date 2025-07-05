@@ -79,6 +79,10 @@ done < $RADIOGLOBE_DIR/requirements.txt
 echo "Copying scripts to /opt/radioglobe..."
 cp -r radioglobe/* /opt/radioglobe/
 
+# Fix NaN enties in stations file
+echo "Fixing NaN enties in stations file"
+sed -i 's/: NaN/: "No Name"/g' stations/stations.json
+
 # Copy stations file
 echo "Copying stations file..."
 cp stations/stations.json /opt/radioglobe/
