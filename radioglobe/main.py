@@ -17,6 +17,8 @@ from database import get_first_station_info
 from database import get_all_station_info
 
 from buttons_async import AsyncButtonManager
+from coordinates import Coordinate
+from display_async import Display
 
 
 async def find_all_cities(coords, cities):
@@ -31,6 +33,7 @@ class AudioPlayer:
         self.instance = vlc.Instance("--input-repeat=-1")
         self.player = self.instance.media_player_new()
         self.current_url = None
+        self.current_volume = self.player.audio_set_volume(50)
 
     def play(self, url):
         """Play a new URL stream, stopping current playback if needed."""
@@ -43,12 +46,16 @@ class AudioPlayer:
         self.player.play()
         print(f"🔊 Playing: {url}")
 
+    def get_current_volume(self):
+        return self.player.audio_get_volume()
+
     def change_volume(self, delta, min_volume=10, max_volume=100):
         """Adjust volume by delta, clamped between min and max."""
         current_volume = self.player.audio_get_volume()
-        new_volume = max(min_volume, min(max_volume, current_volume + delta))
-        self.player.audio_set_volume(new_volume)
-        print(f"🔉 Volume changed: {current_volume} -> {new_volume}")
+        # new_volume = max(min_volume, min(max_volume, current_volume + delta))
+        self.current_volume = max(min_volume, min(max_volume, current_volume + delta))
+        self.player.audio_set_volume(self.current_volume)
+        print(f"🔉 Volume changed: {current_volume} -> {self.current_volume}")
 
     def change_volume_level(self, level: int):
         """Set volume off."""
@@ -67,10 +74,14 @@ class App:
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
         self.encoders = PositionalEncoders()
+        self.display = Display()
         self.stations = None
+        self.station = None
         self.cities = None
+        self.city = None
         self.current_index = 0
         self.mode = "station"
+        self.volume = None
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -114,6 +125,7 @@ class App:
 
         self.dial.start()
         self.encoders.start()
+        self.display.start()
 
         led = RGBLed()
         led_running = asyncio.Event()
@@ -175,11 +187,25 @@ class App:
         await button_manager.start()
         asyncio.create_task(button_manager.handle_events())
 
+
+
         try:
-            await asyncio.sleep(0.5)
+            self.display.message(
+                line_1="Radio Globe",
+                line_2="Made for DesignSpark",
+                line_3="Jude Pullen, Donald",
+                line_4="Robson, Pete Milne",
+            )
+            # self.display.clear()
+            await asyncio.sleep(5)
+            # await asyncio.sleep(0.5)
             # Get current coordinates
-            coords = self.encoders.get_readings()
-            print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
+            # coords = self.encoders.get_readings()
+            lat, lon = self.encoders.get_readings()
+            self.display.update((lat, lon), "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
+            await asyncio.sleep(0)
+            # print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
+            print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
             # self.encoders.zero()
             # print(
@@ -210,8 +236,12 @@ class App:
                         print(f"Matching cities: {matches} {self.encoders.is_latched()}")
 
                         # Play first station for first matched city
-                        name, url = get_first_station_info(stations_info, self.cities[0])
-                        print(f"📻 Tuning to: {self.cities[0]} {name}")
+                        self.city = self.cities[0]
+                        self.station, url = get_first_station_info(stations_info, self.city)
+                        print(f"📻 Tuning to: {self.city} {self.station}")
+                        self.volume = self.audio_player.get_current_volume()
+                        self.display.update((10, 10), self.city, self.volume, self.station, True)
+                        await asyncio.sleep(0)
                         self.audio_player.play(url)
 
                         # Get the rest of the stations for current city
