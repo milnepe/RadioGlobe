@@ -52,8 +52,9 @@ class App:
             return
         self.current_index = (self.current_index + direction) % len(self.stations)
         print(self.stations)
-        name, url = self.stations[self.current_index]
-        print(f"📻 Tuning to: {name}")
+        self.station, url = self.stations[self.current_index]
+        print(f"📻 Tuning to: {self.station}")
+        self.display.update((10, 10), self.city, 0, self.station, False)
         self.audio_player.play(url)
 
     def next_city(self, direction):
