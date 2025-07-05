@@ -55,8 +55,6 @@ class App:
         print(self.stations)
         self.station, self.url = self.stations[self.current_index]
         print(f"📻 Tuning to: {self.station}")
-        self.display.update((10, 10), self.city, 0, self.station, False)
-        self.audio_player.play(self.url)
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
@@ -67,7 +65,6 @@ class App:
         print(self.cities)
         self.city = self.cities[self.current_index]
         print(f"📻 Changed city: {self.city}")
-        self.display.update((10, 10), self.city, 0, self.station, False)
 
     def switch_mode(self):
         """Toggle between application modes."""
@@ -106,7 +103,7 @@ class App:
             self.display.update((10, 10), self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
             self.display.update((10, 10), self.city, 0, self.station, False)
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))         
+            asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():
             print("🖲️ Jog button short press! Change mode")
@@ -214,7 +211,7 @@ class App:
                         # Get the rest of the stations for current city
                         self.stations = get_all_station_info(stations_info, self.cities[0])
 
-                # Modal selection of stations of city using dial
+                # Modal selection of stations and city using dial
                 direction = self.dial.get_direction()
                 if direction != 0:
                     asyncio.create_task(led_task(led, led_running, "blue", 0.1))
@@ -223,6 +220,9 @@ class App:
                         self.next_station(direction)
                     elif self.mode == "city":
                         self.next_city(direction)
+                        self.station, self.url = get_first_station_info(stations_info, self.city)
+                    self.display.update((10, 10), self.city, 0, self.station, False)
+                    self.audio_player.play(self.url)
 
         except KeyboardInterrupt:
             print("👋 Exiting on keyboard interrupt...")

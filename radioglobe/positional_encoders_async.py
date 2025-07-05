@@ -102,7 +102,6 @@ class PositionalEncoders:
                 pass
 
 
-
 async def main():
     encoder_offsets = (0, 0)
     encoders = PositionalEncoders(encoder_offsets[0], encoder_offsets[1])
