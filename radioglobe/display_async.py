@@ -68,14 +68,16 @@ class Display:
         self.buffer[2] = "-" * bar_length + " " * (DISPLAY_COLUMNS - bar_length)
 
         if arrows:
-            station = station[:DISPLAY_COLUMNS - 4]
+            station = station[: DISPLAY_COLUMNS - 4]
             padding = DISPLAY_COLUMNS - 4 - len(station)
             station = " " * (padding // 2) + station + " " * (padding - padding // 2)
             station = "< " + station + " >"
         self.buffer[3] = station.center(DISPLAY_COLUMNS)
 
         self.changed.set()
-        logger.info(f"Display updated: coords={coords}, location='{location}', volume={volume}, station='{station}', arrows={arrows}")
+        logger.info(
+            f"Display updated: coords={coords}, location='{location}', volume={volume}, station='{station}', arrows={arrows}"
+        )
 
 
 async def main():
@@ -94,6 +96,7 @@ async def main():
     await asyncio.sleep(1)
 
     await display.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

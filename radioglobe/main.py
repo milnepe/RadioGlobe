@@ -1,9 +1,11 @@
 import asyncio
-import vlc
+
+# import vlc
 import subprocess
 
 import RPi.GPIO as GPIO  # type: ignore
 
+from audio_async import AudioPlayer
 from dial_async import AsyncDial
 from positional_encoders_async import PositionalEncoders
 
@@ -17,7 +19,8 @@ from database import get_first_station_info
 from database import get_all_station_info
 
 from buttons_async import AsyncButtonManager
-from coordinates import Coordinate
+
+# from coordinates import Coordinate
 from display_async import Display
 
 
@@ -26,47 +29,6 @@ async def find_all_cities(coords, cities):
     Returns all cities that match with points
     """
     return [cities[coord] for coord in coords if coord in cities]
-
-
-class AudioPlayer:
-    def __init__(self):
-        self.instance = vlc.Instance("--input-repeat=-1")
-        self.player = self.instance.media_player_new()
-        self.current_url = None
-        self.current_volume = self.player.audio_set_volume(50)
-
-    def play(self, url):
-        """Play a new URL stream, stopping current playback if needed."""
-        if self.player.is_playing():
-            self.player.stop()
-
-        self.current_url = url
-        media = self.instance.media_new(url)
-        self.player.set_media(media)
-        self.player.play()
-        print(f"🔊 Playing: {url}")
-
-    def get_current_volume(self):
-        return self.player.audio_get_volume()
-
-    def change_volume(self, delta, min_volume=10, max_volume=100):
-        """Adjust volume by delta, clamped between min and max."""
-        current_volume = self.player.audio_get_volume()
-        # new_volume = max(min_volume, min(max_volume, current_volume + delta))
-        self.current_volume = max(min_volume, min(max_volume, current_volume + delta))
-        self.player.audio_set_volume(self.current_volume)
-        print(f"🔉 Volume changed: {current_volume} -> {self.current_volume}")
-
-    def change_volume_level(self, level: int):
-        """Set volume off."""
-        current_volume = self.player.audio_get_volume()
-        self.player.audio_set_volume(level)
-        print(f"🔉 Volume changed: {current_volume} -> {level}")
-
-    def stop(self):
-        """Stop playback if something is playing."""
-        if self.player.is_playing():
-            self.player.stop()
 
 
 class App:
@@ -143,8 +105,8 @@ class App:
         async def handle_short_top():
             print("🖲️ Top button short press! Increasing volume.")
             self.audio_player.change_volume(10, min_volume=10, max_volume=100)
-            self.volume = self.audio_player.get_current_volume()
-            self.display.update((10, 10), self.city, self.volume, self.station, True)
+            volume = self.audio_player.get_current_volume()
+            self.display.update((10, 10), self.city, volume, self.station, True)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_long_top():
@@ -195,8 +157,6 @@ class App:
         await button_manager.start()
         asyncio.create_task(button_manager.handle_events())
 
-
-
         try:
             self.display.message(
                 line_1="Radio Globe",
@@ -210,7 +170,9 @@ class App:
             # Get current coordinates
             # coords = self.encoders.get_readings()
             lat, lon = self.encoders.get_readings()
-            self.display.update((lat, lon), "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
+            self.display.update(
+                (lat, lon), "Bristol, United Kingdom", 45, "BBC Radio Bristol", True
+            )
             await asyncio.sleep(0)
             # print(f"Current Coordinates: Latitude {coords[0]}, Longitude {coords[1]}")
             print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
