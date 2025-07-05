@@ -1,6 +1,4 @@
 import asyncio
-
-# import vlc
 import subprocess
 
 import RPi.GPIO as GPIO  # type: ignore
@@ -22,13 +20,6 @@ from buttons_async import AsyncButtonManager
 
 from coordinates import Coordinate
 from display_async import Display
-
-
-async def find_all_cities(coords, cities):
-    """
-    Returns all cities that match with points
-    """
-    return [cities[coord] for coord in coords if coord in cities]
 
 
 class App:
@@ -80,7 +71,7 @@ class App:
         # Load the stations information into memory
         # stations_info = load_stations("perth-stations-test.json")
         stations_info = load_stations("stations.json")
-        print(stations_info)
+        # print(stations_info)
 
         cities_idx = build_cities_index(stations_info)
         # print(cities_idx)
@@ -92,13 +83,17 @@ class App:
         led = RGBLed()
         led_running = asyncio.Event()
 
-        # Button stuff
+        async def find_all_cities(coords, cities):
+            """Returns all cities that match with coords"""
+            return [cities[coord] for coord in coords if coord in cities]
+
         def get_coords():
             """Lat / lon helper"""
             lat = stations_info[self.city]["coords"]["n"]
             lon = stations_info[self.city]["coords"]["e"]
             return Coordinate(lat, lon)
 
+        # Button stuff
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
@@ -214,7 +209,7 @@ class App:
                         self.station, self.url = get_first_station_info(stations_info, self.city)
                         print(f"📻 Tuning to: {self.city} {self.station}")
                         coords = get_coords()
-                        self.display.update(coords, self.city, 0, self.station, True)
+                        self.display.update(coords, self.city, 0, self.station, False)
                         # await asyncio.sleep(0)
                         self.audio_player.play(self.url)
 
