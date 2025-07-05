@@ -114,7 +114,7 @@ class App:
         async def handle_short_jog():
             print("🖲️ Jog button short press! Change mode")
             self.switch_mode()
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))
+            asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
             print("🖲️ Jog button long press: None")
