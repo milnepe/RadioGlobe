@@ -103,6 +103,8 @@ class PositionalEncoders:
 
 
 async def main():
+    import logging
+
     encoder_offsets = (0, 0)
     encoders = PositionalEncoders(encoder_offsets[0], encoder_offsets[1])
     encoders.start()
@@ -112,22 +114,22 @@ async def main():
     try:
         await asyncio.sleep(0.5)
         coords_lat, coords_long = encoders.get_readings()
-        print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+        logging.debug(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
         encoders.zero()
-        print(f"Encoder offsets set to: {encoders.latitude_offset}, {encoders.longitude_offset}")
+        logging.debug(f"Encoder offsets set to: {encoders.latitude_offset}, {encoders.longitude_offset}")
 
         while True:
             await asyncio.sleep(1)
             coords_lat, coords_long = encoders.get_readings()
             encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
-            print(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
+            logging.debug(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
     except KeyboardInterrupt:
-        print("Stopping encoder task...")
+        logging.debug("Stopping encoder task...")
     finally:
         await encoders.stop()
-        print("Encoder task stopped.")
+        logging.debug("Encoder task stopped.")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,5 @@
+import logging
+
 ROUNDING = 2
 
 
@@ -27,36 +29,36 @@ class Coordinate:
 
 if __name__ == "__main__":
     origin = Coordinate()
-    print(f"Origin: {origin.lat}, {origin.lon}")
-    print(f"Origin: {origin}")
+    logging.debug(f"Origin: {origin.lat}, {origin.lon}")
+    logging.debug(f"Origin: {origin}")
 
     greenwich = Coordinate(0.0001, 0.0001)
-    print(f"Greenwich: {greenwich.lat}, {greenwich.lon}")
-    print(f"Greenwich: {greenwich}")
+    logging.debug(f"Greenwich: {greenwich.lat}, {greenwich.lon}")
+    logging.debug(f"Greenwich: {greenwich}")
 
     if result := origin == greenwich:  # result is None if false
-        print(f"Origin equals Greenwich: {result}")
+        logging.debug(f"Origin equals Greenwich: {result}")
     else:
-        print("False")
+        logging.debug("False")
 
     kolkata = Coordinate(22.54, 88.34)
-    print(f"Kolkata: {kolkata.lat}, {kolkata.lon}")
-    print(f"Kalkata: {kolkata}")
+    logging.debug(f"Kolkata: {kolkata.lat}, {kolkata.lon}")
+    logging.debug(f"Kalkata: {kolkata}")
 
-    print("""Akron,US-OH": {
+    logging.debug("""Akron,US-OH": {
                 "coords": {
                             "n": 41.0798,
                             "e": -81.5219""")
 
     akron = Coordinate(41.0798, -81.5219)
-    print(f"Akron: {akron.lat}, {akron.lon}")
-    print(f"Akron: {akron}")
+    logging.debug(f"Akron: {akron.lat}, {akron.lon}")
+    logging.debug(f"Akron: {akron}")
 
-    print(""""Den Haag,NL": {
+    logging.debug(""""Den Haag,NL": {
         "coords": {
           "n": 52.08,
           "e": 4.27
         }""")
     den_haag = Coordinate(52.08, 4.27)
-    print(f"Den Haag: {den_haag.lat}, {den_haag.lon}")
-    print(den_haag)
+    logging.debug(f"Den Haag: {den_haag.lat}, {den_haag.lon}")
+    logging.debug(den_haag)

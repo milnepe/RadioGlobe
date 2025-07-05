@@ -1,5 +1,6 @@
 import asyncio
 import subprocess
+import logging
 
 import RPi.GPIO as GPIO  # type: ignore
 
@@ -40,27 +41,27 @@ class App:
     def next_station(self, direction):
         """Navigate to the next or previous station."""
         if not self.stations:
-            print("⚠️ No stations available.")
+            logging.debug("⚠️ No stations available.")
             return
         self.current_index = (self.current_index + direction) % len(self.stations)
-        print(self.stations)
+        logging.debug(self.stations)
         self.station, self.url = self.stations[self.current_index]
-        print(f"📻 Tuning to: {self.station}")
+        logging.debug(f"📻 Tuning to: {self.station}")
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
         if not self.cities:
-            print("⚠️ No cities available.")
+            logging.debug("⚠️ No cities available.")
             return
         self.current_index = (self.current_index + direction) % len(self.cities)
-        print(self.cities)
+        logging.debug(self.cities)
         self.city = self.cities[self.current_index]
-        print(f"📻 Changed city: {self.city}")
+        logging.debug(f"📻 Changed city: {self.city}")
 
     def switch_mode(self):
         """Toggle between application modes."""
         self.mode = "city" if self.mode == "station" else "station"
-        print(f"🌀 Mode switched to: {self.mode}")
+        logging.debug(f"🌀 Mode switched to: {self.mode}")
         # Future mode-based behavior can go here
 
     async def run(self):
@@ -71,10 +72,10 @@ class App:
         # Load the stations information into memory
         # stations_info = load_stations("perth-stations-test.json")
         stations_info = load_stations("stations.json")
-        # print(stations_info)
+        # logging.debug(stations_info)
 
         cities_idx = build_cities_index(stations_info)
-        # print(cities_idx)
+        # logging.debug(cities_idx)
 
         self.dial.start()
         self.encoders.start()
@@ -112,42 +113,42 @@ class App:
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():
-            print("🖲️ Jog button short press! Change mode")
+            logging.debug("🖲️ Jog button short press! Change mode")
             self.switch_mode()
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
-            print("🖲️ Jog button long press: None")
+            logging.debug("🖲️ Jog button long press: None")
             await asyncio.sleep(0.2)
 
         async def handle_short_top():
-            print("🖲️ Top button short press! Increasing volume.")
+            logging.debug("🖲️ Top button short press! Increasing volume.")
             await update_volume(10)
 
         async def handle_long_top():
-            print("🖲️ Top button long press! Set volume on")
+            logging.debug("🖲️ Top button long press! Set volume on")
             await update_volume_level(80)
 
         async def handle_short_bottom():
-            print("🖲️ Bottom button short press! Lowering volume.")
+            logging.debug("🖲️ Bottom button short press! Lowering volume.")
             await update_volume(-10)
 
         async def handle_long_bottom():
-            print("🖲️ Bottom button long press! Set volume off")
+            logging.debug("🖲️ Bottom button long press! Set volume off")
             await update_volume_level(0)
 
         async def handle_short_mid():
-            print("🖲️ Mid button mid short press! Calibrating.")
+            logging.debug("🖲️ Mid button mid short press! Calibrating.")
             self.encoders.zero()
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
-            print(
+            logging.debug(
                 f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
             self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
             await asyncio.sleep(0.5)
 
         async def handle_long_mid():
-            print("🔴 Shutdown initiated! Powering off...")
+            logging.debug("🔴 Shutdown initiated! Powering off...")
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
             await asyncio.sleep(2)  # Optional delay before shutdown for visibility
             subprocess.run(["sudo", "poweroff"])
@@ -177,7 +178,7 @@ class App:
             lat, lon = self.encoders.get_readings()
             self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
             await asyncio.sleep(0)
-            print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
+            logging.debug(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
             while True:
                 await asyncio.sleep(0.1)
@@ -189,7 +190,7 @@ class App:
                 # Get any cities that match with in the look arround zone
                 matches = await find_all_cities(zone, cities_idx)
                 if not self.encoders.is_latched():
-                    # print(coords)
+                    # logging.debug(coords)
 
                     if matches:
                         # Flash LED to signal match
@@ -200,14 +201,14 @@ class App:
                         # Sensitivity is determined by the STICKINESS value
                         self.encoders.latch(*coords, stickiness=STICKINESS)
                         self.cities = matches
-                        print(f"Matching cities: {matches} {self.encoders.is_latched()}")
+                        logging.debug(f"Matching cities: {matches} {self.encoders.is_latched()}")
 
                         # Play first station for first matched city
                         self.city = self.cities[0]
                         # latitude = stations_info[self.city]["coords"]["n"]
                         # longitude = stations_info[self.city]["coords"]["e"]
                         self.station, self.url = get_first_station_info(stations_info, self.city)
-                        print(f"📻 Tuning to: {self.city} {self.station}")
+                        logging.debug(f"📻 Tuning to: {self.city} {self.station}")
                         coords = get_coords()
                         self.display.update(coords, self.city, 0, self.station, False)
                         # await asyncio.sleep(0)
@@ -220,7 +221,7 @@ class App:
                 direction = self.dial.get_direction()
                 if direction != 0:
                     asyncio.create_task(led_task(led, led_running, "blue", 0.1))
-                    print(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
+                    logging.debug(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
                     if self.mode == "station":
                         self.next_station(direction)
                     elif self.mode == "city":
@@ -231,7 +232,7 @@ class App:
                     self.audio_player.play(self.url)
 
         except KeyboardInterrupt:
-            print("👋 Exiting on keyboard interrupt...")
+            logging.debug("👋 Exiting on keyboard interrupt...")
         finally:
             self.audio_player.stop()
             await self.dial.stop()
@@ -240,4 +241,10 @@ class App:
 
 
 if __name__ == "__main__":
+    format = "%(asctime)s: %(message)s"
+    logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+    logging.getLogger().setLevel(logging.DEBUG)
+
+    logging.info("Starting RadioGlobe...")
+
     asyncio.run(App().run())

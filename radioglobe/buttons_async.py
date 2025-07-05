@@ -1,7 +1,9 @@
 import asyncio
-import RPi.GPIO as GPIO  # type: ignore
 import time
 import inspect
+import logging
+
+import RPi.GPIO as GPIO  # type: ignore
 
 
 class AsyncButton:
@@ -100,19 +102,19 @@ async def main():
     # Async-compatible handlers
 
     async def handle_short_jog():
-        print("🚶 Jog button short press: jog step")
+        logging.debug("🚶 Jog button short press: jog step")
         await asyncio.sleep(0.1)  # simulate async work
 
     async def handle_long_jog():
-        print("🏃 Jog button long press: start continuous jog")
+        logging.debug("🏃 Jog button long press: start continuous jog")
         await asyncio.sleep(0.2)
 
     async def handle_short_shutdown():
-        print("🧯 Shutdown short press: ignored")
+        logging.debug("🧯 Shutdown short press: ignored")
         await asyncio.sleep(0.05)
 
     async def handle_long_shutdown():
-        print("🛑 Shutdown long press: shutting down system!")
+        logging.debug("🛑 Shutdown long press: shutting down system!")
 
     await asyncio.sleep(0.5)
     loop = asyncio.get_running_loop()
@@ -132,7 +134,7 @@ async def main():
             await asyncio.sleep(0.1)
 
     except KeyboardInterrupt:
-        print("👋 Exiting...")
+        logging.debug("👋 Exiting...")
     finally:
         GPIO.cleanup()
 

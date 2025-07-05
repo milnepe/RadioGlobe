@@ -1,5 +1,6 @@
 import asyncio
 import random
+import logging
 import RPi.GPIO as GPIO  # type: ignore
 
 
@@ -35,14 +36,14 @@ class RGBLed:
 
 async def led_task(led: RGBLed, led_running: asyncio.Event, color: str, duration: float):
     if led_running.is_set():
-        print("LED task already running, skipping.")
+        logging.debug("LED task already running, skipping.")
         return
     led_running.set()
-    print(f"LED ON ({color}) for {duration}s")
+    logging.debug(f"LED ON ({color}) for {duration}s")
     led.set_color(color)
     await asyncio.sleep(duration)
     led.off()
-    print("LED OFF")
+    logging.debug("LED OFF")
     led_running.clear()
 
 
@@ -52,7 +53,7 @@ async def worker(led: RGBLed, led_running: asyncio.Event):
         sleep_time = random.uniform(1, 2)
         await asyncio.sleep(sleep_time)
         color = random.choice(colors)
-        print(f"Worker woke up — triggering LED: {color}")
+        logging.debug(f"Worker woke up — triggering LED: {color}")
         if not led_running.is_set():
             asyncio.create_task(led_task(led, led_running, color, 0.5))
 
@@ -69,7 +70,7 @@ async def main():
         try:
             await worker_task
         except asyncio.CancelledError:
-            print("Worker stopped.")
+            logging.debug("Worker stopped.")
         led.cleanup()
 
 

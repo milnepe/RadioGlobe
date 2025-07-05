@@ -1,4 +1,6 @@
 import asyncio
+import logging
+
 import RPi.GPIO as GPIO  # type: ignore
 
 PIN17 = 17
@@ -49,17 +51,17 @@ async def main():
     dial.start()
 
     try:
-        print("Listening for dial input. Press Ctrl+C to stop.")
+        logging.debug("Listening for dial input. Press Ctrl+C to stop.")
         while True:
             await asyncio.sleep(0.1)
             direction = dial.get_direction()
             if direction != 0:
-                print(f"Direction: {'Left' if direction == 1 else 'Right'}")
+                logging.debug(f"Direction: {'Left' if direction == 1 else 'Right'}")
     except KeyboardInterrupt:
-        print("\nStopping dial...")
+        logging.debug("\nStopping dial...")
     finally:
         await dial.stop()
-        print("Cleaned up and exited.")
+        logging.debug("Cleaned up and exited.")
 
 
 if __name__ == "__main__":
