@@ -20,7 +20,7 @@ from database import get_all_station_info
 
 from buttons_async import AsyncButtonManager
 
-# from coordinates import Coordinate
+from coordinates import Coordinate
 from display_async import Display
 
 
@@ -80,7 +80,7 @@ class App:
         # Load the stations information into memory
         # stations_info = load_stations("perth-stations-test.json")
         stations_info = load_stations("stations.json")
-        # print(stations_info)
+        print(stations_info)
 
         cities_idx = build_cities_index(stations_info)
         # print(cities_idx)
@@ -93,12 +93,19 @@ class App:
         led_running = asyncio.Event()
 
         # Button stuff
+        def get_coords():
+            """Lat / lon helper"""
+            lat = stations_info[self.city]["coords"]["n"]
+            lon = stations_info[self.city]["coords"]["e"]
+            return Coordinate(lat, lon)
+
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
-            self.display.update((10, 10), self.city, volume, self.station, False)
+            coords = get_coords()
+            self.display.update(coords, self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
-            self.display.update((10, 10), self.city, 0, self.station, False)
+            self.display.update(coords, self.city, 0, self.station, False)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def update_volume_level(level):
@@ -141,7 +148,7 @@ class App:
             print(
                 f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
-            self.display.update((0, 0), "Calibrated", 0, "", False)
+            self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
             await asyncio.sleep(0.5)
 
         async def handle_long_mid():
@@ -173,7 +180,7 @@ class App:
             await asyncio.sleep(5)
 
             lat, lon = self.encoders.get_readings()
-            self.display.update((0, 0), "Calibrate", 0, "", False)
+            self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
             await asyncio.sleep(0)
             print(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
@@ -202,9 +209,12 @@ class App:
 
                         # Play first station for first matched city
                         self.city = self.cities[0]
+                        # latitude = stations_info[self.city]["coords"]["n"]
+                        # longitude = stations_info[self.city]["coords"]["e"]
                         self.station, self.url = get_first_station_info(stations_info, self.city)
                         print(f"📻 Tuning to: {self.city} {self.station}")
-                        self.display.update((10, 10), self.city, 0, self.station, True)
+                        coords = get_coords()
+                        self.display.update(coords, self.city, 0, self.station, True)
                         # await asyncio.sleep(0)
                         self.audio_player.play(self.url)
 
@@ -221,7 +231,8 @@ class App:
                     elif self.mode == "city":
                         self.next_city(direction)
                         self.station, self.url = get_first_station_info(stations_info, self.city)
-                    self.display.update((10, 10), self.city, 0, self.station, False)
+                    coords = get_coords()
+                    self.display.update(coords, self.city, 0, self.station, False)
                     self.audio_player.play(self.url)
 
         except KeyboardInterrupt:
