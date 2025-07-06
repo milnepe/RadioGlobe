@@ -190,41 +190,38 @@ class App:
                 # Get a list of coordinates that surround the current coordinates
                 # The size of the look arround zone is determined by the FUZZINESS value
                 zone = look_around(coords, FUZZINESS)
-                # Get any cities that match with in the look arround zone
+                # Get any cities that match in the look arround zone
                 self.cities = await find_all_cities(zone, cities_idx)
-                if not self.encoders.is_latched():
-                    # logging.debug(coords)
+                if not self.encoders.is_latched() and self.cities:
+                    # Flash LED to signal match
+                    if not led_running.is_set():
+                        asyncio.create_task(led_task(led, led_running, "green", 0.5))
 
-                    if self.cities:
-                        # Flash LED to signal match
-                        if not led_running.is_set():
-                            asyncio.create_task(led_task(led, led_running, "green", 0.5))
-
-                        # Set the latch to hold onto any matched cities until the reticule moves again
-                        # Sensitivity is determined by the STICKINESS value
-                        self.encoders.latch(*coords, stickiness=STICKINESS)
-                        # Reset indexes to 0
-                        self.current_idx = self.city_idx = 0
-                        logging.debug(
-                            f"Matching cities: current:{self.current_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
-                        )
-                        # Get first city in cities list
-                        self.city = self.cities[self.city_idx]
-                        # Get list of stations (name, url) for first city
-                        self.stations = get_all_station_info(
-                            stations_info, self.cities[self.city_idx]
-                        )
-                        # Reset stations index
-                        self.current_idx = self.station_idx = 0
-                        # Get the first station (name, url) in the stations list
-                        self.station = self.stations[self.station_idx]
-                        logging.debug(
-                            f"📻 Tuning to: current:{self.current_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
-                        )
-                        coords = get_coords_by_city(self.city)
-                        self.display.update(coords, self.city, 0, self.station[0], False)
-                        # Play first cities' first station
-                        self.audio_player.play(self.station[1])
+                    # Set the latch to hold onto any matched cities until the reticule moves again
+                    # Sensitivity is determined by the STICKINESS value
+                    self.encoders.latch(*coords, stickiness=STICKINESS)
+                    # Reset indexes to 0
+                    self.current_idx = self.city_idx = 0
+                    logging.debug(
+                        f"Matching cities: current:{self.current_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
+                    )
+                    # Get first city in cities list
+                    self.city = self.cities[self.city_idx]
+                    # Get list of stations (name, url) for first city
+                    self.stations = get_all_station_info(
+                        stations_info, self.cities[self.city_idx]
+                    )
+                    # Reset station index
+                    self.current_idx = self.station_idx = 0
+                    # Get the first station (name, url) in the stations list
+                    self.station = self.stations[self.station_idx]
+                    logging.debug(
+                        f"📻 Tuning to: current:{self.current_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
+                    )
+                    coords = get_coords_by_city(self.city)
+                    self.display.update(coords, self.city, 0, self.station[0], False)
+                    # Play first cities' first station
+                    self.audio_player.play(self.station[1])
 
                 # Modal selection of stations and city using dial
                 direction = self.dial.get_direction()
