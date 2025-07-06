@@ -18,7 +18,8 @@ class AsyncDial:
     def get_direction(self):
         return_val = self.direction
         self.direction = 0
-        return return_val
+        # change sign
+        return return_val * -1
 
     async def _wait_for_edge(self, pin, edge=GPIO.FALLING):
         return await asyncio.to_thread(GPIO.wait_for_edge, pin, edge)
@@ -32,6 +33,7 @@ class AsyncDial:
             new_direction = GPIO.input(PIN18)
             if not new_direction:
                 new_direction = -1
+                # new_direction = 1
             self.direction = new_direction
 
             await asyncio.sleep(0.3)  # Debounce

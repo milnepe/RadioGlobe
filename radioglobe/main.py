@@ -45,19 +45,19 @@ class App:
         if not self.stations:
             logging.debug("⚠️ No stations available.")
             return
-        self.current_index = (self.current_index + direction) % len(self.stations)
-        logging.debug(self.stations)
-        self.station, self.url = self.stations[self.current_index]
-        logging.debug(f"📻 Tuning to: {self.station}")
+        self.current_idx = (self.current_idx + direction) % len(self.stations)
+        logging.debug(f"cur:{self.current_idx} {self.stations}")
+        self.station = self.stations[self.current_idx]
+        logging.debug(f"📻 Tuning to: cur:{self.current_idx} {self.station}")
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
         if not self.cities:
             logging.debug("⚠️ No cities available.")
             return
-        self.current_index = (self.current_index + direction) % len(self.cities)
+        self.current_idx = (self.current_idx + direction) % len(self.cities)
         logging.debug(self.cities)
-        self.city = self.cities[self.current_index]
+        self.city = self.cities[self.current_idx]
         logging.debug(f"📻 Changed city: {self.city}")
 
     def switch_mode(self):
@@ -208,9 +208,7 @@ class App:
                     # Get first city in cities list
                     self.city = self.cities[self.city_idx]
                     # Get list of stations (name, url) for first city
-                    self.stations = get_all_station_info(
-                        stations_info, self.cities[self.city_idx]
-                    )
+                    self.stations = get_all_station_info(stations_info, self.cities[self.city_idx])
                     # Reset station index
                     self.current_idx = self.station_idx = 0
                     # Get the first station (name, url) in the stations list
@@ -227,15 +225,17 @@ class App:
                 direction = self.dial.get_direction()
                 if direction != 0:
                     asyncio.create_task(led_task(led, led_running, "blue", 0.1))
-                    logging.debug(f"↪️ Dial turned: {'left' if direction > 0 else 'right'}")
+                    logging.debug(
+                        f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
+                    )
                     if self.mode == "station":
                         self.next_station(direction)
                     elif self.mode == "city":
                         self.next_city(direction)
-                        self.station, self.url = get_first_station_info(stations_info, self.city)
+                        self.station = get_first_station_info(stations_info, self.city)
                     coords = get_coords_by_city(self.city)
-                    self.display.update(coords, self.city, 0, self.station, False)
-                    self.audio_player.play(self.url)
+                    self.display.update(coords, self.city, 0, self.station[0], False)
+                    self.audio_player.play(self.station[1])
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
