@@ -117,7 +117,9 @@ async def main():
         logging.debug(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
 
         encoders.zero()
-        logging.debug(f"Encoder offsets set to: {encoders.latitude_offset}, {encoders.longitude_offset}")
+        logging.debug(
+            f"Encoder offsets set to: {encoders.latitude_offset}, {encoders.longitude_offset}"
+        )
 
         while True:
             await asyncio.sleep(1)

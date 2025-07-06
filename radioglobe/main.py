@@ -30,11 +30,13 @@ class App:
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.stations = None
-        self.station = None
+        self.station = None  # tuple
+        self.station_idx = None
         self.cities = None
         self.city = None
+        self.city_idx = None
         self.url = None
-        self.current_index = 0
+        self.current_idx = None
         self.mode = "station"
         self.volume = 50
 
@@ -88,17 +90,17 @@ class App:
             """Returns all cities that match with coords"""
             return [cities[coord] for coord in coords if coord in cities]
 
-        def get_coords():
+        def get_coords_by_city(city):
             """Lat / lon helper"""
-            lat = stations_info[self.city]["coords"]["n"]
-            lon = stations_info[self.city]["coords"]["e"]
+            lat = stations_info[city]["coords"]["n"]
+            lon = stations_info[city]["coords"]["e"]
             return Coordinate(lat, lon)
 
         # Button stuff
         async def update_volume(delta):
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
-            coords = get_coords()
+            coords = get_coords_by_city(self.city)
             self.display.update(coords, self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
             self.display.update(coords, self.city, 0, self.station, False)
@@ -107,7 +109,7 @@ class App:
         async def update_volume_level(level):
             """Volume and display helper"""
             volume = self.audio_player.change_volume_level(level)
-            coords = get_coords()
+            coords = get_coords_by_city(self.city)
             self.display.update(coords, self.city, volume, self.station, False)
             await asyncio.sleep(0.5)
             self.display.update(coords, self.city, 0, self.station, False)
@@ -174,7 +176,7 @@ class App:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne",
             )
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)
 
             lat, lon = self.encoders.get_readings()
             self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
@@ -189,11 +191,11 @@ class App:
                 # The size of the look arround zone is determined by the FUZZINESS value
                 zone = look_around(coords, FUZZINESS)
                 # Get any cities that match with in the look arround zone
-                matches = await find_all_cities(zone, cities_idx)
+                self.cities = await find_all_cities(zone, cities_idx)
                 if not self.encoders.is_latched():
                     # logging.debug(coords)
 
-                    if matches:
+                    if self.cities:
                         # Flash LED to signal match
                         if not led_running.is_set():
                             asyncio.create_task(led_task(led, led_running, "green", 0.5))
@@ -201,22 +203,28 @@ class App:
                         # Set the latch to hold onto any matched cities until the reticule moves again
                         # Sensitivity is determined by the STICKINESS value
                         self.encoders.latch(*coords, stickiness=STICKINESS)
-                        self.cities = matches
-                        logging.debug(f"Matching cities: {matches} {self.encoders.is_latched()}")
-
-                        # Play first station for first matched city
-                        self.city = self.cities[0]
-                        # latitude = stations_info[self.city]["coords"]["n"]
-                        # longitude = stations_info[self.city]["coords"]["e"]
-                        self.station, self.url = get_first_station_info(stations_info, self.city)
-                        logging.debug(f"📻 Tuning to: {self.city} {self.station}")
-                        coords = get_coords()
-                        self.display.update(coords, self.city, 0, self.station, False)
-                        # await asyncio.sleep(0)
-                        self.audio_player.play(self.url)
-
-                        # Get the rest of the stations for current city
-                        self.stations = get_all_station_info(stations_info, self.cities[0])
+                        # Reset indexes to 0
+                        self.current_idx = self.city_idx = 0
+                        logging.debug(
+                            f"Matching cities: current:{self.current_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
+                        )
+                        # Get first city in cities list
+                        self.city = self.cities[self.city_idx]
+                        # Get list of stations (name, url) for first city
+                        self.stations = get_all_station_info(
+                            stations_info, self.cities[self.city_idx]
+                        )
+                        # Reset stations index
+                        self.current_idx = self.station_idx = 0
+                        # Get the first station (name, url) in the stations list
+                        self.station = self.stations[self.station_idx]
+                        logging.debug(
+                            f"📻 Tuning to: current:{self.current_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
+                        )
+                        coords = get_coords_by_city(self.city)
+                        self.display.update(coords, self.city, 0, self.station[0], False)
+                        # Play first cities' first station
+                        self.audio_player.play(self.station[1])
 
                 # Modal selection of stations and city using dial
                 direction = self.dial.get_direction()
@@ -228,7 +236,7 @@ class App:
                     elif self.mode == "city":
                         self.next_city(direction)
                         self.station, self.url = get_first_station_info(stations_info, self.city)
-                    coords = get_coords()
+                    coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station, False)
                     self.audio_player.play(self.url)
 

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import liquidcrystal_i2c # type: ignore
+import liquidcrystal_i2c  # type: ignore
 from coordinates import Coordinate
 
 DISPLAY_I2C_ADDRESS = 0x27
