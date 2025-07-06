@@ -56,14 +56,14 @@ class App:
             logging.debug("⚠️ No cities available.")
             return
         self.current_idx = (self.current_idx + direction) % len(self.cities)
-        logging.debug(self.cities)
+        logging.debug(f"cur:{self.current_idx} {self.cities}")
         self.city = self.cities[self.current_idx]
-        logging.debug(f"📻 Changed city: {self.city}")
+        logging.debug(f"📻 Changed city: cur:{self.current_idx} {self.city} {self.stations}")
 
     def switch_mode(self):
         """Toggle between application modes."""
         self.mode = "city" if self.mode == "station" else "station"
-        logging.debug(f"🌀 Mode switched to: {self.mode}")
+        logging.debug(f"🌀 Mode switched to: {self.mode} cur:{self.current_idx} {self.city} {self.stations}")
         # Future mode-based behavior can go here
 
     async def run(self):
@@ -116,8 +116,8 @@ class App:
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():
-            logging.debug("🖲️ Jog button short press! Change mode")
             self.switch_mode()
+            logging.debug(f"{self.current_idx} 🖲️ Jog button short press! Change mode {self.stations}")
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
@@ -233,6 +233,7 @@ class App:
                     elif self.mode == "city":
                         self.next_city(direction)
                         self.station = get_first_station_info(stations_info, self.city)
+
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
                     self.audio_player.play(self.station)
