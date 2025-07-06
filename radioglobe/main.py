@@ -100,18 +100,18 @@ class App:
             """Volume and display helper"""
             volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
             coords = get_coords_by_city(self.city)
-            self.display.update(coords, self.city, volume, self.station, False)
+            self.display.update(coords, self.city, volume, self.station[0], False)
             await asyncio.sleep(0.5)
-            self.display.update(coords, self.city, 0, self.station, False)
+            self.display.update(coords, self.city, 0, self.station[0], False)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def update_volume_level(level):
             """Volume and display helper"""
             volume = self.audio_player.change_volume_level(level)
             coords = get_coords_by_city(self.city)
-            self.display.update(coords, self.city, volume, self.station, False)
+            self.display.update(coords, self.city, volume, self.station[0], False)
             await asyncio.sleep(0.5)
-            self.display.update(coords, self.city, 0, self.station, False)
+            self.display.update(coords, self.city, 0, self.station[0], False)
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():
