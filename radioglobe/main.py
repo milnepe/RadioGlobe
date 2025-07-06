@@ -219,7 +219,7 @@ class App:
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
                     # Play first cities' first station
-                    self.audio_player.play(self.station[1])
+                    self.audio_player.play(self.station)
 
                 # Modal selection of stations and city using dial
                 direction = self.dial.get_direction()
@@ -235,7 +235,7 @@ class App:
                         self.station = get_first_station_info(stations_info, self.city)
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
-                    self.audio_player.play(self.station[1])
+                    self.audio_player.play(self.station)
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")

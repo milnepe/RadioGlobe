@@ -7,18 +7,17 @@ class AudioPlayer:
         self.instance = vlc.Instance("--input-repeat=-1")
         self.player = self.instance.media_player_new()
         self.current_url = None
-        # self.current_volume = self.player.audio_set_volume(50)
 
-    def play(self, url):
+    def play(self, station: tuple):
         """Play a new URL stream, stopping current playback if needed."""
         if self.player.is_playing():
             self.player.stop()
 
-        self.current_url = url
-        media = self.instance.media_new(url)
+        self.current_url = station[1]
+        media = self.instance.media_new(self.current_url)
         self.player.set_media(media)
         self.player.play()
-        logging.debug(f"🔊 Playing: {url}")
+        logging.debug(f"🔊 Playing: {station}")
 
     def get_current_volume(self):
         return self.player.audio_get_volume()
