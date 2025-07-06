@@ -35,7 +35,6 @@ class App:
         self.cities = None
         self.city = None
         self.city_idx = None
-        self.url = None
         self.current_idx = None
         self.mode = "station"
         self.volume = 50
