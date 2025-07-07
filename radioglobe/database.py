@@ -154,21 +154,35 @@ def get_stations_info(city, stations) -> list[tuple | None]:
             ]
     return []  # No match found
 
+def get_calibration_file_path(path_str: str) -> str:
+    """Returns the absolute path for the calibration file."""
+    return os.path.expanduser(path_str)
 
-def Save_Calibration(latitude: int, longitude: int):
-    offsets = [latitude, longitude]
-    with open(OFFSETS_JSON, "w") as offsets_file:
-        offsets_file.write(json.dumps(offsets))
-        logging.debug(f"{OFFSETS_JSON} saved...")
+def save_calibration(latitude: int, longitude: int, station: tuple[str, str], filepath: str = "~/cache/radioglobe.json"):
+    """Saves calibration offsets and station info to a JSON file."""
+    data = {
+        "offsets": [latitude, longitude],
+        "station": list(station)  # Convert tuple to list for JSON compatibility
+    }
+    full_path = get_calibration_file_path(filepath)
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)  # Ensure the directory exists
+    with open(full_path, "w") as offsets_file:
+        offsets_file.write(json.dumps(data))
+        logging.debug(f"{full_path} saved...")
 
+def load_calibration(filepath: str = "~/cache/radioglobe.json"):
+    """Loads calibration offsets and station info from a JSON file."""
+    full_path = get_calibration_file_path(filepath)
 
-def Load_Calibration():
     try:
-        with open(OFFSETS_JSON, "r") as offsets_file:
-            offsets = json.load(offsets_file)
-    except Exception:
-        offsets = [0, 0]
+        with open(full_path, "r") as offsets_file:
+            data = json.load(offsets_file)
+            offsets = data.get("offsets", [0, 0])
+            station = tuple(data.get("station", ("", "")))
+    except Exception as e:
+        logging.warning(f"Failed to load calibration from {full_path}: {e}")
+        offsets = None
+        station = None
 
-    logging.debug(f"Setting offsets to: {offsets}")
-
-    return offsets
+    logging.debug(f"Setting offsets to: {offsets}, station: {station}")
+    return offsets, station

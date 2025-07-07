@@ -16,6 +16,8 @@ from database import build_cities_index
 from database import look_around
 from database import get_first_station_info
 from database import get_all_station_info
+from database import save_calibration
+from database import load_calibration
 
 from buttons_async import AsyncButtonManager
 
@@ -148,14 +150,16 @@ class App:
             self.encoders.zero()
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
             logging.debug(
-                f"Encoder offsets set to: {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
+                f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
             self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
             await asyncio.sleep(0.5)
 
         async def handle_long_mid():
             logging.debug("🔴 Shutdown initiated! Powering off...")
+            save_calibration(self.encoders.latitude_offset, self.encoders.longitude_offset, self.station)
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
+            logging.debug(f"Saving params {self.encoders.latitude_offset}, {self.encoders.longitude_offset} {self.station}")
             await asyncio.sleep(2)  # Optional delay before shutdown for visibility
             subprocess.run(["sudo", "poweroff"])
 
@@ -182,7 +186,15 @@ class App:
             await asyncio.sleep(2)
 
             lat, lon = self.encoders.get_readings()
-            self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
+            calibration, station = load_calibration()
+            if calibration:
+                self.encoders.latitude_offset, self.encoders.longitude_offset
+                self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
+                # self.station = ('Zekoula Fm 88.0', 'https://stream.zeno.fm/u3z3e6c9yy8uv')
+                self.station = station
+                self.audio_player.play(self.station)
+            else:
+                self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
             await asyncio.sleep(0)
             logging.debug(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
 
