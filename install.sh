@@ -86,6 +86,10 @@ cp -r radioglobe/* /opt/radioglobe/
 echo "Fixing NaN enties in stations file..."
 sed -i 's/: NaN/: "No Name"/g' stations/stations.json
 
+# Strip url query strings
+echo "Removing url query strings"
+sed -i.bak -E 's#("url": *"[^"?]+)\?[^"]*"#\1"#g' stations/stations.json
+
 # Copy stations file
 echo "Copying stations file..."
 cp stations/stations.json /opt/radioglobe/
