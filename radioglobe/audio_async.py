@@ -19,10 +19,7 @@ class AudioPlayer:
         self.player.play()
         logging.debug(f"🔊 Playing: {station}")
 
-    def get_current_volume(self):
-        return self.player.audio_get_volume()
-
-    def change_volume(self, delta, min_volume=10, max_volume=100):
+    def change_volume(self, delta, min_volume=10, max_volume=100) -> int:
         """Adjust volume by delta, clamped between min and max."""
         current_volume = self.player.audio_get_volume()
         new_volume = max(min_volume, min(max_volume, current_volume + delta))
@@ -30,11 +27,12 @@ class AudioPlayer:
         logging.debug(f"🔉 Volume changed: {current_volume} -> {new_volume}")
         return new_volume
 
-    def change_volume_level(self, level: int):
-        """Set volume off."""
+    def change_volume_level(self, level: int) -> int:
+        """Adjust volume to set level."""
         current_volume = self.player.audio_get_volume()
         self.player.audio_set_volume(level)
         logging.debug(f"🔉 Volume changed: {current_volume} -> {level}")
+        return level
 
     def stop(self):
         """Stop playback if something is playing."""

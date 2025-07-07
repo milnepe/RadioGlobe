@@ -27,6 +27,7 @@ class App:
     def __init__(self):
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
+        self.audio_player.change_volume_level(50)  # init volume
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.stations = None
@@ -37,7 +38,6 @@ class App:
         self.city_idx = None
         self.current_idx = None
         self.mode = "station"
-        self.volume = 50
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -62,7 +62,9 @@ class App:
     def switch_mode(self):
         """Toggle between application modes."""
         self.mode = "city" if self.mode == "station" else "station"
-        logging.debug(f"🌀 Mode switched to: {self.mode} cur:{self.current_idx} {self.city} {self.stations}")
+        logging.debug(
+            f"🌀 Mode switched to: {self.mode} cur:{self.current_idx} {self.city} {self.stations}"
+        )
         # Future mode-based behavior can go here
 
     async def run(self):
@@ -97,8 +99,8 @@ class App:
 
         # Button stuff
         async def update_volume(delta):
-            """Volume and display helper"""
-            volume = self.audio_player.change_volume(delta, min_volume=10, max_volume=100)
+            """Volume change and display helper"""
+            volume = self.audio_player.change_volume(delta)
             coords = get_coords_by_city(self.city)
             self.display.update(coords, self.city, volume, self.station[0], False)
             await asyncio.sleep(0.5)
@@ -106,7 +108,7 @@ class App:
             asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def update_volume_level(level):
-            """Volume and display helper"""
+            """Volume level and display helper"""
             volume = self.audio_player.change_volume_level(level)
             coords = get_coords_by_city(self.city)
             self.display.update(coords, self.city, volume, self.station[0], False)
@@ -116,7 +118,9 @@ class App:
 
         async def handle_short_jog():
             self.switch_mode()
-            logging.debug(f"{self.current_idx} 🖲️ Jog button short press! Change mode {self.stations}")
+            logging.debug(
+                f"{self.current_idx} 🖲️ Jog button short press! Change mode {self.stations}"
+            )
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
