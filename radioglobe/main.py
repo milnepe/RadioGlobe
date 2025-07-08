@@ -1,6 +1,8 @@
 import asyncio
 import subprocess
 import logging
+import os
+import json
 
 import RPi.GPIO as GPIO  # type: ignore
 
@@ -16,8 +18,8 @@ from database import build_cities_index
 from database import look_around
 from database import get_first_station_info
 from database import get_all_station_info
-from database import save_calibration
-from database import load_calibration
+# from database import save_calibration
+# from database import load_calibration
 
 from buttons_async import AsyncButtonManager
 
@@ -29,17 +31,66 @@ class App:
     def __init__(self):
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
-        self.audio_player.change_volume_level(50)  # init volume
+        self.audio_player.change_volume_level(50)
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.stations = None
-        self.station = None  # tuple
+        self.station = None
         self.station_idx = None
         self.cities = None
         self.city = None
         self.city_idx = None
         self.current_idx = None
         self.mode = "station"
+
+    def save_state(self):
+        def safe(obj):
+            if isinstance(obj, tuple):
+                return list(obj)
+            return obj
+
+        state = {
+            "stations": self.stations,
+            "station": self.station,
+            "station_idx": self.station_idx,
+            "cities": self.cities,
+            "city": self.city,
+            "city_idx": self.city_idx,
+            "current_idx": self.current_idx,
+            "mode": self.mode,
+            "lat": self.encoders.latitude,
+            "lon": self.encoders.longitude,
+            "lat_offset": self.encoders.latitude_offset,
+            "lon_offset": self.encoders.longitude_offset,
+            "latch": True,
+        }
+
+        path = os.path.expanduser("~/cache/radioglobe.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(state, f)
+
+    def load_state(self):
+        path = os.path.expanduser("~/cache/radioglobe.json")
+        if not os.path.exists(path):
+            return
+        with open(path, "r") as f:
+            state = json.load(f)
+
+        self.stations = state.get("stations")
+        self.station = tuple(state["station"]) if state.get("station") else None
+        self.station_idx = state.get("station_idx")
+        self.cities = state.get("cities")
+        # self.city = tuple(state["city"]) if state.get("city") else None
+        self.city = state.get("city")
+        self.city_idx = state.get("city_idx")
+        self.current_idx = state.get("current_idx")
+        self.mode = state.get("mode")
+        self.encoders.latitude = state.get("lat")
+        self.encoders.longitude = state.get("lon")
+        self.encoders.latitude_offset = state.get("lat_offset")
+        self.encoders.longitude_offset = state.get("lon_offset")
+        self.encoders.latch_stickiness = True
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -73,6 +124,8 @@ class App:
         """Main app loop."""
         STICKINESS = 10
         FUZZINESS = 3
+
+        self.load_state()
 
         # Load the stations information into memory
         # stations_info = load_stations("perth-stations-test.json")
@@ -157,9 +210,11 @@ class App:
 
         async def handle_long_mid():
             logging.debug("🔴 Shutdown initiated! Powering off...")
-            save_calibration(self.encoders.latitude_offset, self.encoders.longitude_offset, self.station)
+            # save_calibration(self.encoders.latitude_offset, self.encoders.longitude_offset, self.station)
+            self.save_state()
+            logging.debug("Saved state...")
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
-            logging.debug(f"Saving params {self.encoders.latitude_offset}, {self.encoders.longitude_offset} {self.station}")
+            # logging.debug(f"Saving params {self.encoders.latitude_offset}, {self.encoders.longitude_offset} {self.station}")
             await asyncio.sleep(2)  # Optional delay before shutdown for visibility
             subprocess.run(["sudo", "poweroff"])
 
@@ -185,28 +240,33 @@ class App:
             )
             await asyncio.sleep(2)
 
-            lat, lon = self.encoders.get_readings()
-            calibration, station = load_calibration()
-            if calibration:
-                self.encoders.latitude_offset, self.encoders.longitude_offset
-                self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
-                # self.station = ('Zekoula Fm 88.0', 'https://stream.zeno.fm/u3z3e6c9yy8uv')
-                self.station = station
+            try:
+                self.load_state()
+            except Exception:
+                logging.debug("Config not found...")
+            logging.debug(
+                f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} {self.mode} {self.city} {self.station} {self.encoders.is_latched()}"
+            )
+
+            if self.encoders.is_latched():
+                # if self.encoders.has_offsets:
+                coords = get_coords_by_city(self.city)
+                self.display.update(coords, self.city, 0, self.station[0], False)
                 self.audio_player.play(self.station)
             else:
-                self.display.update(Coordinate(0, 0), "Calibrate", 0, "", False)
-            await asyncio.sleep(0)
-            logging.debug(f"Current Coordinates: Latitude {lat}, Longitude {lon}")
+                self.display.update((0, 0), "CALIBRATE", 0, "", False)
 
             while True:
                 await asyncio.sleep(0.1)
 
                 coords = self.encoders.get_readings()
+                # logging.debug(coords)
                 # Get a list of coordinates that surround the current coordinates
                 # The size of the look arround zone is determined by the FUZZINESS value
                 zone = look_around(coords, FUZZINESS)
                 # Get any cities that match in the look arround zone
                 self.cities = await find_all_cities(zone, cities_idx)
+                # logging.debug(f"Latch: {self.encoders.is_latched()} cities: {self.cities}")
                 if not self.encoders.is_latched() and self.cities:
                     # Flash LED to signal match
                     if not led_running.is_set():
