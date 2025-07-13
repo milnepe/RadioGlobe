@@ -17,8 +17,6 @@ from database import load_stations
 from database import build_cities_index
 from database import look_around
 from database import get_stations_by_city
-# from database import save_calibration
-# from database import load_calibration
 
 from buttons_async import AsyncButtonManager
 
@@ -82,9 +80,7 @@ class App:
         self.stations = state.get("stations")
         self.station = tuple(state["station"]) if state.get("station") else None
         self.station_idx = state.get("station_idx")
-        # self.cities = state.get("cities")
         self.cities = tuple(state["cities"]) if state.get("cities") else None
-        # self.city = tuple(state["city"]) if state.get("city") else None
         self.city = state.get("city")
         self.city_idx = state.get("city_idx")
         self.jog_idx = state.get("jog_idx")
@@ -128,7 +124,7 @@ class App:
         STICKINESS = 10
         FUZZINESS = 3
 
-        # Load any saves state
+        # Load any saved state
         self.load_state()
 
         self.dial.start()
@@ -208,12 +204,11 @@ class App:
 
         async def handle_long_mid():
             logging.debug("🔴 Shutdown initiated! Powering off...")
-            # save_calibration(self.encoders.latitude_offset, self.encoders.longitude_offset, self.station)
+            # Save app state
             self.save_state()
             logging.debug("Saved state...")
             asyncio.create_task(led_task(led, led_running, "red", 0.2))
-            # logging.debug(f"Saving params {self.encoders.latitude_offset}, {self.encoders.longitude_offset} {self.station}")
-            await asyncio.sleep(2)  # Optional delay before shutdown for visibility
+            await asyncio.sleep(2)  # Delay before shutdown for visibility
             subprocess.run(["sudo", "poweroff"])
 
         loop = asyncio.get_running_loop()
@@ -246,8 +241,8 @@ class App:
                 f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} {self.mode} {self.city} {self.station} {self.encoders.is_latched()}"
             )
 
+            # The latch is set if there was saved state - this triggers playing the saved station
             if self.encoders.is_latched():
-                # if self.encoders.has_offsets:
                 coords = get_coords_by_city(self.city)
                 self.display.update(coords, self.city, 0, self.station[0], False)
                 self.audio_player.play(self.station)
@@ -285,11 +280,9 @@ class App:
                     # Get first city in cities list
                     self.city = self.cities[self.city_idx]
                     # Get list of stations (name, url) for first city
-                    # self.stations = get_stations_by_city(stations_info, self.cities[self.city_idx])
                     self.stations = get_stations_by_city(self.stations_info, self.city)
-                    # Reset station index
-                    self.jog_idx = self.station_idx = 0
                     # Get the first station (name, url) in the stations list
+                    self.jog_idx = self.station_idx = 0
                     self.station = self.stations[self.station_idx]
                     logging.debug(
                         f"📻 Tuning to: current:{self.jog_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
