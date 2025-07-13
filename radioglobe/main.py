@@ -45,7 +45,7 @@ class App:
         self.stations_info = load_stations("stations.json")
         self.cities_info = build_cities_index(self.stations_info)
 
-    def save_state(self):
+    def save_state(self, cache="~/cache/radioglobe.json"):
         def safe(obj):
             if isinstance(obj, tuple):
                 return list(obj)
@@ -68,7 +68,7 @@ class App:
             "latch": True,
         }
 
-        path = os.path.expanduser("~/cache/radioglobe.json")
+        path = os.path.expanduser(cache)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             json.dump(state, f)
