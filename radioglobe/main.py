@@ -17,7 +17,7 @@ from database import load_stations
 from database import build_cities_index
 from database import look_around
 from database import get_first_station_info
-from database import get_all_station_info
+from database import get_stations_by_city
 # from database import save_calibration
 # from database import load_calibration
 
@@ -42,6 +42,8 @@ class App:
         self.city_idx = None
         self.current_idx = None
         self.mode = "station"
+        self.stations_info = load_stations("stations.json")
+        self.cities_info = build_cities_index(self.stations_info)
 
     def save_state(self):
         def safe(obj):
@@ -49,6 +51,7 @@ class App:
                 return list(obj)
             return obj
 
+        logging.debug(f"STATIONS: {self.stations}")
         state = {
             "stations": self.stations,
             "station": self.station,
@@ -80,7 +83,8 @@ class App:
         self.stations = state.get("stations")
         self.station = tuple(state["station"]) if state.get("station") else None
         self.station_idx = state.get("station_idx")
-        self.cities = state.get("cities")
+        # self.cities = state.get("cities")
+        self.cities = tuple(state["cities"]) if state.get("cities") else None
         # self.city = tuple(state["city"]) if state.get("city") else None
         self.city = state.get("city")
         self.city_idx = state.get("city_idx")
@@ -108,8 +112,8 @@ class App:
             logging.debug("⚠️ No cities available.")
             return
         self.current_idx = (self.current_idx + direction) % len(self.cities)
-        logging.debug(f"cur:{self.current_idx} {self.cities}")
         self.city = self.cities[self.current_idx]
+        self.stations = get_stations_by_city(self.stations_info, self.city)
         logging.debug(f"📻 Changed city: cur:{self.current_idx} {self.city} {self.stations}")
 
     def switch_mode(self):
@@ -125,15 +129,8 @@ class App:
         STICKINESS = 10
         FUZZINESS = 3
 
+        # Load any saves state
         self.load_state()
-
-        # Load the stations information into memory
-        # stations_info = load_stations("perth-stations-test.json")
-        stations_info = load_stations("stations.json")
-        # logging.debug(stations_info)
-
-        cities_idx = build_cities_index(stations_info)
-        # logging.debug(cities_idx)
 
         self.dial.start()
         self.encoders.start()
@@ -148,8 +145,8 @@ class App:
 
         def get_coords_by_city(city):
             """Lat / lon helper"""
-            lat = stations_info[city]["coords"]["n"]
-            lon = stations_info[city]["coords"]["e"]
+            lat = self.stations_info[city]["coords"]["n"]
+            lon = self.stations_info[city]["coords"]["e"]
             return Coordinate(lat, lon)
 
         # Button stuff
@@ -253,6 +250,9 @@ class App:
                 coords = get_coords_by_city(self.city)
                 self.display.update(coords, self.city, 0, self.station[0], False)
                 self.audio_player.play(self.station)
+                logging.debug(
+                    f"Playing saved station: {self.station} {self.city} {self.cities} {self.stations}"
+                )
             else:
                 self.display.update((0, 0), "CALIBRATE", 0, "", False)
 
@@ -265,9 +265,10 @@ class App:
                 # The size of the look arround zone is determined by the FUZZINESS value
                 zone = look_around(coords, FUZZINESS)
                 # Get any cities that match in the look arround zone
-                self.cities = await find_all_cities(zone, cities_idx)
+                self.cities = await find_all_cities(zone, self.cities_info)
                 # logging.debug(f"Latch: {self.encoders.is_latched()} cities: {self.cities}")
                 if not self.encoders.is_latched() and self.cities:
+                    logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.cities}")
                     # Flash LED to signal match
                     if not led_running.is_set():
                         asyncio.create_task(led_task(led, led_running, "green", 0.5))
@@ -283,7 +284,8 @@ class App:
                     # Get first city in cities list
                     self.city = self.cities[self.city_idx]
                     # Get list of stations (name, url) for first city
-                    self.stations = get_all_station_info(stations_info, self.cities[self.city_idx])
+                    # self.stations = get_stations_by_city(stations_info, self.cities[self.city_idx])
+                    self.stations = get_stations_by_city(self.stations_info, self.city)
                     # Reset station index
                     self.current_idx = self.station_idx = 0
                     # Get the first station (name, url) in the stations list
@@ -307,7 +309,7 @@ class App:
                         self.next_station(direction)
                     elif self.mode == "city":
                         self.next_city(direction)
-                        self.station = get_first_station_info(stations_info, self.city)
+                        self.station = get_first_station_info(self.stations_info, self.city)
 
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)

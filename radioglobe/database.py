@@ -1,10 +1,12 @@
 import json
-import os.path
+
+# import os.path
 import logging
-from radio_config import DATADIR, ENCODER_RESOLUTION
+# from radio_config import DATADIR, ENCODER_RESOLUTION
 
+ENCODER_RESOLUTION = 1024
 
-os.makedirs(DATADIR, exist_ok=True)
+# os.makedirs(DATADIR, exist_ok=True)
 
 
 def load_stations(stations_json: str) -> dict:
@@ -80,7 +82,8 @@ def get_first_station_info(stations, city_country):
     return None, None
 
 
-def get_all_station_info(stations, city_country):
+def get_stations_by_city(stations: dict, city_country: str) -> list:
+    """Return all the stations for the given city"""
     station_info = stations.get(city_country)
     if not station_info or "urls" not in station_info:
         return []
@@ -153,6 +156,7 @@ def get_stations_info(city, stations) -> list[tuple | None]:
                 if "name" in entry and "url" in entry
             ]
     return []  # No match found
+
 
 # def get_calibration_file_path(path_str: str) -> str:
 #     """Returns the absolute path for the calibration file."""
