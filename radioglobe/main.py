@@ -152,7 +152,6 @@ class App:
             self.display.update(coords, self.city, volume, self.station[0], False)
             await asyncio.sleep(0.5)
             self.display.update(coords, self.city, 0, self.station[0], False)
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def update_volume_level(level):
             """Volume level and display helper"""
@@ -161,7 +160,6 @@ class App:
             self.display.update(coords, self.city, volume, self.station[0], False)
             await asyncio.sleep(0.5)
             self.display.update(coords, self.city, 0, self.station[0], False)
-            asyncio.create_task(led_task(led, led_running, "white", 0.2))
 
         async def handle_short_jog():
             self.switch_mode()
@@ -175,6 +173,9 @@ class App:
         async def handle_long_jog():
             logging.debug("🖲️ Jog button long press: None")
             await asyncio.sleep(0.2)
+
+        async def on_sound_press():
+            asyncio.create_task(led_task(led, led_running, "blue", 0.2))  # LED flashes on press
 
         async def handle_short_top():
             logging.debug("🖲️ Top button short press! Increasing volume.")
@@ -198,7 +199,6 @@ class App:
         async def handle_short_mid():
             logging.debug("🖲️ Mid button mid short press! Calibrating.")
             self.encoders.zero()
-            # asyncio.create_task(led_task(led, led_running, "green", 0.2))
             logging.debug(
                 f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
@@ -218,9 +218,9 @@ class App:
 
         button_definitions = [
             ("Jog", 27, handle_short_jog, None),
-            ("Top", 5, handle_short_top, handle_long_top),
+            ("Top", 5, handle_short_top, handle_long_top, on_sound_press),
             ("Mid", 6, handle_short_mid, handle_long_mid, on_mid_press),  # 👈 press_cb added
-            ("Bottom", 12, handle_short_bottom, handle_long_bottom),
+            ("Bottom", 12, handle_short_bottom, handle_long_bottom, on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
