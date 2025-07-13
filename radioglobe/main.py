@@ -161,6 +161,9 @@ class App:
             await asyncio.sleep(0.5)
             self.display.update(coords, self.city, 0, self.station[0], False)
 
+        async def on_jog_press():
+            asyncio.create_task(led_task(led, led_running, "green", 0.2))  # LED flashes on press
+
         async def handle_short_jog():
             self.switch_mode()
             if self.mode == "station":
@@ -168,7 +171,6 @@ class App:
             else:
                 result = self.cities
             logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.jog_idx} {result}")
-            asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
             logging.debug("🖲️ Jog button long press: None")
@@ -217,9 +219,9 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ("Jog", 27, handle_short_jog, None),
+            ("Jog", 27, handle_short_jog, None, on_jog_press),
             ("Top", 5, handle_short_top, handle_long_top, on_sound_press),
-            ("Mid", 6, handle_short_mid, handle_long_mid, on_mid_press),  # 👈 press_cb added
+            ("Mid", 6, handle_short_mid, handle_long_mid, on_mid_press),
             ("Bottom", 12, handle_short_bottom, handle_long_bottom, on_sound_press),
         ]
 
