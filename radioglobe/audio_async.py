@@ -8,7 +8,7 @@ class AudioPlayer:
         self.player = self.instance.media_player_new()
         self.current_url = None
 
-    def play(self, station: tuple):
+    def play(self, city, station: tuple):
         """Play a new URL stream, stopping current playback if needed."""
         if self.player.is_playing():
             self.player.stop()
@@ -17,7 +17,7 @@ class AudioPlayer:
         media = self.instance.media_new(self.current_url)
         self.player.set_media(media)
         self.player.play()
-        logging.debug(f"🔊 Playing: {station}")
+        logging.debug(f"🔊 Playing: {city} {station}")
 
     def change_volume(self, delta, min_volume=10, max_volume=100) -> int:
         """Adjust volume by delta, clamped between min and max."""

@@ -245,7 +245,7 @@ class App:
             if self.encoders.is_latched():
                 coords = get_coords_by_city(self.city)
                 self.display.update(coords, self.city, 0, self.station[0], False)
-                self.audio_player.play(self.station)
+                self.audio_player.play(self.city, self.station)
                 logging.debug(
                     f"Playing saved station: {self.station} {self.city} {self.cities} {self.stations}"
                 )
@@ -290,7 +290,7 @@ class App:
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
                     # Play first cities' first station
-                    self.audio_player.play(self.station)
+                    self.audio_player.play(self.city, self.station)
 
                 # Modal selection of stations and city using dial
                 direction = self.dial.get_direction()
@@ -308,7 +308,7 @@ class App:
 
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
-                    self.audio_player.play(self.station)
+                    self.audio_player.play(self.city, self.station)
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
