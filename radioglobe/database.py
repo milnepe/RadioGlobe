@@ -74,14 +74,6 @@ def look_around(origin: tuple, fuzziness: int) -> list:
     return search_area
 
 
-def get_first_station_info(stations, city_country):
-    station_info = stations.get(city_country)
-    if station_info and "urls" in station_info and station_info["urls"]:
-        first_station = station_info["urls"][0]
-        return first_station["name"], first_station["url"]
-    return None, None
-
-
 def get_stations_by_city(stations: dict, city_country: str) -> list:
     """Return all the stations for the given city"""
     station_info = stations.get(city_country)
@@ -156,37 +148,3 @@ def get_stations_info(city, stations) -> list[tuple | None]:
                 if "name" in entry and "url" in entry
             ]
     return []  # No match found
-
-
-# def get_calibration_file_path(path_str: str) -> str:
-#     """Returns the absolute path for the calibration file."""
-#     return os.path.expanduser(path_str)
-
-# def save_calibration(latitude: int, longitude: int, station: tuple[str, str], filepath: str = "~/cache/radioglobe.json"):
-#     """Saves calibration offsets and station info to a JSON file."""
-#     data = {
-#         "offsets": [latitude, longitude],
-#         "station": list(station)  # Convert tuple to list for JSON compatibility
-#     }
-#     full_path = get_calibration_file_path(filepath)
-#     os.makedirs(os.path.dirname(full_path), exist_ok=True)  # Ensure the directory exists
-#     with open(full_path, "w") as offsets_file:
-#         offsets_file.write(json.dumps(data))
-#         logging.debug(f"{full_path} saved...")
-
-# def load_calibration(filepath: str = "~/cache/radioglobe.json"):
-#     """Loads calibration offsets and station info from a JSON file."""
-#     full_path = get_calibration_file_path(filepath)
-
-#     try:
-#         with open(full_path, "r") as offsets_file:
-#             data = json.load(offsets_file)
-#             offsets = data.get("offsets", [0, 0])
-#             station = tuple(data.get("station", ("", "")))
-#     except Exception as e:
-#         logging.warning(f"Failed to load calibration from {full_path}: {e}")
-#         offsets = None
-#         station = None
-
-#     logging.debug(f"Setting offsets to: {offsets}, station: {station}")
-#     return offsets, station

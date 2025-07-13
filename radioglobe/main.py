@@ -16,7 +16,6 @@ from rgb_led_async import led_task
 from database import load_stations
 from database import build_cities_index
 from database import look_around
-from database import get_first_station_info
 from database import get_stations_by_city
 # from database import save_calibration
 # from database import load_calibration
@@ -40,7 +39,7 @@ class App:
         self.cities = None
         self.city = None
         self.city_idx = None
-        self.current_idx = None
+        self.jog_idx = 0
         self.mode = "station"
         self.stations_info = load_stations("stations.json")
         self.cities_info = build_cities_index(self.stations_info)
@@ -59,7 +58,7 @@ class App:
             "cities": self.cities,
             "city": self.city,
             "city_idx": self.city_idx,
-            "current_idx": self.current_idx,
+            "jog_idx": self.jog_idx,
             "mode": self.mode,
             "lat": self.encoders.latitude,
             "lon": self.encoders.longitude,
@@ -88,7 +87,7 @@ class App:
         # self.city = tuple(state["city"]) if state.get("city") else None
         self.city = state.get("city")
         self.city_idx = state.get("city_idx")
-        self.current_idx = state.get("current_idx")
+        self.jog_idx = state.get("jog_idx")
         self.mode = state.get("mode")
         self.encoders.latitude = state.get("lat")
         self.encoders.longitude = state.get("lon")
@@ -101,26 +100,26 @@ class App:
         if not self.stations:
             logging.debug("⚠️ No stations available.")
             return
-        self.current_idx = (self.current_idx + direction) % len(self.stations)
-        logging.debug(f"cur:{self.current_idx} {self.stations}")
-        self.station = self.stations[self.current_idx]
-        logging.debug(f"📻 Tuning to: cur:{self.current_idx} {self.station}")
+        self.jog_idx = (self.jog_idx + direction) % len(self.stations)
+        logging.debug(f"jog:{self.jog_idx} {self.stations}")
+        self.station = self.stations[self.jog_idx]
+        logging.debug(f"📻 Tuning to: jog:{self.jog_idx} {self.station}")
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
         if not self.cities:
             logging.debug("⚠️ No cities available.")
             return
-        self.current_idx = (self.current_idx + direction) % len(self.cities)
-        self.city = self.cities[self.current_idx]
+        self.jog_idx = (self.jog_idx + direction) % len(self.cities)
+        self.city = self.cities[self.jog_idx]
         self.stations = get_stations_by_city(self.stations_info, self.city)
-        logging.debug(f"📻 Changed city: cur:{self.current_idx} {self.city} {self.stations}")
+        logging.debug(f"📻 Changed city: jog:{self.jog_idx} {self.city} {self.stations}")
 
     def switch_mode(self):
         """Toggle between application modes."""
         self.mode = "city" if self.mode == "station" else "station"
         logging.debug(
-            f"🌀 Mode switched to: {self.mode} cur:{self.current_idx} {self.city} {self.stations}"
+            f"🌀 Mode switched to: {self.mode} jog:{self.jog_idx} {self.city} {self.station}"
         )
         # Future mode-based behavior can go here
 
@@ -170,9 +169,11 @@ class App:
 
         async def handle_short_jog():
             self.switch_mode()
-            logging.debug(
-                f"{self.current_idx} 🖲️ Jog button short press! Change mode {self.stations}"
-            )
+            if self.mode == "station":
+                result = self.stations
+            else:
+                result = self.cities
+            logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.jog_idx} {result}")
             asyncio.create_task(led_task(led, led_running, "green", 0.2))
 
         async def handle_long_jog():
@@ -277,9 +278,9 @@ class App:
                     # Sensitivity is determined by the STICKINESS value
                     self.encoders.latch(*coords, stickiness=STICKINESS)
                     # Reset indexes to 0
-                    self.current_idx = self.city_idx = 0
+                    self.jog_idx = self.city_idx = 0
                     logging.debug(
-                        f"Matching cities: current:{self.current_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
+                        f"Matching cities: current:{self.jog_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
                     )
                     # Get first city in cities list
                     self.city = self.cities[self.city_idx]
@@ -287,11 +288,11 @@ class App:
                     # self.stations = get_stations_by_city(stations_info, self.cities[self.city_idx])
                     self.stations = get_stations_by_city(self.stations_info, self.city)
                     # Reset station index
-                    self.current_idx = self.station_idx = 0
+                    self.jog_idx = self.station_idx = 0
                     # Get the first station (name, url) in the stations list
                     self.station = self.stations[self.station_idx]
                     logging.debug(
-                        f"📻 Tuning to: current:{self.current_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
+                        f"📻 Tuning to: current:{self.jog_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
                     )
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
@@ -309,7 +310,8 @@ class App:
                         self.next_station(direction)
                     elif self.mode == "city":
                         self.next_city(direction)
-                        self.station = get_first_station_info(self.stations_info, self.city)
+                        # Get first station for next city
+                        self.station = get_stations_by_city(self.stations_info, self.city)[0]
 
                     coords = get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
