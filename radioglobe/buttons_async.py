@@ -7,7 +7,7 @@ import RPi.GPIO as GPIO  # type: ignore
 
 
 class AsyncButton:
-    def __init__(self, name, gpio_pin, loop, long_press_threshold=1.0):
+    def __init__(self, name, gpio_pin, loop, long_press_threshold=1.0, press_cb=None):
         self.name = name
         self.pin = gpio_pin
         self.loop = loop
@@ -16,6 +16,7 @@ class AsyncButton:
         self._pressed = False
         self._press_start = None
         self._event_ready = None  # "short" or "long"
+        self.press_cb = press_cb  # callback for press-down
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -29,6 +30,13 @@ class AsyncButton:
         if not self._pressed and GPIO.input(self.pin) == GPIO.LOW:
             self._pressed = True
             self._press_start = time.monotonic()
+
+            # 🔔 Fire press-down callback immediately
+            if self.press_cb:
+                if inspect.iscoroutinefunction(self.press_cb):
+                    await self.press_cb()
+                else:
+                    self.press_cb()
 
             # Wait for release
             while GPIO.input(self.pin) == GPIO.LOW:
@@ -61,8 +69,13 @@ class AsyncButtonManager:
         self.buttons = []
         self.event_queue = asyncio.Queue()
 
-        for name, pin, short_cb, long_cb in button_definitions:
-            btn = AsyncButton(name, pin, loop, long_press_threshold)
+        for definition in button_definitions:
+            if len(definition) == 5:
+                name, pin, short_cb, long_cb, press_cb = definition
+            else:
+                name, pin, short_cb, long_cb = definition
+                press_cb = None
+            btn = AsyncButton(name, pin, loop, long_press_threshold, press_cb)
             self.buttons.append(btn)
             setattr(btn, "short_cb", short_cb)
             setattr(btn, "long_cb", long_cb)

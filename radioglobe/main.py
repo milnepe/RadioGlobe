@@ -192,10 +192,13 @@ class App:
             logging.debug("🖲️ Bottom button long press! Set volume off")
             await update_volume_level(0)
 
+        async def on_mid_press():
+            asyncio.create_task(led_task(led, led_running, "green", 0.2))  # LED flashes on press
+
         async def handle_short_mid():
             logging.debug("🖲️ Mid button mid short press! Calibrating.")
             self.encoders.zero()
-            asyncio.create_task(led_task(led, led_running, "green", 0.2))
+            # asyncio.create_task(led_task(led, led_running, "green", 0.2))
             logging.debug(
                 f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
             )
@@ -207,7 +210,7 @@ class App:
             # Save app state
             self.save_state()
             logging.debug("Saved state...")
-            asyncio.create_task(led_task(led, led_running, "red", 0.2))
+            self.display.update("", "Shutdown", 0, "", False)
             await asyncio.sleep(2)  # Delay before shutdown for visibility
             subprocess.run(["sudo", "poweroff"])
 
@@ -216,7 +219,7 @@ class App:
         button_definitions = [
             ("Jog", 27, handle_short_jog, None),
             ("Top", 5, handle_short_top, handle_long_top),
-            ("Mid", 6, handle_short_mid, handle_long_mid),
+            ("Mid", 6, handle_short_mid, handle_long_mid, on_mid_press),  # 👈 press_cb added
             ("Bottom", 12, handle_short_bottom, handle_long_bottom),
         ]
 

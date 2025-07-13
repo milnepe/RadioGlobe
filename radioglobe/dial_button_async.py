@@ -3,12 +3,13 @@ import RPi.GPIO as GPIO  # type: ignore
 
 
 class AsyncDialWithButton:
-    def __init__(self):
+    def __init__(self, on_button_press=None):
         self.direction = 0
         self.button_pressed = False
         self._stop_event = asyncio.Event()
         self._task = None
         self._button_task = None
+        self.on_button_press = on_button_press  # 👈 callback on press
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setup([17, 18, 27], GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -45,12 +46,13 @@ class AsyncDialWithButton:
             if self._stop_event.is_set():
                 break
 
-            # Debounce: ensure button is still pressed after short delay
-            await asyncio.sleep(0.05)
+            # Debounce
+            await asyncio.sleep(0.01)
             if GPIO.input(27) == 0:
+                if self.on_button_press:
+                    asyncio.create_task(self.on_button_press())  # 🔔 flash LED etc.
                 self.button_pressed = True
 
-                # Wait for button release before accepting next press
                 while GPIO.input(27) == 0 and not self._stop_event.is_set():
                     await asyncio.sleep(0.01)
 
