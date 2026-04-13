@@ -8,7 +8,7 @@ SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "🚀 Installing RadioGlobe..."
 
 # -----------------------------
-# Read version (injected at build time)
+# Version (injected from dev machine)
 # -----------------------------
 if [[ -f "$SRC_DIR/VERSION" ]]; then
     VERSION=$(cat "$SRC_DIR/VERSION")
@@ -32,37 +32,41 @@ sudo apt install -y \
     jq
 
 # -----------------------------
-# Install directory
+# Prepare install directory
 # -----------------------------
 echo "📁 Preparing install dir..."
 sudo mkdir -p $RADIOGLOBE_DIR
-sudo chown $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
+sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
 # -----------------------------
-# Python venv
+# Python virtual environment (idempotent)
 # -----------------------------
-echo "🐍 Setting up virtualenv..."
-python3 -m venv $RADIOGLOBE_DIR/venv
-source $RADIOGLOBE_DIR/venv/bin/activate
+if [ ! -f "$RADIOGLOBE_DIR/venv/bin/python" ]; then
+    echo "🐍 Creating virtualenv..."
+    sudo -u $RADIOGLOBE_USER python3 -m venv $RADIOGLOBE_DIR/venv
+fi
 
-pip install --upgrade pip
-pip install -r "$SRC_DIR/requirements.txt"
+echo "📦 Installing Python dependencies..."
+sudo -u $RADIOGLOBE_USER \
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade pip
+
+sudo -u $RADIOGLOBE_USER \
+    $RADIOGLOBE_DIR/venv/bin/pip install -r "$SRC_DIR/requirements.txt"
 
 # -----------------------------
-# Copy application
+# Copy application (SAFE: no delete)
 # -----------------------------
 echo "📂 Copying application..."
-sudo rsync -a --delete \
-    "$SRC_DIR/radioglobe/" \
-    "$RADIOGLOBE_DIR/"
+sudo cp -r "$SRC_DIR/radioglobe/"* "$RADIOGLOBE_DIR/"
 
+# Stations + version
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/"
 sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
 # -----------------------------
-# Fix stations
+# Clean stations file
 # -----------------------------
 echo "🧹 Cleaning stations..."
 sed -i 's/: NaN/: "No Name"/g' "$RADIOGLOBE_DIR/stations.json"
@@ -81,20 +85,18 @@ sudo sed -i "s|__RADIOGLOBE_DIR__|$RADIOGLOBE_DIR|g" $SERVICE_FILE
 sudo sed -i "s|__VERSION__|$VERSION|g" $SERVICE_FILE
 
 # -----------------------------
-# Enable lingering (CRITICAL)
+# Enable lingering (required for user services)
 # -----------------------------
 echo "🔑 Enabling lingering..."
 sudo loginctl enable-linger $RADIOGLOBE_USER
 
 # -----------------------------
-# Enable + start service
+# Enable service (DO NOT start here)
 # -----------------------------
-echo "🔄 Starting service..."
-
 USER_ID=$(id -u $RADIOGLOBE_USER)
 export XDG_RUNTIME_DIR=/run/user/$USER_ID
 
-sudo loginctl enable-linger $RADIOGLOBE_USER
+echo "🔄 Enabling service..."
 
 sudo -u $RADIOGLOBE_USER \
     XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
@@ -104,7 +106,7 @@ sudo -u $RADIOGLOBE_USER \
     XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
     systemctl --user enable radioglobe.service
 
-echo "✅ Service enabled. Reboot recommended."
-
-echo "✅ Done!"
-echo "📖 Logs: journalctl --user-unit=radioglobe.service -f"
+echo "✅ Installation complete!"
+echo "⚠️ Reboot recommended to start service cleanly"
+echo "📖 Logs after reboot:"
+echo "   journalctl --user-unit=radioglobe.service -f"
