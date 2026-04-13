@@ -1,5 +1,6 @@
+SHELL := /bin/bash
 APP_NAME=radioglobe
-REMOTE=radioglobe@device.local
+REMOTE=radioglobe@radioglobe.local
 REMOTE_DIR=~/RadioGlobe
 
 VERSION_FILE=pyproject.toml

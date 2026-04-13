@@ -91,9 +91,12 @@ sudo loginctl enable-linger $RADIOGLOBE_USER
 # -----------------------------
 echo "🔄 Starting service..."
 
-runuser -l $RADIOGLOBE_USER -c "systemctl --user daemon-reload"
-runuser -l $RADIOGLOBE_USER -c "systemctl --user enable radioglobe.service"
-runuser -l $RADIOGLOBE_USER -c "systemctl --user restart radioglobe.service"
+# runuser -l $RADIOGLOBE_USER -c "systemctl --user daemon-reload"
+# runuser -l $RADIOGLOBE_USER -c "systemctl --user enable radioglobe.service"
+# runuser -l $RADIOGLOBE_USER -c "systemctl --user restart radioglobe.service"
+sudo -u $RADIOGLOBE_USER systemctl --user daemon-reload
+sudo -u $RADIOGLOBE_USER systemctl --user enable radioglobe.service
+sudo -u $RADIOGLOBE_USER systemctl --user restart radioglobe.service
 
 echo "✅ Done!"
 echo "📖 Logs: journalctl --user-unit=radioglobe.service -f"
