@@ -68,3 +68,5 @@ release: bump-patch deploy install
 	@git push
 	@git push --tags
 
+clean:
+	rm -f VERSION
