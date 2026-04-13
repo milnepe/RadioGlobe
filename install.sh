@@ -1,121 +1,99 @@
-#! /usr/bin/bash
+#!/usr/bin/env bash
+set -e
 
-# Install all dependencies and setup radioglobe service to run under radioglobe user
-# The script assumes the repo is cloned to the radioglobe home directory
-# and it is executed from within the ~/RadioGlobe dir
+RADIOGLOBE_USER=radioglobe
+RADIOGLOBE_DIR=/opt/radioglobe
+SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Logging:
-#journalctl --user-unit=radioglobe.service -b -f
+echo "🚀 Installing RadioGlobe..."
 
-# sudo apt install vlc-bin vlc-plugin-base python3-venv python3-dev pulseaudio-module-bluetooth
-# sudo apt install vlc pulseaudio python3-pip python3-smbus python3-dev python3-rpi.gpio
-echo "Installing OS dependencies..."
-sudo apt install vlc-bin vlc-plugin-base python3-dev pulseaudio-module-bluetooth jq
+# -----------------------------
+# Read version (injected at build time)
+# -----------------------------
+if [[ -f "$SRC_DIR/VERSION" ]]; then
+    VERSION=$(cat "$SRC_DIR/VERSION")
+else
+    VERSION="unknown"
+fi
 
-# Create python virtual environment and activate it so python packages can be installed in it
-echo "Creating virtual environment..."
-export RADIOGLOBE_DIR=/opt/radioglobe
-sudo mkdir $RADIOGLOBE_DIR
-sudo chown radioglobe:radioglobe $RADIOGLOBE_DIR
-python -m venv $RADIOGLOBE_DIR/venv
+echo "📦 Version: $VERSION"
+
+# -----------------------------
+# OS dependencies
+# -----------------------------
+echo "📦 Installing OS dependencies..."
+sudo apt update
+sudo apt install -y \
+    vlc-bin \
+    vlc-plugin-base \
+    python3-venv \
+    python3-dev \
+    pulseaudio-module-bluetooth \
+    jq
+
+# -----------------------------
+# Install directory
+# -----------------------------
+echo "📁 Preparing install dir..."
+sudo mkdir -p $RADIOGLOBE_DIR
+sudo chown $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
+
+# -----------------------------
+# Python venv
+# -----------------------------
+echo "🐍 Setting up virtualenv..."
+python3 -m venv $RADIOGLOBE_DIR/venv
 source $RADIOGLOBE_DIR/venv/bin/activate
-cp requirements.txt $RADIOGLOBE_DIR/
-pip install -r $RADIOGLOBE_DIR/requirements.txt
 
-# Check python dependencies are correctly installed in venv
-echo "Checking python venv..."
-if [[ -z "$VIRTUAL_ENV" ]]; then
-  echo "❌ Please activate your virtual environment first."
-  exit 1
-fi
+pip install --upgrade pip
+pip install -r "$SRC_DIR/requirements.txt"
 
-echo "🔍 Checking Python packages in requirements.txt against current venv..."
+# -----------------------------
+# Copy application
+# -----------------------------
+echo "📂 Copying application..."
+sudo rsync -a --delete \
+    "$SRC_DIR/radioglobe/" \
+    "$RADIOGLOBE_DIR/"
 
-while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/"
+sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
 
-  # Extract package name
-  if [[ "$line" =~ @\  ]]; then
-    # Handle VCS entries like: package @ git+https://...
-    pkg_name=$(echo "$line" | cut -d '@' -f 1 | xargs)
-  else
-    # Handle regular entries like: package==version
-    pkg_name=$(echo "$line" | cut -d '=' -f 1 | cut -d '<' -f 1 | cut -d '>' -f 1 | xargs)
-  fi
+sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
-  # Check if the package is installed
-  pip show "$pkg_name" > /dev/null 2>&1
-  if [[ $? -eq 0 ]]; then
-    echo "✅ $pkg_name is installed"
-  else
-    echo "❌ $pkg_name is NOT installed"
-  fi
-done < $RADIOGLOBE_DIR/requirements.txt
+# -----------------------------
+# Fix stations
+# -----------------------------
+echo "🧹 Cleaning stations..."
+sed -i 's/: NaN/: "No Name"/g' "$RADIOGLOBE_DIR/stations.json"
+sed -i -E 's#("url": *"[^"?]+)\?[^"]*"#\1"#g' "$RADIOGLOBE_DIR/stations.json"
+jq empty "$RADIOGLOBE_DIR/stations.json"
 
-# Replaced by above to put dependencies into venv not OS - Bullseye no longer supported
-# Install python dependencies
-# pip install spidev
-# pip install smbus
-# pip install python-vlc
-# pip install https://github.com/pl31/python-liquidcrystal_i2c/archive/master.zip
+# -----------------------------
+# Install systemd user service
+# -----------------------------
+echo "⚙️ Installing service..."
 
-# Install appropriate GPIO support
-# source /etc/os-release
-# echo "$VERSION_CODENAME"
-# case $VERSION_CODENAME in
-#     bullseye)
-#     # Legacy support
-#     pip install RPi.GPIO
-#     ;;
-#     bookworm)
-#     # Bookworm compatibility with RPi.GPIO
-#     pip install lgpio
-#     pip install rpi-lgpio
-#     ;;
-#     *)
-#     echo "Debian version unknown"
-#     exit
-#     ;;
-# esac
+SERVICE_FILE=/etc/systemd/user/radioglobe.service
+sudo cp "$SRC_DIR/services/radioglobe.service" $SERVICE_FILE
 
-# Copy files to working dir
-echo "Copying scripts to /opt/radioglobe..."
-cp -r radioglobe/* /opt/radioglobe/
+sudo sed -i "s|__RADIOGLOBE_DIR__|$RADIOGLOBE_DIR|g" $SERVICE_FILE
+sudo sed -i "s|__VERSION__|$VERSION|g" $SERVICE_FILE
 
-# Fix NaN enties in stations file
-echo "Fixing NaN enties in stations file..."
-sed -i 's/: NaN/: "No Name"/g' stations/stations.json
+# -----------------------------
+# Enable lingering (CRITICAL)
+# -----------------------------
+echo "🔑 Enabling lingering..."
+sudo loginctl enable-linger $RADIOGLOBE_USER
 
-# Strip url query strings
-echo "Removing url query strings"
-sed -i.bak -E 's#("url": *"[^"?]+)\?[^"]*"#\1"#g' stations/stations.json
+# -----------------------------
+# Enable + start service
+# -----------------------------
+echo "🔄 Starting service..."
 
-# Copy stations file
-echo "Copying stations file..."
-cp stations/stations.json /opt/radioglobe/
+runuser -l $RADIOGLOBE_USER -c "systemctl --user daemon-reload"
+runuser -l $RADIOGLOBE_USER -c "systemctl --user enable radioglobe.service"
+runuser -l $RADIOGLOBE_USER -c "systemctl --user restart radioglobe.service"
 
-# Validate stations.json
-echo "Validating stations file..."
-cat stations/stations.json | jq empty
-
-# Remove any old radioglobe service
-echo "Stopping any existing services..."
-FILE=/etc/systemd/system/radioglobe.service
-if [[ -f "$FILE" ]]; then
-    sudo systemctl stop radioglobe.service
-    sudo systemctl disable radioglobe.service
-    sudo systemctl daemon-reload
-    sudo rm $FILE
-fi
-
-# Set paths according to username
-#sed -i "s/USER/${USER}/g" services/radioglobe.service
-# Start radioglobe as the default user, NOT root so pulseaudio can manage audio
-echo "Installing service units..."
-sudo cp services/radioglobe.service /etc/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable pulseaudio
-systemctl --user enable radioglobe.service
-systemctl --user start pulseaudio
-
-sudo reboot
+echo "✅ Done!"
+echo "📖 Logs: journalctl --user-unit=radioglobe.service -f"
