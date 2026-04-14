@@ -32,6 +32,8 @@ class App:
         self.audio_player.change_volume_level(50)
         self.encoders = PositionalEncoders()
         self.display = Display()
+        self.led = RGBLed()
+        self.led_running = asyncio.Event()
         self.stations = None
         self.station = None
         self.station_idx = None
@@ -118,7 +120,96 @@ class App:
         logging.debug(
             f"🌀 Mode switched to: {self.mode} jog:{self.jog_idx} {self.city} {self.station}"
         )
-        # Future mode-based behavior can go here
+
+    # ---------------------------------------------------------------------------
+    # Helpers
+    # ---------------------------------------------------------------------------
+
+    def _get_coords_by_city(self, city):
+        """Return a Coordinate for the given city string."""
+        lat = self.stations_info[city]["coords"]["n"]
+        lon = self.stations_info[city]["coords"]["e"]
+        return Coordinate(lat, lon)
+
+    async def _find_all_cities(self, coords, cities):
+        """Return all cities whose grid coordinates appear in coords."""
+        return [cities[coord] for coord in coords if coord in cities]
+
+    async def _update_volume(self, delta):
+        """Adjust volume by delta and briefly show the level on the display."""
+        volume = self.audio_player.change_volume(delta)
+        coords = self._get_coords_by_city(self.city)
+        self.display.update(coords, self.city, volume, self.station[0], False)
+        await asyncio.sleep(0.5)
+        self.display.update(coords, self.city, 0, self.station[0], False)
+
+    async def _update_volume_level(self, level):
+        """Set volume to an absolute level and briefly show it on the display."""
+        volume = self.audio_player.change_volume_level(level)
+        coords = self._get_coords_by_city(self.city)
+        self.display.update(coords, self.city, volume, self.station[0], False)
+        await asyncio.sleep(0.5)
+        self.display.update(coords, self.city, 0, self.station[0], False)
+
+    # ---------------------------------------------------------------------------
+    # Button handlers
+    # ---------------------------------------------------------------------------
+
+    async def _on_jog_press(self):
+        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.2))
+
+    async def _handle_short_jog(self):
+        self.switch_mode()
+        result = self.stations if self.mode == "station" else self.cities
+        logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.jog_idx} {result}")
+
+    async def _handle_long_jog(self):
+        logging.debug("🖲️ Jog button long press: None")
+        await asyncio.sleep(0.2)
+
+    async def _on_sound_press(self):
+        asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.2))
+
+    async def _handle_short_top(self):
+        logging.debug("🖲️ Top button short press! Increasing volume.")
+        await self._update_volume(10)
+
+    async def _handle_long_top(self):
+        logging.debug("🖲️ Top button long press! Set volume on")
+        await self._update_volume_level(80)
+
+    async def _handle_short_bottom(self):
+        logging.debug("🖲️ Bottom button short press! Lowering volume.")
+        await self._update_volume(-10)
+
+    async def _handle_long_bottom(self):
+        logging.debug("🖲️ Bottom button long press! Set volume off")
+        await self._update_volume_level(0)
+
+    async def _on_mid_press(self):
+        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.2))
+
+    async def _handle_short_mid(self):
+        logging.debug("🖲️ Mid button mid short press! Calibrating.")
+        self.encoders.zero()
+        logging.debug(
+            f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
+            f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
+        )
+        self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
+        await asyncio.sleep(0.5)
+
+    async def _handle_long_mid(self):
+        logging.debug("🔴 Shutdown initiated! Powering off...")
+        self.save_state()
+        logging.debug("Saved state...")
+        self.display.update(Coordinate(0, 0), "Shutdown", 0, "", False)
+        await asyncio.sleep(2)
+        subprocess.run(["sudo", "poweroff"])
+
+    # ---------------------------------------------------------------------------
+    # Main loop
+    # ---------------------------------------------------------------------------
 
     async def run(self):
         """Main app loop."""
@@ -126,98 +217,13 @@ class App:
         self.encoders.start()
         self.display.start()
 
-        led = RGBLed()
-        led_running = asyncio.Event()
-
-        async def find_all_cities(coords, cities):
-            """Returns all cities that match with coords"""
-            return [cities[coord] for coord in coords if coord in cities]
-
-        def get_coords_by_city(city):
-            """Lat / lon helper"""
-            lat = self.stations_info[city]["coords"]["n"]
-            lon = self.stations_info[city]["coords"]["e"]
-            return Coordinate(lat, lon)
-
-        # Button stuff
-        async def update_volume(delta):
-            """Volume change and display helper"""
-            volume = self.audio_player.change_volume(delta)
-            coords = get_coords_by_city(self.city)
-            self.display.update(coords, self.city, volume, self.station[0], False)
-            await asyncio.sleep(0.5)
-            self.display.update(coords, self.city, 0, self.station[0], False)
-
-        async def update_volume_level(level):
-            """Volume level and display helper"""
-            volume = self.audio_player.change_volume_level(level)
-            coords = get_coords_by_city(self.city)
-            self.display.update(coords, self.city, volume, self.station[0], False)
-            await asyncio.sleep(0.5)
-            self.display.update(coords, self.city, 0, self.station[0], False)
-
-        async def on_jog_press():
-            asyncio.create_task(led_task(led, led_running, "green", 0.2))  # LED flashes on press
-
-        async def handle_short_jog():
-            self.switch_mode()
-            if self.mode == "station":
-                result = self.stations
-            else:
-                result = self.cities
-            logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.jog_idx} {result}")
-
-        async def handle_long_jog():
-            logging.debug("🖲️ Jog button long press: None")
-            await asyncio.sleep(0.2)
-
-        async def on_sound_press():
-            asyncio.create_task(led_task(led, led_running, "blue", 0.2))  # LED flashes on press
-
-        async def handle_short_top():
-            logging.debug("🖲️ Top button short press! Increasing volume.")
-            await update_volume(10)
-
-        async def handle_long_top():
-            logging.debug("🖲️ Top button long press! Set volume on")
-            await update_volume_level(80)
-
-        async def handle_short_bottom():
-            logging.debug("🖲️ Bottom button short press! Lowering volume.")
-            await update_volume(-10)
-
-        async def handle_long_bottom():
-            logging.debug("🖲️ Bottom button long press! Set volume off")
-            await update_volume_level(0)
-
-        async def on_mid_press():
-            asyncio.create_task(led_task(led, led_running, "green", 0.2))  # LED flashes on press
-
-        async def handle_short_mid():
-            logging.debug("🖲️ Mid button mid short press! Calibrating.")
-            self.encoders.zero()
-            logging.debug(
-                f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} {self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
-            )
-            self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
-            await asyncio.sleep(0.5)
-
-        async def handle_long_mid():
-            logging.debug("🔴 Shutdown initiated! Powering off...")
-            # Save app state
-            self.save_state()
-            logging.debug("Saved state...")
-            self.display.update("", "Shutdown", 0, "", False)
-            await asyncio.sleep(2)  # Delay before shutdown for visibility
-            subprocess.run(["sudo", "poweroff"])
-
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ("Jog",    PIN_BTN_JOG,    handle_short_jog,    None,             on_jog_press),
-            ("Top",    PIN_BTN_TOP,    handle_short_top,    handle_long_top,  on_sound_press),
-            ("Mid",    PIN_BTN_MID,    handle_short_mid,    handle_long_mid,  on_mid_press),
-            ("Bottom", PIN_BTN_BOTTOM, handle_short_bottom, handle_long_bottom, on_sound_press),
+            ("Jog",    PIN_BTN_JOG,    self._handle_short_jog,    None,                    self._on_jog_press),
+            ("Top",    PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
+            ("Mid",    PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
+            ("Bottom", PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
@@ -238,64 +244,58 @@ class App:
             except Exception:
                 logging.debug("Config not found...")
             logging.debug(
-                f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} {self.mode} {self.city} {self.station} {self.encoders.is_latched()}"
+                f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} "
+                f"{self.mode} {self.city} {self.station} {self.encoders.is_latched()}"
             )
 
-            # The latch is set if there was saved state - this triggers playing the saved station
+            # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                coords = get_coords_by_city(self.city)
+                coords = self._get_coords_by_city(self.city)
                 self.display.update(coords, self.city, 0, self.station[0], False)
                 self.audio_player.play(self.city, self.station)
                 logging.debug(
                     f"Playing saved station: {self.station} {self.city} {self.cities} {self.stations}"
                 )
             else:
-                self.display.update((0, 0), "CALIBRATE", 0, "", False)
+                self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
 
             while True:
                 await asyncio.sleep(0.1)
 
                 coords = self.encoders.get_readings()
-                # logging.debug(coords)
-                # Get a list of coordinates that surround the current coordinates
-                # The size of the look arround zone is determined by the FUZZINESS value
+                # The size of the look-around zone is determined by FUZZINESS
                 zone = look_around(coords, FUZZINESS)
-                # Get any cities that match in the look arround zone
-                self.cities = await find_all_cities(zone, self.cities_info)
-                # logging.debug(f"Latch: {self.encoders.is_latched()} cities: {self.cities}")
+                self.cities = await self._find_all_cities(zone, self.cities_info)
+
                 if not self.encoders.is_latched() and self.cities:
                     logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.cities}")
                     # Flash LED to signal match
-                    if not led_running.is_set():
-                        asyncio.create_task(led_task(led, led_running, "green", 0.5))
+                    if not self.led_running.is_set():
+                        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.5))
 
-                    # Set the latch to hold onto any matched cities until the reticule moves again
-                    # Sensitivity is determined by the STICKINESS value
+                    # Freeze position until reticule moves again
                     self.encoders.latch(*coords, stickiness=STICKINESS)
-                    # Reset indexes to 0
                     self.jog_idx = self.city_idx = 0
                     logging.debug(
-                        f"Matching cities: current:{self.jog_idx} city:{self.city_idx} stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
+                        f"Matching cities: current:{self.jog_idx} city:{self.city_idx} "
+                        f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
                     )
-                    # Get first city in cities list
                     self.city = self.cities[self.city_idx]
-                    # Get list of stations (name, url) for first city
                     self.stations = get_stations_by_city(self.stations_info, self.city)
-                    # Get the first station (name, url) in the stations list
                     self.jog_idx = self.station_idx = 0
                     self.station = self.stations[self.station_idx]
                     logging.debug(
-                        f"📻 Tuning to: current:{self.jog_idx} city:{self.city_idx} stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
+                        f"📻 Tuning to: current:{self.jog_idx} city:{self.city_idx} "
+                        f"stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
                     )
-                    coords = get_coords_by_city(self.city)
+                    coords = self._get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
-                    # Play first cities' first station
                     self.audio_player.play(self.city, self.station)
 
-                # Modal selection of stations and city using dial
+                # Modal dial: cycles stations (station mode) or cities (city mode)
                 direction = self.dial.get_direction()
                 if direction != 0:
-                    asyncio.create_task(led_task(led, led_running, "blue", 0.1))
+                    asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.1))
                     logging.debug(
                         f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
                     )
@@ -303,10 +303,9 @@ class App:
                         self.next_station(direction)
                     elif self.mode == "city":
                         self.next_city(direction)
-                        # Get first station for next city
                         self.station = get_stations_by_city(self.stations_info, self.city)[0]
 
-                    coords = get_coords_by_city(self.city)
+                    coords = self._get_coords_by_city(self.city)
                     self.display.update(coords, self.city, 0, self.station[0], False)
                     self.audio_player.play(self.city, self.station)
 
