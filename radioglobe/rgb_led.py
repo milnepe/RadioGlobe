@@ -31,7 +31,15 @@ class RGBLed:
     def off(self):
         self.set_color("off")
 
+    def start(self):
+        pass  # GPIO pins are configured at construction time
+
+    async def stop(self):
+        """Turn the LED off."""
+        self.off()
+
     def cleanup(self):
+        """Turn the LED off and release GPIO resources (for standalone use)."""
         self.off()
         GPIO.cleanup()
 

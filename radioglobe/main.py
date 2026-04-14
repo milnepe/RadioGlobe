@@ -312,9 +312,8 @@ class App:
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
         finally:
-            self.audio_player.stop()
-            await self.dial.stop()
-            await self.encoders.stop()
+            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led]:
+                await hw.stop()
             GPIO.cleanup()
 
 
