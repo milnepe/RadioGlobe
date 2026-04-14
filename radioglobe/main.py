@@ -366,7 +366,7 @@ class App:
                         self.next_station(direction)
                     elif self.state.mode == "city":
                         self.next_city(direction)
-                        self.state.station = get_stations_by_city(self.stations_info, self.state.city)[0]
+                        self.state.station = self.state.stations[0]
 
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
