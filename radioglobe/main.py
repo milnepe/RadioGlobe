@@ -1,8 +1,11 @@
 import asyncio
+import dataclasses
 import subprocess
 import logging
 import os
 import json
+
+from dataclasses import dataclass, field
 
 import RPi.GPIO as GPIO  # type: ignore
 
@@ -25,6 +28,18 @@ from display import Display
 from radio_config import FUZZINESS, STICKINESS, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
 
 
+@dataclass
+class AppState:
+    stations: list = field(default_factory=list)
+    station: tuple = None
+    station_idx: int = 0
+    cities: list = field(default_factory=list)
+    city: str = None
+    city_idx: int = 0
+    jog_idx: int = 0
+    mode: str = "station"
+
+
 class App:
     def __init__(self):
         self.dial = AsyncDial()
@@ -34,39 +49,20 @@ class App:
         self.display = Display()
         self.led = RGBLed()
         self.led_running = asyncio.Event()
-        self.stations = None
-        self.station = None
-        self.station_idx = None
-        self.cities = None
-        self.city = None
-        self.city_idx = None
-        self.jog_idx = 0
-        self.mode = "station"
+        self.state = AppState()
         self.stations_info = load_stations("stations.json")
         self.cities_info = build_cities_index(self.stations_info)
 
     def save_state(self, cache="~/cache/radioglobe.json"):
-        def safe(obj):
-            if isinstance(obj, tuple):
-                return list(obj)
-            return obj
-
-        logging.debug(f"STATIONS: {self.stations}")
-        state = {
-            "stations": self.stations,
-            "station": self.station,
-            "station_idx": self.station_idx,
-            "cities": self.cities,
-            "city": self.city,
-            "city_idx": self.city_idx,
-            "jog_idx": self.jog_idx,
-            "mode": self.mode,
+        logging.debug(f"STATIONS: {self.state.stations}")
+        state = dataclasses.asdict(self.state)
+        state.update({
             "lat": self.encoders.latitude,
             "lon": self.encoders.longitude,
             "lat_offset": self.encoders.latitude_offset,
             "lon_offset": self.encoders.longitude_offset,
             "latch": True,
-        }
+        })
 
         path = os.path.expanduser(cache)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -80,14 +76,16 @@ class App:
         with open(path, "r") as f:
             state = json.load(f)
 
-        self.stations = state.get("stations")
-        self.station = tuple(state["station"]) if state.get("station") else None
-        self.station_idx = state.get("station_idx")
-        self.cities = tuple(state["cities"]) if state.get("cities") else None
-        self.city = state.get("city")
-        self.city_idx = state.get("city_idx")
-        self.jog_idx = state.get("jog_idx")
-        self.mode = state.get("mode")
+        self.state = AppState(
+            stations=state.get("stations") or [],
+            station=tuple(state["station"]) if state.get("station") else None,
+            station_idx=state.get("station_idx") or 0,
+            cities=state.get("cities") or [],
+            city=state.get("city"),
+            city_idx=state.get("city_idx") or 0,
+            jog_idx=state.get("jog_idx") or 0,
+            mode=state.get("mode") or "station",
+        )
         self.encoders.latitude = state.get("lat")
         self.encoders.longitude = state.get("lon")
         self.encoders.latitude_offset = state.get("lat_offset")
@@ -96,29 +94,30 @@ class App:
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
-        if not self.stations:
+        if not self.state.stations:
             logging.debug("⚠️ No stations available.")
             return
-        self.jog_idx = (self.jog_idx + direction) % len(self.stations)
-        logging.debug(f"jog:{self.jog_idx} {self.stations}")
-        self.station = self.stations[self.jog_idx]
-        logging.debug(f"📻 Tuning to: jog:{self.jog_idx} {self.station}")
+        self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.stations)
+        logging.debug(f"jog:{self.state.jog_idx} {self.state.stations}")
+        self.state.station = self.state.stations[self.state.jog_idx]
+        logging.debug(f"📻 Tuning to: jog:{self.state.jog_idx} {self.state.station}")
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
-        if not self.cities:
+        if not self.state.cities:
             logging.debug("⚠️ No cities available.")
             return
-        self.jog_idx = (self.jog_idx + direction) % len(self.cities)
-        self.city = self.cities[self.jog_idx]
-        self.stations = get_stations_by_city(self.stations_info, self.city)
-        logging.debug(f"📻 Changed city: jog:{self.jog_idx} {self.city} {self.stations}")
+        self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
+        self.state.city = self.state.cities[self.state.jog_idx]
+        self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+        logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city} {self.state.stations}")
 
     def switch_mode(self):
         """Toggle between application modes."""
-        self.mode = "city" if self.mode == "station" else "station"
+        self.state.mode = "city" if self.state.mode == "station" else "station"
         logging.debug(
-            f"🌀 Mode switched to: {self.mode} jog:{self.jog_idx} {self.city} {self.station}"
+            f"🌀 Mode switched to: {self.state.mode} jog:{self.state.jog_idx} "
+            f"{self.state.city} {self.state.station}"
         )
 
     # ---------------------------------------------------------------------------
@@ -138,18 +137,18 @@ class App:
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
         volume = self.audio_player.change_volume(delta)
-        coords = self._get_coords_by_city(self.city)
-        self.display.update(coords, self.city, volume, self.station[0], False)
+        coords = self._get_coords_by_city(self.state.city)
+        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
-        self.display.update(coords, self.city, 0, self.station[0], False)
+        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
         volume = self.audio_player.change_volume_level(level)
-        coords = self._get_coords_by_city(self.city)
-        self.display.update(coords, self.city, volume, self.station[0], False)
+        coords = self._get_coords_by_city(self.state.city)
+        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
-        self.display.update(coords, self.city, 0, self.station[0], False)
+        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
     # ---------------------------------------------------------------------------
     # Button handlers
@@ -160,8 +159,8 @@ class App:
 
     async def _handle_short_jog(self):
         self.switch_mode()
-        result = self.stations if self.mode == "station" else self.cities
-        logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.jog_idx} {result}")
+        result = self.state.stations if self.state.mode == "station" else self.state.cities
+        logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.state.jog_idx} {result}")
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")
@@ -245,16 +244,17 @@ class App:
                 logging.debug("Config not found...")
             logging.debug(
                 f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} "
-                f"{self.mode} {self.city} {self.station} {self.encoders.is_latched()}"
+                f"{self.state.mode} {self.state.city} {self.state.station} {self.encoders.is_latched()}"
             )
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                coords = self._get_coords_by_city(self.city)
-                self.display.update(coords, self.city, 0, self.station[0], False)
-                self.audio_player.play(self.city, self.station)
+                coords = self._get_coords_by_city(self.state.city)
+                self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                self.audio_player.play(self.state.city, self.state.station)
                 logging.debug(
-                    f"Playing saved station: {self.station} {self.city} {self.cities} {self.stations}"
+                    f"Playing saved station: {self.state.station} {self.state.city} "
+                    f"{self.state.cities} {self.state.stations}"
                 )
             else:
                 self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
@@ -265,32 +265,32 @@ class App:
                 coords = self.encoders.get_readings()
                 # The size of the look-around zone is determined by FUZZINESS
                 zone = look_around(coords, FUZZINESS)
-                self.cities = await self._find_all_cities(zone, self.cities_info)
+                self.state.cities = await self._find_all_cities(zone, self.cities_info)
 
-                if not self.encoders.is_latched() and self.cities:
-                    logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.cities}")
+                if not self.encoders.is_latched() and self.state.cities:
+                    logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
                     # Flash LED to signal match
                     if not self.led_running.is_set():
                         asyncio.create_task(led_task(self.led, self.led_running, "green", 0.5))
 
                     # Freeze position until reticule moves again
                     self.encoders.latch(*coords, stickiness=STICKINESS)
-                    self.jog_idx = self.city_idx = 0
+                    self.state.jog_idx = self.state.city_idx = 0
                     logging.debug(
-                        f"Matching cities: current:{self.jog_idx} city:{self.city_idx} "
-                        f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.cities} {self.encoders.is_latched()}"
+                        f"Matching cities: current:{self.state.jog_idx} city:{self.state.city_idx} "
+                        f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
                     )
-                    self.city = self.cities[self.city_idx]
-                    self.stations = get_stations_by_city(self.stations_info, self.city)
-                    self.jog_idx = self.station_idx = 0
-                    self.station = self.stations[self.station_idx]
+                    self.state.city = self.state.cities[self.state.city_idx]
+                    self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+                    self.state.jog_idx = self.state.station_idx = 0
+                    self.state.station = self.state.stations[self.state.station_idx]
                     logging.debug(
-                        f"📻 Tuning to: current:{self.jog_idx} city:{self.city_idx} "
-                        f"stat:{self.station_idx} {self.city} {self.station}\n{self.stations}"
+                        f"📻 Tuning to: current:{self.state.jog_idx} city:{self.state.city_idx} "
+                        f"stat:{self.state.station_idx} {self.state.city} {self.state.station}\n{self.state.stations}"
                     )
-                    coords = self._get_coords_by_city(self.city)
-                    self.display.update(coords, self.city, 0, self.station[0], False)
-                    self.audio_player.play(self.city, self.station)
+                    coords = self._get_coords_by_city(self.state.city)
+                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                    self.audio_player.play(self.state.city, self.state.station)
 
                 # Modal dial: cycles stations (station mode) or cities (city mode)
                 direction = self.dial.get_direction()
@@ -299,15 +299,15 @@ class App:
                     logging.debug(
                         f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
                     )
-                    if self.mode == "station":
+                    if self.state.mode == "station":
                         self.next_station(direction)
-                    elif self.mode == "city":
+                    elif self.state.mode == "city":
                         self.next_city(direction)
-                        self.station = get_stations_by_city(self.stations_info, self.city)[0]
+                        self.state.station = get_stations_by_city(self.stations_info, self.state.city)[0]
 
-                    coords = self._get_coords_by_city(self.city)
-                    self.display.update(coords, self.city, 0, self.station[0], False)
-                    self.audio_player.play(self.city, self.station)
+                    coords = self._get_coords_by_city(self.state.city)
+                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                    self.audio_player.play(self.state.city, self.state.station)
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
