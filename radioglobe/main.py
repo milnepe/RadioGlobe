@@ -304,16 +304,19 @@ class App:
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                assert self.state.city is not None, "latched state missing city"
-                assert self.state.station is not None, "latched state missing station"
-                coords = self._get_coords_by_city(self.state.city)
-                self.display.update(coords, self.state.city, 0, self.state.station[0], False)
-                self.audio_player.play(self.state.city, self.state.station)
-                self._start_monitor_stream(self.state.station[1])
-                logging.debug(
-                    f"Playing saved station: {self.state.station} {self.state.city} "
-                    f"{self.state.cities} {self.state.stations}"
-                )
+                if not self.state.city or not self.state.station:
+                    logging.warning("Saved state incomplete — starting in calibrate mode")
+                    self.encoders.reset_latch()
+                    self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
+                else:
+                    coords = self._get_coords_by_city(self.state.city)
+                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                    self.audio_player.play(self.state.city, self.state.station)
+                    self._start_monitor_stream(self.state.station[1])
+                    logging.debug(
+                        f"Playing saved station: {self.state.station} {self.state.city} "
+                        f"{self.state.cities} {self.state.stations}"
+                    )
             else:
                 self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
 
