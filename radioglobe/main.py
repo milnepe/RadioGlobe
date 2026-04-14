@@ -122,9 +122,6 @@ class App:
 
     async def run(self):
         """Main app loop."""
-        # Load any saved state
-        self.load_state()
-
         self.dial.start()
         self.encoders.start()
         self.display.start()
