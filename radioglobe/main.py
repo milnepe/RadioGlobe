@@ -150,6 +150,17 @@ class App:
         await asyncio.sleep(0.5)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
+    async def _check_stream(self, expected_url: str):
+        """Detect a failed stream and update the display after a short delay."""
+        await asyncio.sleep(3)
+        if self.audio_player.current_url != expected_url:
+            return  # station changed before check fired — stale
+        if self.audio_player.is_error():
+            logging.debug(f"⚠️ Stream error detected for {expected_url}")
+            asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
+            coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
+            self.display.update(coords, self.state.city or "", 0, "Stream error", False)
+
     # ---------------------------------------------------------------------------
     # Button handlers
     # ---------------------------------------------------------------------------
@@ -252,6 +263,7 @@ class App:
                 coords = self._get_coords_by_city(self.state.city)
                 self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
+                asyncio.create_task(self._check_stream(self.state.station[1]))
                 logging.debug(
                     f"Playing saved station: {self.state.station} {self.state.city} "
                     f"{self.state.cities} {self.state.stations}"
@@ -291,6 +303,7 @@ class App:
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
+                    asyncio.create_task(self._check_stream(self.state.station[1]))
 
                 # Modal dial: cycles stations (station mode) or cities (city mode)
                 direction = self.dial.get_direction()
@@ -308,6 +321,7 @@ class App:
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
+                    asyncio.create_task(self._check_stream(self.state.station[1]))
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")

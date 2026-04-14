@@ -37,6 +37,10 @@ class AudioPlayer:
         logging.debug(f"🔉 Volume changed: {current_volume} -> {level}")
         return level
 
+    def is_error(self) -> bool:
+        """Return True if VLC has encountered a stream error."""
+        return self.player.get_state() == vlc.State.Error
+
     async def stop(self):
         """Stop playback if something is playing."""
         if self.player.is_playing():
