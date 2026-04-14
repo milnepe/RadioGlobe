@@ -170,6 +170,7 @@ The `App` class is the central controller. `__init__` instantiates all hardware 
 | `_find_all_cities(coords, cities)` | Return all city names whose grid coords appear in `coords` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
+| `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
 | `_monitor_stream(expected_url)` | Poll VLC state every 5 s; flash LED red and show "Stream error" on first failure; clear on recovery; exits when URL changes |
 | `_handle_short_jog` / `_handle_long_jog` | Jog button handlers |
 | `_handle_short_top` / `_handle_long_top` | Top button handlers |
@@ -326,7 +327,7 @@ Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistent
 
 Defines constants for the application. **Warning: many of these are not actually used.** See [§8 Configuration Reference](#8-configuration-reference) for the full discrepancy table.
 
-Also has a side-effect on import: sets up `logging.basicConfig()`. Logging setup should live in `main.py`.
+No side-effects on import — it is a constants-only module. Logging is configured in `main.py`'s `__main__` block.
 
 ---
 
@@ -361,7 +362,7 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 6. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
 7. `audio_player.play(city, station)` passes the URL to VLC.
 8. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
-9. `asyncio.create_task(_monitor_stream(station_url))` starts continuous stream health monitoring (3 s grace, then 5 s polls).
+9. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one (3 s grace, then 5 s polls).
 
 ### Flow B: User Turns the Dial
 
@@ -391,9 +392,7 @@ Application state is held in an `AppState` dataclass on `self.state`:
 
 Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on `self.encoders`.
 
-On shutdown (long press of mid button), `save_state()` calls `dataclasses.asdict(self.state)` and appends the encoder offsets and latch flag, writing the result to `~/cache/radioglobe.json`. On the next boot, `load_state()` reconstructs `AppState(...)` from the JSON and sets `latch_stickiness = True` so the app resumes the last station immediately.
-
-**Fragility note:** The saved `stations` and `cities` lists are snapshots. If `stations.json` is updated between boots (e.g. after an install), the saved indices may point to different or non-existent stations. The restore currently uses the saved lists as-is rather than re-querying from `stations_info`.
+On shutdown (long press of mid button), `save_state()` calls `dataclasses.asdict(self.state)` and appends the encoder offsets and latch flag, writing the result to `~/cache/radioglobe.json`. On the next boot, `load_state()` reconstructs `AppState(...)` from the JSON, then immediately re-queries `get_stations_by_city()` from the live database. It matches the saved station by name; if not found it falls back to index 0. This means a `stations.json` update between boots never causes a wrong URL or stale index.
 
 ---
 
@@ -422,19 +421,17 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 
 ## 8. Configuration Reference
 
-`radio_config.py` is not reliably used. Here is the ground truth:
+All constants are defined in `radio_config.py` and imported where used. There are no dead constants and no import side-effects.
 
-| Parameter | `radio_config.py` value | Actual value used | Notes |
-|---|---|---|---|
-| `FUZZINESS` | **2** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 3 |
-| `STICKINESS` | **3** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 10 |
-| `ENCODER_RESOLUTION` | 1024 | Imported in `database.py` and `positional_encoders.py` | ✓ Centralised |
-| `VOLUME_STEP` | 10 | Imported in `main.py` | ✓ Used in `_handle_short_top` / `_handle_short_bottom` |
-| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | Imported in `main.py` | ✓ Used by both `save_state()` and `load_state()` |
-| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Imported in each hardware module | ✓ Centralised |
-| I2C address | `I2C_LCD_ADDR = 0x27` | Imported in `display.py` | ✓ Centralised |
-
-`FUZZINESS = 2` gives a 9-point (3×3) search zone. The intended operational value of 3 gives a 25-point (5×5) zone and is less likely to miss a city near the edge of the reticule. `STICKINESS = 3` unlatches after just 3 encoder steps (~1°), which can cause jitter. The intended value of 10 is more stable. Since `main.py` now imports both from `radio_config.py`, changing the values there takes effect immediately.
+| Parameter | Value | Where used |
+|---|---|---|
+| `FUZZINESS` | 3 | `main.py` — 25-point (5×5) search zone |
+| `STICKINESS` | 10 | `main.py` — unlatch threshold in encoder steps |
+| `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
+| `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
+| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
+| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module |
+| I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
 
 ---
 
@@ -467,77 +464,52 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ---
 
-### Improvement A: Set `FUZZINESS` and `STICKINESS` to their intended values
+### Improvement A: `assert` guards on the warm-restart path crash in production
 
-**Problem:** `radio_config.py` still has `FUZZINESS = 2` and `STICKINESS = 3`. Both are imported by `main.py`, so they take effect immediately — but the values are not yet tuned. `FUZZINESS = 2` gives a 9-point (3×3) search zone that can miss a city near the reticule edge; the intended operational value is 3 (25-point zone). `STICKINESS = 3` unlatches on just 3 encoder steps (~1°) and causes jitter when the user holds the globe still; the intended value is 10.
-
-**Fix:** Two one-line changes in `radio_config.py`:
+**Problem:** After `load_state()`, `run()` uses:
 ```python
-FUZZINESS = 3
-STICKINESS = 10
+assert self.state.city is not None, "latched state missing city"
+assert self.state.station is not None, "latched state missing station"
 ```
+If the saved state is inconsistent (e.g. `city` present but `stations.json` no longer contains it, so `station` ends up `None`), Python raises `AssertionError` and the app exits entirely. Assertions are for programmer errors during development, not runtime data conditions.
 
-**Effort:** 5 minutes.
-
----
-
-### Improvement B: `_monitor_stream` tasks are not cancelled on shutdown
-
-**Problem:** `asyncio.create_task(_monitor_stream(...))` is fire-and-forget. On app shutdown the `finally` block in `run()` calls `display.stop()`, but any active `_monitor_stream` task continues running its 5 s poll loop. The next poll calls `display.update()` on a stopped display and may log spurious errors or attempt I2C writes after the display task has exited.
-
-**Fix:** Collect the task handle at each call site:
+**Fix:** Replace with explicit guards that degrade gracefully:
 ```python
-if self._stream_task:
-    self._stream_task.cancel()
-self._stream_task = asyncio.create_task(self._monitor_stream(url))
-```
-Cancel it in the `finally` block alongside the other hardware teardown. This also ensures only one monitor task runs at a time, replacing the URL-equality guard as the primary stale-check mechanism.
-
-**Effort:** 20 minutes.
-
----
-
-### Improvement C: `_get_coords_by_city` raises `KeyError` on stale saved state
-
-**Problem:** `_get_coords_by_city(city)` uses `self.stations_info[city]` — a raw dict access. If `city` is not in `stations_info` (possible after a `stations.json` update with a stale saved state), it raises an unhandled `KeyError` that crashes the app immediately on the warm-restart path.
-
-**Fix:**
-```python
-def _get_coords_by_city(self, city: str) -> Coordinate:
-    entry = self.stations_info.get(city)
-    if entry is None:
-        logging.warning(f"City not found in stations data: {city!r}")
-        return Coordinate(0, 0)
-    return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
+if not self.state.city or not self.state.station:
+    logging.warning("Saved state incomplete — starting in calibrate mode")
+    self.encoders.reset_latch()
+    self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
+else:
+    # warm restart path...
 ```
 
 **Effort:** 10 minutes.
 
 ---
 
-### Improvement D: `radio_config.py` configures logging on import
+### Improvement B: Long city names overflow the 20-character display
 
-**Problem:** `radio_config.py` calls `logging.basicConfig()` and sets the root logger level as a side effect of being imported. This runs before `main.py` has any chance to configure logging, and it makes the module order-sensitive. Any module that imports `radio_config` before `main.py` sets up its own handler gets the config file's defaults silently applied.
+**Problem:** `display.update()` calls `location.center(DISPLAY_COLUMNS)` on line 1. If `location` is longer than 20 characters (e.g. `"São Paulo,BR"` is fine; `"Ouagadougou,BF"` at 14 chars is borderline; some station names exceed 20), `str.center()` does not truncate — it pads but passes the overlong string straight to `lcd.printline()`. The `liquidcrystal_i2c` library wraps or clips depending on firmware; either way the display is wrong.
 
-**Fix:** Move the `logging.basicConfig()` call to the `if __name__ == "__main__":` block in `main.py`. `radio_config.py` should only define constants.
+**Fix:** Truncate before centering in `display.update()` and `display.message()`:
+```python
+self.buffer[1] = location[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
+```
+Apply the same guard to `station` on line 3 (it already truncates for the arrow case but not the plain case).
 
-**Effort:** 10 minutes.
+**Effort:** 15 minutes.
 
 ---
 
-### Improvement E: `load_state()` replays a stale station snapshot
+### Improvement C: `jog_idx` / `city_idx` / `station_idx` triple-index design is confusing
 
-**Problem:** `save_state()` writes the current `stations` list (a snapshot of `[(name, url), ...]`) into the cache JSON. On the next boot, `load_state()` restores this list directly into `AppState`. If `stations.json` has been updated between boots (e.g. after an install or upstream database update), the restored list may contain stale URLs, wrong indices, or entries for a city that has since been renamed. The issue is noted in §6 but not yet fixed.
+**Problem:** `AppState` has three index fields that partially overlap. `jog_idx` is the live navigation cursor — it is overloaded to mean "station index in station mode" and "city index in city mode". `station_idx` and `city_idx` are set at latch time but are not kept in sync with `jog_idx` during dial navigation, so they drift. The intent is clear in isolation but the three-field design makes it easy to read the wrong index when adding new features.
 
-**Fix:** In `load_state()`, after restoring `city`, re-query the station list from the live database:
-```python
-if self.state.city:
-    self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-    self.state.station = self.state.stations[0] if self.state.stations else None
-```
-The saved `station_idx` should be treated as a hint rather than authoritative — look up by name if a match exists, otherwise fall back to index 0.
+**Fix (low-risk):** Add a comment block above `AppState` explaining the contract: `jog_idx` is the authoritative cursor; `station_idx` and `city_idx` are snapshots saved to cache. Guard any new navigation code against reading the wrong one.
 
-**Effort:** 20 minutes.
+**Fix (correct):** Remove `station_idx` and `city_idx` from `AppState`. Derive the saved index at `save_state()` time from `jog_idx` and `mode`. On `load_state()`, restore `jog_idx` only and let the re-query block set the station.
+
+**Effort:** 30–60 minutes for the correct fix.
 
 ---
 
