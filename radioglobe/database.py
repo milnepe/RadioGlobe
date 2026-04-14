@@ -33,8 +33,7 @@ def build_cities_index(stations_data: dict) -> dict:
         # logging.debug(f"{location}, {latitude}, {longitude}")
 
         city_coords = (latitude, longitude)
-        if city_coords not in cities_index:
-            cities_index[city_coords] = location
+        cities_index.setdefault(city_coords, []).append(location)
 
     logging.info("Built cities index...")
     return cities_index
@@ -88,10 +87,10 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
     # and all radio stations in the area, in order encountered
     for coords in search_area:
         if coords in city_map:
-            city = city_map[coords]
-            # logging.debug(f"Coords: {coords}, City: {city}")
-            if city not in cities:
-                cities.append(city)
+            for city in city_map[coords]:
+                # logging.debug(f"Coords: {coords}, City: {city}")
+                if city not in cities:
+                    cities.append(city)
     # logging.debug(f"Cities found: {cities}")
     return cities
 

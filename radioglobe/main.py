@@ -133,7 +133,7 @@ class App:
 
     async def _find_all_cities(self, coords, cities):
         """Return all cities whose grid coordinates appear in coords."""
-        return [cities[coord] for coord in coords if coord in cities]
+        return [city for coord in coords if coord in cities for city in cities[coord]]
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
