@@ -25,7 +25,7 @@ from buttons import AsyncButtonManager
 
 from coordinates import Coordinate
 from display import Display
-from radio_config import FUZZINESS, STICKINESS, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
+from radio_config import FUZZINESS, STICKINESS, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH
 
 
 @dataclass
@@ -53,7 +53,7 @@ class App:
         self.stations_info = load_stations("stations.json")
         self.cities_info = build_cities_index(self.stations_info)
 
-    def save_state(self, cache="~/cache/radioglobe.json"):
+    def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
         state = dataclasses.asdict(self.state)
         state.update({
@@ -70,7 +70,7 @@ class App:
             json.dump(state, f)
 
     def load_state(self):
-        path = os.path.expanduser("~/cache/radioglobe.json")
+        path = os.path.expanduser(STATE_CACHE_PATH)
         if not os.path.exists(path):
             return
         with open(path, "r") as f:
