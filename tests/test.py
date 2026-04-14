@@ -1,5 +1,5 @@
 import asyncio
-import rgb_led_async
+import rgb_led
 import time
 
 
@@ -13,7 +13,7 @@ async def scheduler():
 
 async def led_init():
     print("Testing LEDs...")
-    led = rgb_led_async.RGB_LED()
+    led = rgb_led.RGB_LED()
     led.set_static("RED")
     await asyncio.sleep(1)
     led.set_static("GREEN")

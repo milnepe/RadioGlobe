@@ -7,21 +7,21 @@ import json
 import RPi.GPIO as GPIO  # type: ignore
 
 from audio_async import AudioPlayer
-from dial_async import AsyncDial
-from positional_encoders_async import PositionalEncoders
+from dial import AsyncDial
+from positional_encoders import PositionalEncoders
 
-from rgb_led_async import RGBLed
-from rgb_led_async import led_task
+from rgb_led import RGBLed
+from rgb_led import led_task
 
 from database import load_stations
 from database import build_cities_index
 from database import look_around
 from database import get_stations_by_city
 
-from buttons_async import AsyncButtonManager
+from buttons import AsyncButtonManager
 
 from coordinates import Coordinate
-from display_async import Display
+from display import Display
 from radio_config import FUZZINESS, STICKINESS
 
 

@@ -36,14 +36,14 @@ The Raspberry Pi 4B runs Raspberry Pi OS Bookworm Lite. Audio plays through VLC 
 
 | Physical Component | Interface | GPIO / Address | Module |
 |---|---|---|---|
-| Globe reticule encoders (lat, lon) | SPI bus 0, devices 0 & 1 | — | `positional_encoders_async.py` |
-| Station/city select dial | GPIO quadrature | Pins 17 (clock), 18 (direction) | `dial_async.py` |
-| Jog button (mode toggle) | GPIO | Pin 27 | `buttons_async.py` |
-| Top button (volume up) | GPIO | Pin 5 | `buttons_async.py` |
-| Mid button (calibrate / shutdown) | GPIO | Pin 6 | `buttons_async.py` |
-| Bottom button (volume down) | GPIO | Pin 12 | `buttons_async.py` |
-| 20×4 character LCD | I2C | Bus 1, address 0x27 | `display_async.py` |
-| RGB status LED | GPIO | R=22, G=23, B=24 | `rgb_led_async.py` |
+| Globe reticule encoders (lat, lon) | SPI bus 0, devices 0 & 1 | — | `positional_encoders.py` |
+| Station/city select dial | GPIO quadrature | Pins 17 (clock), 18 (direction) | `dial.py` |
+| Jog button (mode toggle) | GPIO | Pin 27 | `buttons.py` |
+| Top button (volume up) | GPIO | Pin 5 | `buttons.py` |
+| Mid button (calibrate / shutdown) | GPIO | Pin 6 | `buttons.py` |
+| Bottom button (volume down) | GPIO | Pin 12 | `buttons.py` |
+| 20×4 character LCD | I2C | Bus 1, address 0x27 | `display.py` |
+| RGB status LED | GPIO | R=22, G=23, B=24 | `rgb_led.py` |
 | Audio output | VLC / PulseAudio | 3.5mm / Bluetooth | `audio_async.py` |
 
 ### Button Operations
@@ -67,12 +67,12 @@ RadioGlobe/
 │   ├── database.py                   # Pure functions: station/city spatial index
 │   ├── coordinates.py                # Coordinate value object (lat/lon → display string)
 │   ├── audio_async.py                # AudioPlayer: wraps python-vlc directly
-│   ├── display_async.py              # 20×4 I2C LCD driver
-│   ├── dial_async.py                 # Quadrature encoder for station/city selection
-│   ├── dial_button_async.py          # Combined dial + button (historical, unused in prod)
-│   ├── positional_encoders_async.py  # SPI encoders → lat/lon + latch mechanism
-│   ├── buttons_async.py              # Multi-button manager with short/long press
-│   ├── rgb_led_async.py              # RGB LED flash controller
+│   ├── display.py              # 20×4 I2C LCD driver
+│   ├── dial.py                 # Quadrature encoder for station/city selection
+│   ├── dial_button.py (deleted)          # Combined dial + button (historical, unused in prod)
+│   ├── positional_encoders.py  # SPI encoders → lat/lon + latch mechanism
+│   ├── buttons.py              # Multi-button manager with short/long press
+│   ├── rgb_led.py              # RGB LED flash controller
 │   └── streaming/                    # Lab: historical streaming implementations
 │       ├── streaming.py              # Oldest: subprocess + amixer volume
 │       ├── streaming_cvlc.py         # cvlc subprocess wrapper (used in test scripts)
@@ -126,11 +126,11 @@ The application is a single-process asyncio program. One event loop runs on the 
 graph TD
     main["main.py\n(App)"]
 
-    main --> positional["positional_encoders_async.py\nSPI → lat/lon + latch"]
-    main --> dial["dial_async.py\nGPIO quadrature encoder"]
-    main --> buttons["buttons_async.py\nGPIO button manager"]
-    main --> display["display_async.py\nI2C LCD display"]
-    main --> led["rgb_led_async.py\nGPIO LED"]
+    main --> positional["positional_encoders.py\nSPI → lat/lon + latch"]
+    main --> dial["dial.py\nGPIO quadrature encoder"]
+    main --> buttons["buttons.py\nGPIO button manager"]
+    main --> display["display.py\nI2C LCD display"]
+    main --> led["rgb_led.py\nGPIO LED"]
     main --> audio["audio_async.py\nVLC audio player"]
     main --> database["database.py\nPure functions"]
     main --> coordinates["coordinates.py\nCoordinate type"]
@@ -204,7 +204,7 @@ At ENCODER_RESOLUTION=1024, one grid cell covers ~0.35°, meaning cities within 
 
 ---
 
-### 4.3 `positional_encoders_async.py` — Globe Position
+### 4.3 `positional_encoders.py` — Globe Position
 
 Reads two SPI absolute rotary encoders and maintains the current lat/lon position.
 
@@ -225,7 +225,7 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 ---
 
-### 4.4 `dial_async.py` — Station / City Selector
+### 4.4 `dial.py` — Station / City Selector
 
 Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction).
 
@@ -235,7 +235,7 @@ Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction).
 
 ---
 
-### 4.5 `buttons_async.py` — Button Manager
+### 4.5 `buttons.py` — Button Manager
 
 Manages four GPIO buttons with short and long press detection.
 
@@ -251,7 +251,7 @@ Manages four GPIO buttons with short and long press detection.
 
 ---
 
-### 4.6 `display_async.py` — LCD Display
+### 4.6 `display.py` — LCD Display
 
 Drives a 20×4 I2C character LCD at address 0x27 on bus 1, using the `liquidcrystal_i2c` library.
 
@@ -288,7 +288,7 @@ class AudioPlayer:
 
 ---
 
-### 4.8 `rgb_led_async.py` — Status LED
+### 4.8 `rgb_led.py` — Status LED
 
 Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 
@@ -313,7 +313,7 @@ A simple value object. `__str__` produces the display format used on the LCD:
 '51.51N, 0.13W'
 ```
 
-Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used by `main.py` and `display_async.py` but not consistently — see [Improvement 9](#improvement-9-surface-the-coordinate-type-consistently).
+Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used by `main.py` and `display.py` but not consistently — see [Improvement 9](#improvement-9-surface-the-coordinate-type-consistently).
 
 ---
 
@@ -405,7 +405,7 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 
 **GPIO interrupt bridging:** RPi.GPIO fires button callbacks on a separate interrupt thread. These callbacks call `loop.call_soon_threadsafe(...)` to schedule coroutines back onto the asyncio event loop. This is the correct pattern — do not call `asyncio.create_task()` directly from a GPIO callback thread.
 
-**Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `dial_async.py`. Any new hardware code that polls with blocking calls must do the same.
+**Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `dial.py`. Any new hardware code that polls with blocking calls must do the same.
 
 **LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. The `led_running` Event prevents concurrent flashes.
 
@@ -421,10 +421,10 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 |---|---|---|---|
 | `FUZZINESS` | 3 | 3 (local in `main.py` line 125) | Same value but the import is ignored |
 | `STICKINESS` | 3 | **10** (local in `main.py` line 124) | **Config is wrong — code uses 10** |
-| `ENCODER_RESOLUTION` | 1024 | 1024, but defined locally in `database.py` (line 7) and `positional_encoders_async.py` (line 4) | The `radio_config` import is commented out in `database.py` |
+| `ENCODER_RESOLUTION` | 1024 | 1024, but defined locally in `database.py` (line 7) and `positional_encoders.py` (line 4) | The `radio_config` import is commented out in `database.py` |
 | `VOLUME_INCREMENT` | 1 | Not used — `main.py` hardcodes delta of 10 | Dead constant |
 | GPIO pin numbers | Not present | Hardcoded in each hardware module | Not centralised |
-| I2C address | Not present | Hardcoded as `0x27` in `display_async.py` | Not centralised |
+| I2C address | Not present | Hardcoded as `0x27` in `display.py` | Not centralised |
 
 The intended fix is straightforward: see [Improvement 1](#improvement-1-centralise-encoder_resolution-and-use-radio_configpy) and [Improvement 2](#improvement-2-fix-the-stickiness-inconsistency).
 
@@ -439,7 +439,7 @@ Some files in `tests/` are proper unit tests that run on any machine. Others are
 uv run pytest tests/get_stations_by_city_test.py
 ```
 
-**Hardware / integration scripts** (require Pi): `simulation_test.py`, `positional_encoders_test.py`, `dial_test.py`, `dial_button_async_test.py`, `streaming_cvlc_test.py`, `async_streamer_test.py`, `dial_button_streamer_test.py`.
+**Hardware / integration scripts** (require Pi): `simulation_test.py`, `positional_encoders_test.py`, `dial_test.py`, `streaming_cvlc_test.py`, `async_streamer_test.py`.
 
 These are not separated by directory, and there is no `pytest.ini` or `pyproject.toml` test config that marks or excludes them. Running `pytest tests/` on a development machine will fail on all hardware scripts. See [Improvement 11](#improvement-11-separate-integration-test-scripts).
 
@@ -453,9 +453,9 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ### Improvement 1: Centralise `ENCODER_RESOLUTION` and use `radio_config.py`
 
-**Problem:** `ENCODER_RESOLUTION = 1024` is defined in three separate files (`radio_config.py`, `database.py`, `positional_encoders_async.py`). The import in `database.py` is commented out (line 5).
+**Problem:** `ENCODER_RESOLUTION = 1024` is defined in three separate files (`radio_config.py`, `database.py`, `positional_encoders.py`). The import in `database.py` is commented out (line 5).
 
-**Fix:** Uncomment the import in `database.py` and add an import to `positional_encoders_async.py`. Remove the three local definitions.
+**Fix:** Uncomment the import in `database.py` and add an import to `positional_encoders.py`. Remove the three local definitions.
 
 **Effort:** ~20 minutes.
 
@@ -483,9 +483,9 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ### Improvement 4: Rename the `_async` modules
 
-**Problem:** Module names like `display_async.py`, `dial_async.py`, `buttons_async.py` have an `_async` suffix that was meaningful when synchronous versions existed alongside them. Those are gone. The suffix now just adds noise and implies something special that isn't there.
+**Done.** Modules renamed: `display_async` → `display`, `dial_async` → `dial`, `buttons_async` → `buttons`, `positional_encoders_async` → `positional_encoders`, `rgb_led_async` → `rgb_led`. `dial_button_async.py` deleted (unused).
 
-**Fix:** Rename to `display.py`, `dial.py`, `buttons.py`, `positional_encoders.py`, `rgb_led.py`. Update imports in `main.py` and tests. While at it, `dial_button_async.py` is an unused alternative to `dial.py` + `buttons.py` that can be deleted.
+**Fix:** Rename to `display.py`, `dial.py`, `buttons.py`, `positional_encoders.py`, `rgb_led.py`. Update imports in `main.py` and tests. While at it, `dial_button.py (deleted)` is an unused alternative to `dial.py` + `buttons.py` that can be deleted.
 
 **Effort:** ~30 minutes including import updates. Do this in one commit.
 
@@ -644,6 +644,6 @@ async def _check_stream():
 
 **The latch mechanism.** Freezing the encoder position until the user moves significantly is a genuinely clever UX solution. Without it, browsing stations while holding the globe still would be impossible — any tiny vibration would trigger a city change.
 
-**Display update coalescing.** The buffer + `asyncio.Event` pattern in `display_async.py` correctly batches rapid updates. I2C is slow (~100µs per byte); writing all 4 LCD lines takes several milliseconds, so coalescing is not just an optimisation — it's necessary for responsiveness.
+**Display update coalescing.** The buffer + `asyncio.Event` pattern in `display.py` correctly batches rapid updates. I2C is slow (~100µs per byte); writing all 4 LCD lines takes several milliseconds, so coalescing is not just an optimisation — it's necessary for responsiveness.
 
 **The systemd user service** (not system service) is the correct approach for an application that uses PulseAudio. PulseAudio runs per-user; a system service cannot see the user's audio session. Running as the logged-in user (with `loginctl enable-linger`) is the only reliable way to get auto-detected audio outputs including Bluetooth.

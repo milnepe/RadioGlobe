@@ -1,7 +1,7 @@
 import asyncio
 import time
 import database
-from rgb_led_async import led_init, blink_led
+from rgb_led import led_init, blink_led
 
 # from coordinates import Coordinate
 from radio_config import STATIONS_JSON
