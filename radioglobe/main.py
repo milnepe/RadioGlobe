@@ -53,6 +53,7 @@ class App:
         self.state = AppState()
         self.stations_info = load_stations("stations.json")
         self.cities_info = build_cities_index(self.stations_info)
+        self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
@@ -125,11 +126,13 @@ class App:
     # Helpers
     # ---------------------------------------------------------------------------
 
-    def _get_coords_by_city(self, city):
+    def _get_coords_by_city(self, city: str) -> Coordinate:
         """Return a Coordinate for the given city string."""
-        lat = self.stations_info[city]["coords"]["n"]
-        lon = self.stations_info[city]["coords"]["e"]
-        return Coordinate(lat, lon)
+        entry = self.stations_info.get(city)
+        if entry is None:
+            logging.warning(f"City not found in stations data: {city!r}")
+            return Coordinate(0, 0)
+        return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
     def _find_all_cities(self, coords, cities):
         """Return all cities whose grid coordinates appear in coords."""
@@ -181,6 +184,12 @@ class App:
                     self.display.update(coords, self.state.city or "", 0, station_name, False)
                     error_shown = False
             await asyncio.sleep(5)
+
+    def _start_monitor_stream(self, url: str):
+        """Cancel any running stream monitor and start a fresh one for url."""
+        if self._stream_task and not self._stream_task.done():
+            self._stream_task.cancel()
+        self._stream_task = asyncio.create_task(self._monitor_stream(url))
 
     # ---------------------------------------------------------------------------
     # Button handlers
@@ -288,7 +297,7 @@ class App:
                 coords = self._get_coords_by_city(self.state.city)
                 self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
-                asyncio.create_task(self._monitor_stream(self.state.station[1]))
+                self._start_monitor_stream(self.state.station[1])
                 logging.debug(
                     f"Playing saved station: {self.state.station} {self.state.city} "
                     f"{self.state.cities} {self.state.stations}"
@@ -328,7 +337,7 @@ class App:
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
-                    asyncio.create_task(self._monitor_stream(self.state.station[1]))
+                    self._start_monitor_stream(self.state.station[1])
 
                 # Modal dial: cycles stations (station mode) or cities (city mode)
                 direction = self.dial.get_direction()
@@ -346,11 +355,13 @@ class App:
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
-                    asyncio.create_task(self._monitor_stream(self.state.station[1]))
+                    self._start_monitor_stream(self.state.station[1])
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
         finally:
+            if self._stream_task and not self._stream_task.done():
+                self._stream_task.cancel()
             for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led]:
                 await hw.stop()
             GPIO.cleanup()
