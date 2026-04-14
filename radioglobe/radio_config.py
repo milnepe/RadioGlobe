@@ -1,11 +1,5 @@
 """Global settings"""
 
-import logging
-
-format = "%(asctime)s: %(message)s"
-logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
-logging.getLogger().setLevel(logging.DEBUG)
-
 STATIONS_JSON = "stations.json"
 
 DATADIR = "data"

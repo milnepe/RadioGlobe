@@ -368,8 +368,11 @@ class App:
 
 
 if __name__ == "__main__":
-    logging.basicConfig()
-    logging.getLogger().setLevel(logging.DEBUG)
+    logging.basicConfig(
+        format="%(asctime)s: %(message)s",
+        datefmt="%H:%M:%S",
+        level=logging.DEBUG,
+    )
 
     logging.info("Starting RadioGlobe...")
 
