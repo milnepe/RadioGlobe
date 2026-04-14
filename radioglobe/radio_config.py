@@ -23,7 +23,7 @@ FUZZINESS = 2
 STICKINESS = 3
 
 # Edit these to suit your audio settings
-VOLUME_INCREMENT = 1
+VOLUME_STEP = 10
 
 # GPIO pin assignments (BCM numbering)
 PIN_DIAL_CLOCK = 17

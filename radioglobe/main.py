@@ -25,7 +25,7 @@ from buttons import AsyncButtonManager
 
 from coordinates import Coordinate
 from display import Display
-from radio_config import FUZZINESS, STICKINESS, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH
+from radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH
 
 
 @dataclass
@@ -197,7 +197,7 @@ class App:
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
-        await self._update_volume(10)
+        await self._update_volume(VOLUME_STEP)
 
     async def _handle_long_top(self):
         logging.debug("🖲️ Top button long press! Set volume on")
@@ -205,7 +205,7 @@ class App:
 
     async def _handle_short_bottom(self):
         logging.debug("🖲️ Bottom button short press! Lowering volume.")
-        await self._update_volume(-10)
+        await self._update_volume(-VOLUME_STEP)
 
     async def _handle_long_bottom(self):
         logging.debug("🖲️ Bottom button long press! Set volume off")
