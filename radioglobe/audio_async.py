@@ -4,7 +4,11 @@ import logging
 
 class AudioPlayer:
     def __init__(self):
-        self.instance = vlc.Instance("--input-repeat=-1")
+        self.instance = vlc.Instance(
+            "--input-repeat=-1",
+            "--pulse-latency-msec=300",  # larger PulseAudio buffer prevents overflow/flush
+            "--network-caching=2000",    # 2 s network buffer absorbs stream jitter
+        )
         self.player = self.instance.media_player_new()
         self.current_url = None
 
