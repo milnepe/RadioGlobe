@@ -4,6 +4,7 @@ import subprocess
 import logging
 import os
 import json
+from typing import Optional
 
 from dataclasses import dataclass, field
 
@@ -31,10 +32,10 @@ from radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BT
 @dataclass
 class AppState:
     stations: list = field(default_factory=list)
-    station: tuple = None
+    station: Optional[tuple] = None
     station_idx: int = 0
     cities: list = field(default_factory=list)
-    city: str = None
+    city: Optional[str] = None
     city_idx: int = 0
     jog_idx: int = 0
     mode: str = "station"
