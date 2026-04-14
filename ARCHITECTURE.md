@@ -170,7 +170,7 @@ The `App` class is the central controller. `__init__` instantiates all hardware 
 | `_find_all_cities(coords, cities)` | Return all city names whose grid coords appear in `coords` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
-| `_check_stream(expected_url)` | After 3 s, flash red LED and show "Stream error" if VLC failed |
+| `_monitor_stream(expected_url)` | Poll VLC state every 5 s; flash LED red and show "Stream error" on first failure; clear on recovery; exits when URL changes |
 | `_handle_short_jog` / `_handle_long_jog` | Jog button handlers |
 | `_handle_short_top` / `_handle_long_top` | Top button handlers |
 | `_handle_short_mid` / `_handle_long_mid` | Mid button handlers |
@@ -276,15 +276,20 @@ Wraps `python-vlc` directly. Does not import from `streaming/`.
 ```python
 class AudioPlayer:
     def __init__(self):
-        self.instance = vlc.Instance("--input-repeat=-1")  # infinite repeat
+        self.instance = vlc.Instance(
+            "--input-repeat=-1",
+            "--network-caching=2000",
+        )
         self.player = self.instance.media_player_new()
+        self.current_url = None
 ```
 
-- `play(city, station)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It also records `current_url` for the stale-check guard in `_check_stream`.
-- `--input-repeat=-1` means the stream restarts automatically if the connection drops.
+- `play(city, station)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It records `current_url` so `_monitor_stream` can detect when the user has moved to a new station.
+- `--input-repeat=-1` means VLC retries the stream automatically if the connection drops.
+- `--network-caching=2000` adds a 2 s jitter buffer to absorb network hiccups without triggering error state.
 - Volume is managed via VLC's `audio_get_volume` / `audio_set_volume`, range 0–100.
-- `is_error()` returns `True` if VLC is in `State.Error` **or** `State.Ended`. Both states indicate failure for a live radio stream: `Error` for codec/protocol failures, `Ended` for HTTP 404 / "input can't be opened".
-- Dead-stream detection is handled by `App._check_stream(expected_url)` in `main.py`: it fires 3 s after each `play()`, discards the check if the URL has changed (stale guard), and if the stream has failed it flashes the LED red and shows "Stream error" on the display.
+- `is_error()` returns `True` if VLC is in `State.Error` **or** `State.Ended`. Both indicate failure for a live stream: `Error` for codec/protocol failures, `Ended` for HTTP 404 responses.
+- Dead-stream detection is handled by `App._monitor_stream(expected_url)` in `main.py`. After a 3 s grace period it polls `is_error()` every 5 s. On the first failed poll it flashes the LED red and shows "Stream error" on the display. If VLC subsequently recovers (via `--input-repeat=-1`), the display is restored. The loop exits silently when `current_url` changes (user selected a different station).
 
 ---
 
@@ -356,7 +361,7 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 6. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
 7. `audio_player.play(city, station)` passes the URL to VLC.
 8. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
-9. `asyncio.create_task(_check_stream(station_url))` schedules a 3 s deferred check for stream failure.
+9. `asyncio.create_task(_monitor_stream(station_url))` starts continuous stream health monitoring (3 s grace, then 5 s polls).
 
 ### Flow B: User Turns the Dial
 
@@ -424,7 +429,8 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 | `FUZZINESS` | **2** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 3 |
 | `STICKINESS` | **3** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 10 |
 | `ENCODER_RESOLUTION` | 1024 | Imported in `database.py` and `positional_encoders.py` | ✓ Centralised |
-| `VOLUME_INCREMENT` | 1 | Not used — `main.py` hardcodes delta of 10 | Dead constant |
+| `VOLUME_STEP` | 10 | Imported in `main.py` | ✓ Used in `_handle_short_top` / `_handle_short_bottom` |
+| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | Imported in `main.py` | ✓ Used by both `save_state()` and `load_state()` |
 | GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Imported in each hardware module | ✓ Centralised |
 | I2C address | `I2C_LCD_ADDR = 0x27` | Imported in `display.py` | ✓ Centralised |
 
@@ -463,7 +469,7 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ### Improvement A: Set `FUZZINESS` and `STICKINESS` to their intended values
 
-**Problem:** `radio_config.py` still has `FUZZINESS = 2` and `STICKINESS = 3`. Both `main.py` imports these, so they take effect immediately — but the values are wrong. `FUZZINESS = 2` gives a 9-point search zone that can miss a city at the edge of the reticule; the intended value is 3 (25-point zone). `STICKINESS = 3` unlatches on just 3 encoder steps (~1°) and causes jitter; the intended value is 10.
+**Problem:** `radio_config.py` still has `FUZZINESS = 2` and `STICKINESS = 3`. Both are imported by `main.py`, so they take effect immediately — but the values are not yet tuned. `FUZZINESS = 2` gives a 9-point (3×3) search zone that can miss a city near the reticule edge; the intended operational value is 3 (25-point zone). `STICKINESS = 3` unlatches on just 3 encoder steps (~1°) and causes jitter when the user holds the globe still; the intended value is 10.
 
 **Fix:** Two one-line changes in `radio_config.py`:
 ```python
@@ -475,93 +481,63 @@ STICKINESS = 10
 
 ---
 
-### Improvement B: `_find_all_cities` should not be `async`
+### Improvement B: `_monitor_stream` tasks are not cancelled on shutdown
 
-**Problem:** `_find_all_cities` in `main.py` is declared `async def` but contains no `await`. Python wraps the list comprehension in a coroutine object on every call, adding unnecessary overhead. More visibly, Pyright treats the assignment `self.state.cities = await self._find_all_cities(...)` as a type error because it can't see through the coroutine wrapper.
+**Problem:** `asyncio.create_task(_monitor_stream(...))` is fire-and-forget. On app shutdown the `finally` block in `run()` calls `display.stop()`, but any active `_monitor_stream` task continues running its 5 s poll loop. The next poll calls `display.update()` on a stopped display and may log spurious errors or attempt I2C writes after the display task has exited.
 
-**Fix:** Change `async def _find_all_cities` to `def _find_all_cities` and drop the `await` at the call site. No other changes needed.
+**Fix:** Collect the task handle at each call site:
+```python
+if self._stream_task:
+    self._stream_task.cancel()
+self._stream_task = asyncio.create_task(self._monitor_stream(url))
+```
+Cancel it in the `finally` block alongside the other hardware teardown. This also ensures only one monitor task runs at a time, replacing the URL-equality guard as the primary stale-check mechanism.
 
-**Effort:** 5 minutes.
+**Effort:** 20 minutes.
 
 ---
 
-### Improvement C: `led_running` Event can get stuck permanently
+### Improvement C: `_get_coords_by_city` raises `KeyError` on stale saved state
 
-**Problem:** If a `led_task` coroutine is cancelled (e.g. during rapid state transitions), `led_running.clear()` at the end of the coroutine is never reached. `led_running` stays set for the rest of the session and all subsequent LED flashes are silently skipped.
+**Problem:** `_get_coords_by_city(city)` uses `self.stations_info[city]` — a raw dict access. If `city` is not in `stations_info` (possible after a `stations.json` update with a stale saved state), it raises an unhandled `KeyError` that crashes the app immediately on the warm-restart path.
 
-**Fix:** Wrap the body of `led_task` in `try/finally`:
+**Fix:**
 ```python
-async def led_task(led, led_running, color, duration):
-    if led_running.is_set():
-        return
-    led_running.set()
-    try:
-        led.set_color(color)
-        await asyncio.sleep(duration)
-        led.off()
-    finally:
-        led_running.clear()
+def _get_coords_by_city(self, city: str) -> Coordinate:
+    entry = self.stations_info.get(city)
+    if entry is None:
+        logging.warning(f"City not found in stations data: {city!r}")
+        return Coordinate(0, 0)
+    return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 ```
 
 **Effort:** 10 minutes.
 
 ---
 
-### Improvement D: State cache path is duplicated
+### Improvement D: `radio_config.py` configures logging on import
 
-**Problem:** `save_state()` has `cache="~/cache/radioglobe.json"` as a parameter default; `load_state()` hardcodes the same path inline. If one is changed, the other is missed.
+**Problem:** `radio_config.py` calls `logging.basicConfig()` and sets the root logger level as a side effect of being imported. This runs before `main.py` has any chance to configure logging, and it makes the module order-sensitive. Any module that imports `radio_config` before `main.py` sets up its own handler gets the config file's defaults silently applied.
 
-**Fix:** Add to `radio_config.py`:
-```python
-STATE_CACHE_PATH = "~/cache/radioglobe.json"
-```
-Import it in `main.py` and use it in both methods.
+**Fix:** Move the `logging.basicConfig()` call to the `if __name__ == "__main__":` block in `main.py`. `radio_config.py` should only define constants.
 
 **Effort:** 10 minutes.
 
 ---
 
-### Improvement E: `VOLUME_INCREMENT` constant is dead
+### Improvement E: `load_state()` replays a stale station snapshot
 
-**Problem:** `VOLUME_INCREMENT = 1` is defined in `radio_config.py` but never imported or used. `main.py` hardcodes `10` for the volume step in `_handle_short_top` and `_handle_short_bottom`.
+**Problem:** `save_state()` writes the current `stations` list (a snapshot of `[(name, url), ...]`) into the cache JSON. On the next boot, `load_state()` restores this list directly into `AppState`. If `stations.json` has been updated between boots (e.g. after an install or upstream database update), the restored list may contain stale URLs, wrong indices, or entries for a city that has since been renamed. The issue is noted in §6 but not yet fixed.
 
-**Fix:** Either remove the constant, or rename it `VOLUME_STEP = 10` and use it in the two handlers.
-
-**Effort:** 5 minutes.
-
----
-
-### Improvement F: `AppState` `None` defaults on non-Optional fields
-
-**Problem:** `station: tuple = None` and `city: str = None` in `AppState` are type errors — Pyright flags them. The fields are genuinely `None` before the first city is latched, but the type annotations don't say so.
-
-**Fix:** Annotate correctly:
+**Fix:** In `load_state()`, after restoring `city`, re-query the station list from the live database:
 ```python
-from typing import Optional
-station: Optional[tuple] = None
-city: Optional[str] = None
+if self.state.city:
+    self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+    self.state.station = self.state.stations[0] if self.state.stations else None
 ```
-This also makes the "may be None before first latch" semantics explicit to any caller.
+The saved `station_idx` should be treated as a hint rather than authoritative — look up by name if a match exists, otherwise fall back to index 0.
 
-**Effort:** 5 minutes.
-
----
-
-### Improvement G: Display `_display_loop` failure is silent
-
-**Problem:** If `lcd.printline()` raises an I2C exception (hardware glitch, loose cable), the `_display_loop` asyncio Task terminates with an unhandled exception. All subsequent `update()` calls set the buffer and fire the event, but nothing writes to the LCD — the display silently freezes with no indication in the log at the default level.
-
-**Fix:** Wrap the write loop in `try/except` in `_display_loop`:
-```python
-try:
-    for line_num in range(DISPLAY_ROWS):
-        self.lcd.printline(line_num, self.buffer[line_num])
-except Exception as e:
-    logging.error(f"Display write failed: {e}")
-```
-This keeps the loop alive and makes failures visible in `journalctl`.
-
-**Effort:** 15 minutes.
+**Effort:** 20 minutes.
 
 ---
 
