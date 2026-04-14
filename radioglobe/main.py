@@ -33,10 +33,8 @@ from radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BT
 class AppState:
     stations: list = field(default_factory=list)
     station: Optional[tuple] = None
-    station_idx: int = 0
     cities: list = field(default_factory=list)
     city: Optional[str] = None
-    city_idx: int = 0
     jog_idx: int = 0
     mode: str = "station"
 
@@ -81,10 +79,8 @@ class App:
         self.state = AppState(
             stations=state.get("stations") or [],
             station=tuple(state["station"]) if state.get("station") else None,
-            station_idx=state.get("station_idx") or 0,
             cities=state.get("cities") or [],
             city=state.get("city"),
-            city_idx=state.get("city_idx") or 0,
             jog_idx=state.get("jog_idx") or 0,
             mode=state.get("mode") or "station",
         )
@@ -105,11 +101,9 @@ class App:
             )
             if match:
                 self.state.station = match
-                self.state.station_idx = self.state.stations.index(match)
-                self.state.jog_idx = self.state.station_idx
+                self.state.jog_idx = self.state.stations.index(match)
             else:
                 self.state.station = self.state.stations[0] if self.state.stations else None
-                self.state.station_idx = 0
                 self.state.jog_idx = 0
 
     def next_station(self, direction):
@@ -339,18 +333,18 @@ class App:
 
                     # Freeze position until reticule moves again
                     self.encoders.latch(*coords, stickiness=STICKINESS)
-                    self.state.jog_idx = self.state.city_idx = 0
+                    self.state.jog_idx = 0
                     logging.debug(
-                        f"Matching cities: current:{self.state.jog_idx} city:{self.state.city_idx} "
+                        f"Matching cities: jog:{self.state.jog_idx} "
                         f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
                     )
-                    self.state.city = self.state.cities[self.state.city_idx]
+                    self.state.city = self.state.cities[0]
                     self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-                    self.state.jog_idx = self.state.station_idx = 0
-                    self.state.station = self.state.stations[self.state.station_idx]
+                    self.state.jog_idx = 0
+                    self.state.station = self.state.stations[0]
                     logging.debug(
-                        f"📻 Tuning to: current:{self.state.jog_idx} city:{self.state.city_idx} "
-                        f"stat:{self.state.station_idx} {self.state.city} {self.state.station}\n{self.state.stations}"
+                        f"📻 Tuning to: jog:{self.state.jog_idx} "
+                        f"{self.state.city} {self.state.station}\n{self.state.stations}"
                     )
                     coords = self._get_coords_by_city(self.state.city)
                     self.display.update(coords, self.state.city, 0, self.state.station[0], False)
