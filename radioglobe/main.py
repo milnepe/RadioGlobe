@@ -137,6 +137,8 @@ class App:
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
+        if not self.state.city or not self.state.station:
+            return
         volume = self.audio_player.change_volume(delta)
         coords = self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
@@ -145,6 +147,8 @@ class App:
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
+        if not self.state.city or not self.state.station:
+            return
         volume = self.audio_player.change_volume_level(level)
         coords = self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
@@ -173,7 +177,8 @@ class App:
                 if error_shown:
                     logging.debug(f"✅ Stream recovered for {expected_url}")
                     coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-                    self.display.update(coords, self.state.city or "", 0, self.state.station[0], False)
+                    station_name = self.state.station[0] if self.state.station else ""
+                    self.display.update(coords, self.state.city or "", 0, station_name, False)
                     error_shown = False
             await asyncio.sleep(5)
 
@@ -278,6 +283,8 @@ class App:
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
+                assert self.state.city is not None, "latched state missing city"
+                assert self.state.station is not None, "latched state missing station"
                 coords = self._get_coords_by_city(self.state.city)
                 self.display.update(coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
@@ -325,7 +332,7 @@ class App:
 
                 # Modal dial: cycles stations (station mode) or cities (city mode)
                 direction = self.dial.get_direction()
-                if direction != 0:
+                if direction != 0 and self.state.city and self.state.station:
                     asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.1))
                     logging.debug(
                         f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
