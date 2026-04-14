@@ -38,8 +38,13 @@ class AudioPlayer:
         return level
 
     def is_error(self) -> bool:
-        """Return True if VLC has encountered a stream error."""
-        return self.player.get_state() == vlc.State.Error
+        """Return True if VLC has encountered a stream error.
+
+        A 404 / unreachable URL causes VLC to enter Ended rather than Error,
+        so both states are treated as failures for a live radio stream.
+        """
+        state = self.player.get_state()
+        return state in (vlc.State.Error, vlc.State.Ended)
 
     async def stop(self):
         """Stop playback if something is playing."""
