@@ -54,16 +54,16 @@ class Display:
         logging.info("Display cleared")
 
     def message(self, line_1="", line_2="", line_3="", line_4=""):
-        self.buffer[0] = line_1.center(DISPLAY_COLUMNS)
-        self.buffer[1] = line_2.center(DISPLAY_COLUMNS)
-        self.buffer[2] = line_3.center(DISPLAY_COLUMNS)
-        self.buffer[3] = line_4.center(DISPLAY_COLUMNS)
+        self.buffer[0] = line_1[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
+        self.buffer[1] = line_2[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
+        self.buffer[2] = line_3[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
+        self.buffer[3] = line_4[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
         self.changed.set()
         logging.info(f"Message set: {[line_1, line_2, line_3, line_4]}")
 
     def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
         self.buffer[0] = str(coords).center(DISPLAY_COLUMNS)
-        self.buffer[1] = location.center(DISPLAY_COLUMNS)
+        self.buffer[1] = location[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
 
         # Volume bar
         if not volume:
@@ -76,6 +76,8 @@ class Display:
             padding = DISPLAY_COLUMNS - 4 - len(station)
             station = " " * (padding // 2) + station + " " * (padding - padding // 2)
             station = "< " + station + " >"
+        else:
+            station = station[:DISPLAY_COLUMNS]
         self.buffer[3] = station.center(DISPLAY_COLUMNS)
 
         self.changed.set()
