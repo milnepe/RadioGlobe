@@ -40,8 +40,11 @@ class Display:
     async def _display_loop(self):
         while self.running:
             await self.changed.wait()
-            for line_num in range(DISPLAY_ROWS):
-                self.lcd.printline(line_num, self.buffer[line_num])
+            try:
+                for line_num in range(DISPLAY_ROWS):
+                    self.lcd.printline(line_num, self.buffer[line_num])
+            except Exception as e:
+                logging.error(f"Display write failed: {e}")
             self.changed.clear()
             await asyncio.sleep(0.1)
 
