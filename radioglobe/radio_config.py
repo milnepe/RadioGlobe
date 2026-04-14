@@ -20,7 +20,7 @@ ENCODER_RESOLUTION = 1024
 FUZZINESS = 3
 
 # Affects ability to latch on to cities
-STICKINESS = 3
+STICKINESS = 10
 
 # Edit these to suit your audio settings
 VOLUME_INCREMENT = 1

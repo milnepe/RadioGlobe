@@ -22,6 +22,7 @@ from buttons_async import AsyncButtonManager
 
 from coordinates import Coordinate
 from display_async import Display
+from radio_config import FUZZINESS, STICKINESS
 
 
 class App:
@@ -121,9 +122,6 @@ class App:
 
     async def run(self):
         """Main app loop."""
-        STICKINESS = 10
-        FUZZINESS = 3
-
         # Load any saved state
         self.load_state()
 
