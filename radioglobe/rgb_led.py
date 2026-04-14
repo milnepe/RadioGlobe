@@ -49,12 +49,14 @@ async def led_task(led: RGBLed, led_running: asyncio.Event, color: str, duration
         logging.debug("LED task already running, skipping.")
         return
     led_running.set()
-    logging.debug(f"LED ON ({color}) for {duration}s")
-    led.set_color(color)
-    await asyncio.sleep(duration)
-    led.off()
-    logging.debug("LED OFF")
-    led_running.clear()
+    try:
+        logging.debug(f"LED ON ({color}) for {duration}s")
+        led.set_color(color)
+        await asyncio.sleep(duration)
+        led.off()
+        logging.debug("LED OFF")
+    finally:
+        led_running.clear()
 
 
 async def worker(led: RGBLed, led_running: asyncio.Event):
