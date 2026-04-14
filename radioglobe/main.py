@@ -296,8 +296,10 @@ class App:
 
             try:
                 self.load_state()
-            except Exception:
-                logging.debug("Config not found...")
+            except FileNotFoundError:
+                pass  # no cache yet — normal on first boot
+            except Exception as e:
+                logging.warning(f"load_state failed: {e}")
             logging.debug(
                 f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} "
                 f"{self.state.mode} {self.state.city} {self.state.station} {self.encoders.is_latched()}"
