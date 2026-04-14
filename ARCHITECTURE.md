@@ -179,8 +179,9 @@ The `App` class is the central controller. `__init__` instantiates all hardware 
 | `_on_jog_press` / `_on_sound_press` / `_on_mid_press` | Immediate press-down LED feedback |
 
 **Non-obvious details:**
-- `self.state.city` is passed to `display.update()` as a raw string (e.g. `"London,GB"`) but the display formats it directly — no truncation for long city names.
+- `self.state.city` is passed to `display.update()` as a raw string (e.g. `"London,GB"`). The display truncates it to 20 characters before centering.
 - `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
+- If the warm-restart state is incomplete (city or station is `None` after `load_state()`), the app logs a warning, clears the latch, and falls back to calibrate mode rather than crashing.
 
 ---
 
@@ -259,6 +260,7 @@ Drives a 20×4 I2C character LCD at address 0x27 on bus 1, using the `liquidcrys
 
 - Internally maintains a 4-line text buffer and an `asyncio.Event` (`changed`). When `update()` or `message()` is called, the buffer is updated and the event is set.
 - `_display_loop()` is an asyncio Task that waits for the event, writes all 4 lines to the LCD, and sleeps 100ms. This coalesces rapid updates — important because I2C is slow.
+- All strings are truncated to `DISPLAY_COLUMNS` characters before `center()` is applied, so overlong city or station names never overflow the hardware line buffer.
 
 **Display layout when playing:**
 ```
@@ -464,52 +466,57 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ---
 
-### Improvement A: `assert` guards on the warm-restart path crash in production
+### Improvement A: `switch_mode()` does not reset `jog_idx`
 
-**Problem:** After `load_state()`, `run()` uses:
-```python
-assert self.state.city is not None, "latched state missing city"
-assert self.state.station is not None, "latched state missing station"
-```
-If the saved state is inconsistent (e.g. `city` present but `stations.json` no longer contains it, so `station` ends up `None`), Python raises `AssertionError` and the app exits entirely. Assertions are for programmer errors during development, not runtime data conditions.
+**Problem:** When the user presses the jog button to switch from station mode to city mode (or vice versa), `jog_idx` carries over from the previous mode. If the user was at station index 3 and switches to city mode, the next dial turn starts at city index 4 rather than 1, which is confusing — the user expects to start browsing from the first city.
 
-**Fix:** Replace with explicit guards that degrade gracefully:
+**Fix:** Reset `jog_idx` to 0 in `switch_mode()`:
 ```python
-if not self.state.city or not self.state.station:
-    logging.warning("Saved state incomplete — starting in calibrate mode")
-    self.encoders.reset_latch()
-    self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
-else:
-    # warm restart path...
+def switch_mode(self):
+    self.state.mode = "city" if self.state.mode == "station" else "station"
+    self.state.jog_idx = 0
 ```
 
-**Effort:** 10 minutes.
+**Effort:** 5 minutes.
 
 ---
 
-### Improvement B: Long city names overflow the 20-character display
+### Improvement B: Redundant `get_stations_by_city()` call in the dial/city branch
 
-**Problem:** `display.update()` calls `location.center(DISPLAY_COLUMNS)` on line 1. If `location` is longer than 20 characters (e.g. `"São Paulo,BR"` is fine; `"Ouagadougou,BF"` at 14 chars is borderline; some station names exceed 20), `str.center()` does not truncate — it pads but passes the overlong string straight to `lcd.printline()`. The `liquidcrystal_i2c` library wraps or clips depending on firmware; either way the display is wrong.
-
-**Fix:** Truncate before centering in `display.update()` and `display.message()`:
+**Problem:** In `run()`, when the dial is turned in city mode:
 ```python
-self.buffer[1] = location[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
+self.next_city(direction)   # internally calls get_stations_by_city → self.state.stations
+self.state.station = get_stations_by_city(self.stations_info, self.state.city)[0]  # calls it again
 ```
-Apply the same guard to `station` on line 3 (it already truncates for the arrow case but not the plain case).
+`next_city()` already populates `self.state.stations`. The second call re-queries the database for the same result and throws it away.
 
-**Effort:** 15 minutes.
+**Fix:** Replace the redundant call with a direct list access:
+```python
+self.state.station = self.state.stations[0]
+```
+
+**Effort:** 5 minutes.
 
 ---
 
-### Improvement C: `jog_idx` / `city_idx` / `station_idx` triple-index design is confusing
+### Improvement C: `load_state()` failures are silently swallowed at DEBUG level
 
-**Problem:** `AppState` has three index fields that partially overlap. `jog_idx` is the live navigation cursor — it is overloaded to mean "station index in station mode" and "city index in city mode". `station_idx` and `city_idx` are set at latch time but are not kept in sync with `jog_idx` during dial navigation, so they drift. The intent is clear in isolation but the three-field design makes it easy to read the wrong index when adding new features.
+**Problem:** In `run()`, the call to `load_state()` is wrapped in a bare `except Exception` that logs at DEBUG level:
+```python
+except Exception:
+    logging.debug("Config not found...")
+```
+`FileNotFoundError` (no cache yet) is expected and silent is fine. But a `json.JSONDecodeError` or `PermissionError` is a real problem that would be invisible at the default log level, leaving the user wondering why the app isn't resuming the last station.
 
-**Fix (low-risk):** Add a comment block above `AppState` explaining the contract: `jog_idx` is the authoritative cursor; `station_idx` and `city_idx` are snapshots saved to cache. Guard any new navigation code against reading the wrong one.
+**Fix:** Distinguish expected from unexpected:
+```python
+except FileNotFoundError:
+    pass  # no cache yet — normal on first boot
+except Exception as e:
+    logging.warning(f"load_state failed: {e}")
+```
 
-**Fix (correct):** Remove `station_idx` and `city_idx` from `AppState`. Derive the saved index at `save_state()` time from `jog_idx` and `mode`. On `load_state()`, restore `jog_idx` only and let the re-query block set the station.
-
-**Effort:** 30–60 minutes for the correct fix.
+**Effort:** 5 minutes.
 
 ---
 
