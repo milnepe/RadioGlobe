@@ -1,7 +1,7 @@
 import asyncio
 import spidev  # type: ignore
 
-ENCODER_RESOLUTION = 1024
+from radio_config import ENCODER_RESOLUTION
 
 
 class PositionalEncoders:

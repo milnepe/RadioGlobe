@@ -1,12 +1,7 @@
 import json
-
-# import os.path
 import logging
-# from radio_config import DATADIR, ENCODER_RESOLUTION
 
-ENCODER_RESOLUTION = 1024
-
-# os.makedirs(DATADIR, exist_ok=True)
+from radio_config import ENCODER_RESOLUTION
 
 
 def load_stations(stations_json: str) -> dict:
