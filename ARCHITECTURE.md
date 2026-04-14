@@ -466,57 +466,56 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ---
 
-### Improvement A: `switch_mode()` does not reset `jog_idx`
+### Improvement A: `IndexError` if a city has no stations at latch time
 
-**Problem:** When the user presses the jog button to switch from station mode to city mode (or vice versa), `jog_idx` carries over from the previous mode. If the user was at station index 3 and switches to city mode, the next dial turn starts at city index 4 rather than 1, which is confusing — the user expects to start browsing from the first city.
-
-**Fix:** Reset `jog_idx` to 0 in `switch_mode()`:
+**Problem:** In the latch block in `run()`:
 ```python
-def switch_mode(self):
-    self.state.mode = "city" if self.state.mode == "station" else "station"
-    self.state.jog_idx = 0
+self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+self.state.station = self.state.stations[0]   # IndexError if list is empty
+```
+If a city key exists in `stations.json` but its station list is empty (malformed entry, partial database update), this raises an unhandled `IndexError` that crashes the main loop.
+
+**Fix:** Guard before indexing:
+```python
+if not self.state.stations:
+    logging.warning(f"No stations for {self.state.city!r} — skipping latch")
+    self.encoders.reset_latch()
+else:
+    self.state.station = self.state.stations[0]
+    # ... display, play, monitor
 ```
 
-**Effort:** 5 minutes.
+**Effort:** 10 minutes.
 
 ---
 
-### Improvement B: Redundant `get_stations_by_city()` call in the dial/city branch
+### Improvement B: `save_state()` serialises `stations` and `cities` snapshots that are ignored on restore
 
-**Problem:** In `run()`, when the dial is turned in city mode:
+**Problem:** `save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. Since `load_state()` now re-queries `stations` from the live database and `cities` is repopulated by the first main-loop iteration, the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
+
+**Fix:** Build the dict manually in `save_state()`, omitting the two lists:
 ```python
-self.next_city(direction)   # internally calls get_stations_by_city → self.state.stations
-self.state.station = get_stations_by_city(self.stations_info, self.state.city)[0]  # calls it again
+state = {
+    "station": list(self.state.station) if self.state.station else None,
+    "city": self.state.city,
+    "jog_idx": self.state.jog_idx,
+    "mode": self.state.mode,
+    "lat": self.encoders.latitude,
+    ...
+}
 ```
-`next_city()` already populates `self.state.stations`. The second call re-queries the database for the same result and throws it away.
 
-**Fix:** Replace the redundant call with a direct list access:
-```python
-self.state.station = self.state.stations[0]
-```
-
-**Effort:** 5 minutes.
+**Effort:** 15 minutes.
 
 ---
 
-### Improvement C: `load_state()` failures are silently swallowed at DEBUG level
+### Improvement C: Volume display updates can be overwritten by the main loop
 
-**Problem:** In `run()`, the call to `load_state()` is wrapped in a bare `except Exception` that logs at DEBUG level:
-```python
-except Exception:
-    logging.debug("Config not found...")
-```
-`FileNotFoundError` (no cache yet) is expected and silent is fine. But a `json.JSONDecodeError` or `PermissionError` is a real problem that would be invisible at the default log level, leaving the user wondering why the app isn't resuming the last station.
+**Problem:** `_update_volume()` calls `display.update()`, then `await asyncio.sleep(0.5)`, then calls `display.update()` again to clear the volume bar. During the 0.5 s yield, the main loop (running every 100 ms) may also call `display.update()` — for example if a city is freshly latched. The second volume call then overwrites that update with a stale "volume cleared" view.
 
-**Fix:** Distinguish expected from unexpected:
-```python
-except FileNotFoundError:
-    pass  # no cache yet — normal on first boot
-except Exception as e:
-    logging.warning(f"load_state failed: {e}")
-```
+This is cosmetic and non-crashing, but the display momentarily shows the wrong city or station after the sleep. A fix requires either a timestamp/generation counter to skip the second update if the display has moved on, or removing the two-call pattern entirely in favour of a timed overlay in `_display_loop`.
 
-**Effort:** 5 minutes.
+**Effort:** 30–60 minutes.
 
 ---
 
