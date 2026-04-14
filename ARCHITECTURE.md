@@ -152,24 +152,34 @@ The `streaming/` directory is intentionally omitted — none of its modules are 
 
 ### 4.1 `main.py` — App Controller
 
-The `App` class is the central controller. `__init__` instantiates all hardware objects and loads the station database. `run()` contains the entire main loop and all button callback definitions.
+The `App` class is the central controller. `__init__` instantiates all hardware objects and loads the station database. `run()` contains the main loop and wires button definitions.
+
+**State** is held in an `AppState` dataclass (`self.state`) with eight fields. `save_state()` uses `dataclasses.asdict(self.state)` for serialisation; `load_state()` reconstructs `AppState(...)` directly from the JSON. On boot, if a saved state is found, the latch is restored and the last station resumes playing immediately (warm-restart path).
 
 **Key methods:**
 
 | Method | Purpose |
 |---|---|
 | `run()` | Main async loop: poll encoders, search cities, drive display and audio |
-| `next_station(direction)` | Cycle `jog_idx` within `self.stations` |
-| `next_city(direction)` | Cycle `jog_idx` within `self.cities`, reload station list |
-| `switch_mode()` | Toggle `self.mode` between `"station"` and `"city"` |
-| `save_state()` | Serialise app state to `~/cache/radioglobe.json` |
+| `next_station(direction)` | Cycle `jog_idx` within `self.state.stations` |
+| `next_city(direction)` | Cycle `jog_idx` within `self.state.cities`, reload station list |
+| `switch_mode()` | Toggle `self.state.mode` between `"station"` and `"city"` |
+| `save_state()` | Serialise `AppState` + encoder offsets to `~/cache/radioglobe.json` |
 | `load_state()` | Restore state from cache on startup |
+| `_get_coords_by_city(city)` | Look up a `Coordinate` for a city string |
+| `_find_all_cities(coords, cities)` | Return all city names whose grid coords appear in `coords` |
+| `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
+| `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
+| `_check_stream(expected_url)` | After 3 s, flash red LED and show "Stream error" if VLC failed |
+| `_handle_short_jog` / `_handle_long_jog` | Jog button handlers |
+| `_handle_short_top` / `_handle_long_top` | Top button handlers |
+| `_handle_short_mid` / `_handle_long_mid` | Mid button handlers |
+| `_handle_short_bottom` / `_handle_long_bottom` | Bottom button handlers |
+| `_on_jog_press` / `_on_sound_press` / `_on_mid_press` | Immediate press-down LED feedback |
 
 **Non-obvious details:**
-- `load_state()` is called **twice** in `run()`: once at line 128 (before the splash screen) and once at line 242 (after). The second call is wrapped in a try/except and overwrites the first. Only the second call matters.
-- Button callback functions are defined as nested `async def` closures inside `run()`, capturing `self`. This works but makes the ~70 lines hard to navigate and impossible to unit-test.
-- `self.city` is passed to `display.update()` as a raw string (e.g. `"London,GB"`) but the display formats it directly — no truncation for long city names.
-- `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot (the warm-restart path).
+- `self.state.city` is passed to `display.update()` as a raw string (e.g. `"London,GB"`) but the display formats it directly — no truncation for long city names.
+- `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
 
 ---
 
@@ -182,7 +192,7 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 | Function | Returns | Notes |
 |---|---|---|
 | `load_stations(path)` | `dict` keyed by `"City,CC"` | Returns empty dict on FileNotFoundError |
-| `build_cities_index(stations_data)` | `dict[(lat_idx, lon_idx) → city_name]` | Converts lat/lon degrees to 0–1023 grid indices |
+| `build_cities_index(stations_data)` | `dict[(lat_idx, lon_idx) → list[city_name]]` | Converts lat/lon degrees to 0–1023 grid indices; multiple cities per cell are supported |
 | `look_around(origin, fuzziness)` | `list` of `(lat, lon)` tuples | Returns search zone around a point |
 | `get_stations_by_city(stations, city)` | `list` of `(name, url)` tuples | The canonical station list format |
 | `get_found_cities(search_area, city_map)` | `list` of city strings | Used in some test scripts; superseded by `find_all_cities` in `main.py` |
@@ -190,15 +200,6 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 **Coordinate formula:** `index = round((degrees + 180) * 1024 / 360)`. This maps −180°→0 and +180°→1024.
 
 **`look_around()` detail:** `fuzziness=1` returns just the origin point; `fuzziness=2` returns 9 points (3×3 area); `fuzziness=3` returns 25 points (5×5 area). The search starts bottom-left and scans horizontally — this matches ergonomics (70% of people are right-eye dominant and hold the globe below eye level).
-
-**Important bug in `build_cities_index()`:** The docstring says the index supports multiple cities per cell (`{(609, 178): ['Riverside,US-CA', 'San Bernardino,US-CA'], ...}`), but the actual code does not — it stores only the first city that maps to each cell and silently ignores the rest:
-
-```python
-if city_coords not in cities_index:
-    cities_index[city_coords] = location  # second city at same cell is dropped
-```
-
-At ENCODER_RESOLUTION=1024, one grid cell covers ~0.35°, meaning cities within ~40 km can collide. See [Improvement 8](#improvement-8-fix-build_cities_index-city-collision).
 
 **Legacy functions** at the bottom of the file (`get_station_by_index`, `get_first_station`, `get_all_urls`, `get_stations_info`) are not used by the main application. They exist for test scripts and older code paths.
 
@@ -219,7 +220,7 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 - While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. If it does, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
-**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION.
+**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so the main loop can re-detect cities after zeroing — `zero()` alone does not clear the latch.
 
 **Note:** The `if __name__ == "__main__":` block at the bottom of this file (lines 109–142) is a hardware test script, not part of the class. It hardcodes `STICKINESS = 10`.
 
@@ -266,8 +267,6 @@ Line 2: --------              ← Volume bar (ASCII dashes, scales 0–100)
 Line 3: BBC Radio 2           ← Station name
 ```
 
-**Non-obvious detail:** `update()` accepts a `Coordinate` object for the first argument, but some call sites in `main.py` pass bare tuples (e.g. `self.display.update((0, 0), "CALIBRATE", 0, "", False)` at line 258). This works accidentally because `str((0, 0))` produces `"(0, 0)"` rather than a formatted coordinate string. See [Improvement 9](#improvement-9-surface-the-coordinate-type-consistently).
-
 ---
 
 ### 4.7 `audio_async.py` — Audio Player
@@ -281,10 +280,11 @@ class AudioPlayer:
         self.player = self.instance.media_player_new()
 ```
 
-- `play(city, station)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally.
+- `play(city, station)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It also records `current_url` for the stale-check guard in `_check_stream`.
 - `--input-repeat=-1` means the stream restarts automatically if the connection drops.
 - Volume is managed via VLC's `audio_get_volume` / `audio_set_volume`, range 0–100.
-- There is no async integration — `play()` returns immediately and VLC streams in its own threads. There is currently no way to detect whether a stream has actually connected. Silent failures produce silence. See [Improvement 12](#improvement-12-add-dead-stream-detection).
+- `is_error()` returns `True` if VLC is in `State.Error` **or** `State.Ended`. Both states indicate failure for a live radio stream: `Error` for codec/protocol failures, `Ended` for HTTP 404 / "input can't be opened".
+- Dead-stream detection is handled by `App._check_stream(expected_url)` in `main.py`: it fires 3 s after each `play()`, discards the check if the URL has changed (stale guard), and if the stream has failed it flashes the LED red and shows "Stream error" on the display.
 
 ---
 
@@ -313,7 +313,7 @@ A simple value object. `__str__` produces the display format used on the LCD:
 '51.51N, 0.13W'
 ```
 
-Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used by `main.py` and `display.py` but not consistently — see [Improvement 9](#improvement-9-surface-the-coordinate-type-consistently).
+Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistently throughout `main.py` and `display.py` — all `display.update()` call sites pass a `Coordinate` object.
 
 ---
 
@@ -347,15 +347,16 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 1. `PositionalEncoders.run_encoder()` reads SPI every 200ms and updates `self.latitude` / `self.longitude` (unless latched).
 2. The main loop (100ms sleep) calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
-3. `look_around(coords, FUZZINESS=3)` generates 25 grid coordinates surrounding the current position.
-4. `find_all_cities(zone, self.cities_info)` checks each coordinate against the spatial index dict.
+3. `look_around(coords, FUZZINESS=2)` generates 9 grid coordinates (3×3) surrounding the current position.
+4. `_find_all_cities(zone, self.cities_info)` checks each coordinate against the spatial index dict, flattening the per-cell city lists.
 5. If cities are found and the encoders are not already latched:
-   - `encoders.latch(*coords, stickiness=10)` freezes the position.
+   - `encoders.latch(*coords, stickiness=STICKINESS)` freezes the position.
    - `jog_idx` and `city_idx` reset to 0.
    - The LED flashes green.
 6. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
 7. `audio_player.play(city, station)` passes the URL to VLC.
 8. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
+9. `asyncio.create_task(_check_stream(station_url))` schedules a 3 s deferred check for stream failure.
 
 ### Flow B: User Turns the Dial
 
@@ -370,21 +371,22 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 ## 6. State Management
 
-The app maintains several pieces of mutable state in `App` instance attributes:
+Application state is held in an `AppState` dataclass on `self.state`:
 
-| Attribute | Type | Meaning |
+| Field | Type | Meaning |
 |---|---|---|
-| `self.stations` | `list[(name, url)]` | Stations for the current city |
-| `self.station` | `tuple(name, url)` | Currently playing station |
-| `self.station_idx` | `int` | Index of `station` in `stations` |
-| `self.cities` | `list[str]` | Cities found in the current search zone |
-| `self.city` | `str` | Currently selected city (e.g. `"London,GB"`) |
-| `self.city_idx` | `int` | Index of `city` in `cities` |
-| `self.jog_idx` | `int` | Shared index used by both station and city navigation |
-| `self.mode` | `str` | `"station"` or `"city"` |
-| `self.encoders.*` | — | Lat/lon, offsets, latch state (owned by `PositionalEncoders`) |
+| `stations` | `list[(name, url)]` | Stations for the current city |
+| `station` | `tuple \| None` | Currently playing station |
+| `station_idx` | `int` | Index of `station` in `stations` |
+| `cities` | `list[str]` | Cities found in the current search zone |
+| `city` | `str \| None` | Currently selected city (e.g. `"London,GB"`) |
+| `city_idx` | `int` | Index of `city` in `cities` |
+| `jog_idx` | `int` | Shared index used by both station and city navigation |
+| `mode` | `str` | `"station"` or `"city"` |
 
-On shutdown (long press of mid button), `save_state()` serialises all of this to `~/cache/radioglobe.json`. On the next boot, `load_state()` restores it, sets `latch_stickiness = True`, and the app immediately resumes playing the last station.
+Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on `self.encoders`.
+
+On shutdown (long press of mid button), `save_state()` calls `dataclasses.asdict(self.state)` and appends the encoder offsets and latch flag, writing the result to `~/cache/radioglobe.json`. On the next boot, `load_state()` reconstructs `AppState(...)` from the JSON and sets `latch_stickiness = True` so the app resumes the last station immediately.
 
 **Fragility note:** The saved `stations` and `cities` lists are snapshots. If `stations.json` is updated between boots (e.g. after an install), the saved indices may point to different or non-existent stations. The restore currently uses the saved lists as-is rather than re-querying from `stations_info`.
 
@@ -419,201 +421,147 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 
 | Parameter | `radio_config.py` value | Actual value used | Notes |
 |---|---|---|---|
-| `FUZZINESS` | 3 | Imported in `main.py` | ✓ Fixed |
-| `STICKINESS` | 10 | Imported in `main.py` | ✓ Fixed |
-| `ENCODER_RESOLUTION` | 1024 | Imported in `database.py` and `positional_encoders.py` | ✓ Fixed |
+| `FUZZINESS` | **2** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 3 |
+| `STICKINESS` | **3** (current) | Imported in `main.py` | ✓ Imported — value not yet updated to intended 10 |
+| `ENCODER_RESOLUTION` | 1024 | Imported in `database.py` and `positional_encoders.py` | ✓ Centralised |
 | `VOLUME_INCREMENT` | 1 | Not used — `main.py` hardcodes delta of 10 | Dead constant |
-| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Imported in each hardware module | ✓ Fixed |
-| I2C address | `I2C_LCD_ADDR = 0x27` | Imported in `display.py` | ✓ Fixed |
+| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Imported in each hardware module | ✓ Centralised |
+| I2C address | `I2C_LCD_ADDR = 0x27` | Imported in `display.py` | ✓ Centralised |
 
-The intended fix is straightforward: see [Improvement 1](#improvement-1-centralise-encoder_resolution-and-use-radio_configpy) and [Improvement 2](#improvement-2-fix-the-stickiness-inconsistency).
+`FUZZINESS = 2` gives a 9-point (3×3) search zone. The intended operational value of 3 gives a 25-point (5×5) zone and is less likely to miss a city near the edge of the reticule. `STICKINESS = 3` unlatches after just 3 encoder steps (~1°), which can cause jitter. The intended value of 10 is more stable. Since `main.py` now imports both from `radio_config.py`, changing the values there takes effect immediately.
 
 ---
 
 ## 9. Testing
 
-Some files in `tests/` are proper unit tests that run on any machine. Others are hardware integration scripts that require a connected Raspberry Pi.
+Unit tests run on any machine. Hardware integration scripts require a connected Raspberry Pi.
 
 **Unit tests (run without hardware):**
 ```bash
-uv run pytest tests/get_stations_by_city_test.py
+uv run pytest
 ```
+`pyproject.toml` configures `testpaths = ["tests"]` and `norecursedirs = ["integration"]`, so `pytest` finds only the unit tests and skips the hardware scripts automatically.
 
-**Hardware / integration scripts** (require Pi): `simulation_test.py`, `positional_encoders_test.py`, `dial_test.py`, `streaming_cvlc_test.py`, `async_streamer_test.py`.
+**Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi from the `radioglobe/` directory:
 
-These are not separated by directory, and there is no `pytest.ini` or `pyproject.toml` test config that marks or excludes them. Running `pytest tests/` on a development machine will fail on all hardware scripts. See [Improvement 11](#improvement-11-separate-integration-test-scripts).
+| Script | What it tests |
+|---|---|
+| `button_test.py` | GPIO button short/long press detection — `python ../tests/integration/button_test.py mid` |
+| `dial_test.py` | Quadrature encoder direction detection |
+| `positional_encoders_test.py` | SPI encoder reading and latch mechanism |
+| `simulation_test.py` | End-to-end main loop simulation |
+| `async_streamer_test.py` | Async playlist resolver (requires network) |
+| `streaming_cvlc_test.py` | cvlc subprocess streaming |
 
 ---
 
 ## 10. Suggested Improvements
 
-These are ordered from lowest to highest effort. None require a rewrite — all are incremental changes. The project is a hobby/maker project; these are suggestions, not mandates.
+These are ordered from lowest to highest effort. None require a rewrite — all are incremental changes.
 
 ---
 
-### Improvement 1: Centralise `ENCODER_RESOLUTION` and use `radio_config.py`
+### Improvement A: Set `FUZZINESS` and `STICKINESS` to their intended values
 
-**Problem:** `ENCODER_RESOLUTION = 1024` is defined in three separate files (`radio_config.py`, `database.py`, `positional_encoders.py`). The import in `database.py` is commented out (line 5).
+**Problem:** `radio_config.py` still has `FUZZINESS = 2` and `STICKINESS = 3`. Both `main.py` imports these, so they take effect immediately — but the values are wrong. `FUZZINESS = 2` gives a 9-point search zone that can miss a city at the edge of the reticule; the intended value is 3 (25-point zone). `STICKINESS = 3` unlatches on just 3 encoder steps (~1°) and causes jitter; the intended value is 10.
 
-**Fix:** Uncomment the import in `database.py` and add an import to `positional_encoders.py`. Remove the three local definitions.
+**Fix:** Two one-line changes in `radio_config.py`:
+```python
+FUZZINESS = 3
+STICKINESS = 10
+```
 
-**Effort:** ~20 minutes.
+**Effort:** 5 minutes.
 
 ---
 
-### Improvement 2: Fix the `STICKINESS` inconsistency
+### Improvement B: `_find_all_cities` should not be `async`
 
-**Problem:** `radio_config.py` defines `STICKINESS = 3`, but `main.py` uses a local `STICKINESS = 10` (line 124) that shadows the imported value. The config value is never used. A developer reading `radio_config.py` will have the wrong mental model.
+**Problem:** `_find_all_cities` in `main.py` is declared `async def` but contains no `await`. Python wraps the list comprehension in a coroutine object on every call, adding unnecessary overhead. More visibly, Pyright treats the assignment `self.state.cities = await self._find_all_cities(...)` as a type error because it can't see through the coroutine wrapper.
 
-**Fix:** Update `radio_config.py` to `STICKINESS = 10` (reflecting actual behaviour), then import it in `main.py` instead of using a local. Similarly, the `FUZZINESS` local in `main.py` shadows `radio_config.FUZZINESS` with the same value — remove the local and just import.
+**Fix:** Change `async def _find_all_cities` to `def _find_all_cities` and drop the `await` at the call site. No other changes needed.
+
+**Effort:** 5 minutes.
+
+---
+
+### Improvement C: `led_running` Event can get stuck permanently
+
+**Problem:** If a `led_task` coroutine is cancelled (e.g. during rapid state transitions), `led_running.clear()` at the end of the coroutine is never reached. `led_running` stays set for the rest of the session and all subsequent LED flashes are silently skipped.
+
+**Fix:** Wrap the body of `led_task` in `try/finally`:
+```python
+async def led_task(led, led_running, color, duration):
+    if led_running.is_set():
+        return
+    led_running.set()
+    try:
+        led.set_color(color)
+        await asyncio.sleep(duration)
+        led.off()
+    finally:
+        led_running.clear()
+```
 
 **Effort:** 10 minutes.
 
 ---
 
-### Improvement 3: Remove the duplicate `load_state()` call
+### Improvement D: State cache path is duplicated
 
-**Problem:** `load_state()` is called at `main.py` line 128 (before the splash screen) and again at line 242 (inside the try block, after the splash screen). The second call is in a try/except and overwrites everything the first call did. The first call is dead code.
+**Problem:** `save_state()` has `cache="~/cache/radioglobe.json"` as a parameter default; `load_state()` hardcodes the same path inline. If one is changed, the other is missed.
 
-**Fix:** Remove line 128. Keep only line 242.
-
-**Effort:** 2 minutes.
-
----
-
-### Improvement 4: Rename the `_async` modules
-
-**Done.** Modules renamed: `display_async` → `display`, `dial_async` → `dial`, `buttons_async` → `buttons`, `positional_encoders_async` → `positional_encoders`, `rgb_led_async` → `rgb_led`. `dial_button_async.py` deleted (unused).
-
-**Fix:** Rename to `display.py`, `dial.py`, `buttons.py`, `positional_encoders.py`, `rgb_led.py`. Update imports in `main.py` and tests. While at it, `dial_button.py (deleted)` is an unused alternative to `dial.py` + `buttons.py` that can be deleted.
-
-**Effort:** ~30 minutes including import updates. Do this in one commit.
-
----
-
-### Improvement 5: Centralise GPIO pin constants
-
-**Done.** All GPIO pins and the I2C address are now defined in `radio_config.py` and imported in `dial.py`, `rgb_led.py`, `display.py`, `buttons.py`, and `main.py`.
-
----
-
-### Improvement 6: Move button callbacks out of `App.run()`
-
-**Problem:** `App.run()` contains ~70 lines of nested `async def` functions (the button handlers), defined as closures that capture `self`. This makes `run()` hard to read and the handlers impossible to unit-test.
-
-**Fix:** Move each handler to a named method on `App`:
+**Fix:** Add to `radio_config.py`:
 ```python
-async def _on_volume_up(self): ...
-async def _on_volume_down(self): ...
-async def _on_calibrate(self): ...
-async def _on_shutdown(self): ...
+STATE_CACHE_PATH = "~/cache/radioglobe.json"
 ```
-Wire them up in `run()` using `self._on_volume_up` etc. No functional change.
-
-**Effort:** ~1 hour. Mechanical refactor.
-
----
-
-### Improvement 7: Add a `start()` / `stop()` lifecycle protocol
-
-**Problem:** Each hardware module has a slightly different lifecycle API. `AsyncDial` has `start()`/`stop()`. `PositionalEncoders` has `start()`/`stop()`. `Display` has `start()`/`stop()`. `AudioPlayer` only has `stop()`. `RGBLed` has neither. The cleanup block in `App.run()` is ad-hoc as a result.
-
-**Fix:** Document (or enforce with an ABC) that all hardware objects implement `start()` and `async stop()`. Add the missing methods to `AudioPlayer` and `RGBLed`. Then the cleanup block becomes:
-```python
-finally:
-    for hw in [self.audio_player, self.dial, self.encoders, self.display]:
-        await hw.stop()
-    GPIO.cleanup()
-```
-
-**Effort:** ~1 hour.
-
----
-
-### Improvement 8: Fix `build_cities_index()` city collision
-
-**Problem:** The docstring for `build_cities_index()` says it supports multiple cities per grid cell, but the code does not — it uses `if city_coords not in cities_index`, silently dropping any second city that maps to the same cell. Cities within ~40 km of each other can collide at 1024-step resolution.
-
-**Fix:** Change the index value from a string to a list:
-```python
-cities_index.setdefault(city_coords, []).append(location)
-```
-Then update `find_all_cities()` in `main.py` (line 139) to flatten the lists it receives.
-
-**Effort:** ~30 minutes including test updates.
-
----
-
-### Improvement 9: Surface the `Coordinate` type consistently
-
-**Problem:** `display.update()` accepts a `Coordinate` object for its first argument, but `main.py` passes bare tuples in two places (lines 258 and 215). A bare tuple `(0, 0)` displays as `"(0, 0)"` on the LCD rather than `"0.00N, 0.00E"` — a visual bug that's easy to miss.
-
-**Fix:** Update those two call sites:
-```python
-# line 258
-self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
-# line 215
-self.display.update(Coordinate(0, 0), "Shutdown", 0, "", False)
-```
-Add a type hint to `display.update()` to prevent recurrence.
+Import it in `main.py` and use it in both methods.
 
 **Effort:** 10 minutes.
 
 ---
 
-### Improvement 10: Introduce an `AppState` dataclass
+### Improvement E: `VOLUME_INCREMENT` constant is dead
 
-**Problem:** `App` carries ~8 closely related mutable attributes (`stations`, `station`, `station_idx`, `cities`, `city`, `city_idx`, `jog_idx`, `mode`) that are always modified together. `save_state()` and `load_state()` reference them via fragile string keys in a raw dict.
+**Problem:** `VOLUME_INCREMENT = 1` is defined in `radio_config.py` but never imported or used. `main.py` hardcodes `10` for the volume step in `_handle_short_top` and `_handle_short_bottom`.
 
-**Fix:** Define a dataclass:
-```python
-@dataclass
-class AppState:
-    stations: list = field(default_factory=list)
-    station: tuple = None
-    station_idx: int = 0
-    cities: list = field(default_factory=list)
-    city: str = None
-    city_idx: int = 0
-    jog_idx: int = 0
-    mode: str = "station"
-```
-Use `dataclasses.asdict()` for serialisation. Store as `self.state` on `App`. This makes the state boundary explicit and the serialisation type-safe.
+**Fix:** Either remove the constant, or rename it `VOLUME_STEP = 10` and use it in the two handlers.
 
-**Effort:** ~1–2 hours.
+**Effort:** 5 minutes.
 
 ---
 
-### Improvement 11: Separate integration test scripts
+### Improvement F: `AppState` `None` defaults on non-Optional fields
 
-**Problem:** `tests/` contains a mix of proper unit tests and hardware scripts. Running `pytest tests/` on a development machine fails on the hardware scripts. There's no test configuration to separate them.
+**Problem:** `station: tuple = None` and `city: str = None` in `AppState` are type errors — Pyright flags them. The fields are genuinely `None` before the first city is latched, but the type annotations don't say so.
 
-**Fix:** Move hardware scripts to `tests/integration/`. Add to `pyproject.toml`:
-```toml
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-ignore = ["tests/integration"]
+**Fix:** Annotate correctly:
+```python
+from typing import Optional
+station: Optional[tuple] = None
+city: Optional[str] = None
 ```
-CI (if added) can then run only the unit tests.
+This also makes the "may be None before first latch" semantics explicit to any caller.
 
-**Effort:** ~30 minutes.
+**Effort:** 5 minutes.
 
 ---
 
-### Improvement 12: Add dead-stream detection
+### Improvement G: Display `_display_loop` failure is silent
 
-**Problem:** If a station URL is offline or unreachable, VLC starts, encounters an error, and the app produces silence. There is no feedback to the user and no recovery attempt.
+**Problem:** If `lcd.printline()` raises an I2C exception (hardware glitch, loose cable), the `_display_loop` asyncio Task terminates with an unhandled exception. All subsequent `update()` calls set the buffer and fire the event, but nothing writes to the LCD — the display silently freezes with no indication in the log at the default level.
 
-**Fix:** Fire a background task after `audio_player.play()` that polls `player.get_state()` after a 3-second delay:
+**Fix:** Wrap the write loop in `try/except` in `_display_loop`:
 ```python
-async def _check_stream():
-    await asyncio.sleep(3)
-    if self.audio_player.player.get_state() == vlc.State.Error:
-        asyncio.create_task(led_task(led, led_running, "red", 0.5))
-        self.display.update(coords, self.city, 0, "Stream error", False)
+try:
+    for line_num in range(DISPLAY_ROWS):
+        self.lcd.printline(line_num, self.buffer[line_num])
+except Exception as e:
+    logging.error(f"Display write failed: {e}")
 ```
+This keeps the loop alive and makes failures visible in `journalctl`.
 
-**Effort:** ~2 hours including hardware testing.
+**Effort:** 15 minutes.
 
 ---
 
