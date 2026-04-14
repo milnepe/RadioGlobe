@@ -202,12 +202,14 @@ class App:
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
         self.encoders.zero()
+        self.encoders.reset_latch()
         logging.debug(
             f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
         self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
         await asyncio.sleep(0.5)
+        self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
 
     async def _handle_long_mid(self):
         logging.debug("🔴 Shutdown initiated! Powering off...")

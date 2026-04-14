@@ -27,6 +27,10 @@ class PositionalEncoders:
         self.longitude_offset = (ENCODER_RESOLUTION // 2) - self.longitude
         return [self.latitude_offset, self.longitude_offset]
 
+    def reset_latch(self):
+        """Unlock the stickiness so the main loop can re-latch to a new position."""
+        self.latch_stickiness = None
+
     def get_readings(self) -> tuple:
         return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, (
             self.longitude + self.longitude_offset
