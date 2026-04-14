@@ -130,7 +130,7 @@ class App:
         lon = self.stations_info[city]["coords"]["e"]
         return Coordinate(lat, lon)
 
-    async def _find_all_cities(self, coords, cities):
+    def _find_all_cities(self, coords, cities):
         """Return all cities whose grid coordinates appear in coords."""
         return [city for coord in coords if coord in cities for city in cities[coord]]
 
@@ -279,7 +279,7 @@ class App:
                 coords = self.encoders.get_readings()
                 # The size of the look-around zone is determined by FUZZINESS
                 zone = look_around(coords, FUZZINESS)
-                self.state.cities = await self._find_all_cities(zone, self.cities_info)
+                self.state.cities = self._find_all_cities(zone, self.cities_info)
 
                 if not self.encoders.is_latched() and self.state.cities:
                     logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
