@@ -85,7 +85,7 @@ if __name__ == "__main__":
     /opt/radioglobe/venv/bin/python radioglobe/streaming/python_vlc_streaming.py stations/london-stations-test.json
     """
     import sys
-    import files
+    import tests.integration.streaming.files as files
 
     format = "%(asctime)s: %(message)s"
     logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
