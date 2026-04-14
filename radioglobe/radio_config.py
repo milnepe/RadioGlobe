@@ -24,3 +24,17 @@ STICKINESS = 10
 
 # Edit these to suit your audio settings
 VOLUME_INCREMENT = 1
+
+# GPIO pin assignments (BCM numbering)
+PIN_DIAL_CLOCK = 17
+PIN_DIAL_DIR   = 18
+PIN_BTN_JOG    = 27
+PIN_BTN_TOP    = 5
+PIN_BTN_MID    = 6
+PIN_BTN_BOTTOM = 12
+PIN_LED_R      = 22
+PIN_LED_G      = 23
+PIN_LED_B      = 24
+
+# I2C
+I2C_LCD_ADDR   = 0x27

@@ -5,6 +5,8 @@ import logging
 
 import RPi.GPIO as GPIO  # type: ignore
 
+from radio_config import PIN_BTN_JOG
+
 
 class AsyncButton:
     def __init__(self, name, gpio_pin, loop, long_press_threshold=1.0, press_cb=None):
@@ -133,7 +135,7 @@ async def main():
     loop = asyncio.get_running_loop()
 
     button_definitions = [
-        ("Jog", 27, handle_short_jog, handle_long_jog),
+        ("Jog", PIN_BTN_JOG, handle_short_jog, handle_long_jog),
         ("Shutdown", 26, handle_short_shutdown, handle_long_shutdown),
     ]
 

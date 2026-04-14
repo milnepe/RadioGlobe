@@ -419,12 +419,12 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 
 | Parameter | `radio_config.py` value | Actual value used | Notes |
 |---|---|---|---|
-| `FUZZINESS` | 3 | 3 (local in `main.py` line 125) | Same value but the import is ignored |
-| `STICKINESS` | 3 | **10** (local in `main.py` line 124) | **Config is wrong — code uses 10** |
-| `ENCODER_RESOLUTION` | 1024 | 1024, but defined locally in `database.py` (line 7) and `positional_encoders.py` (line 4) | The `radio_config` import is commented out in `database.py` |
+| `FUZZINESS` | 3 | Imported in `main.py` | ✓ Fixed |
+| `STICKINESS` | 10 | Imported in `main.py` | ✓ Fixed |
+| `ENCODER_RESOLUTION` | 1024 | Imported in `database.py` and `positional_encoders.py` | ✓ Fixed |
 | `VOLUME_INCREMENT` | 1 | Not used — `main.py` hardcodes delta of 10 | Dead constant |
-| GPIO pin numbers | Not present | Hardcoded in each hardware module | Not centralised |
-| I2C address | Not present | Hardcoded as `0x27` in `display.py` | Not centralised |
+| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Imported in each hardware module | ✓ Fixed |
+| I2C address | `I2C_LCD_ADDR = 0x27` | Imported in `display.py` | ✓ Fixed |
 
 The intended fix is straightforward: see [Improvement 1](#improvement-1-centralise-encoder_resolution-and-use-radio_configpy) and [Improvement 2](#improvement-2-fix-the-stickiness-inconsistency).
 
@@ -493,24 +493,7 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ### Improvement 5: Centralise GPIO pin constants
 
-**Problem:** GPIO pins are hardcoded in each hardware module. If you need to know which pin does what, you read four files. Rewiring the hardware (common in maker projects) requires changes scattered across the codebase.
-
-**Fix:** Add pin constants to `radio_config.py`:
-```python
-PIN_DIAL_CLOCK = 17
-PIN_DIAL_DIR   = 18
-PIN_BTN_JOG    = 27
-PIN_BTN_TOP    = 5
-PIN_BTN_MID    = 6
-PIN_BTN_BOTTOM = 12
-PIN_LED_R      = 22
-PIN_LED_G      = 23
-PIN_LED_B      = 24
-I2C_LCD_ADDR   = 0x27
-```
-Import these in the respective hardware modules.
-
-**Effort:** ~45 minutes.
+**Done.** All GPIO pins and the I2C address are now defined in `radio_config.py` and imported in `dial.py`, `rgb_led.py`, `display.py`, `buttons.py`, and `main.py`.
 
 ---
 

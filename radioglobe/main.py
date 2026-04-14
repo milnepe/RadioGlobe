@@ -22,7 +22,7 @@ from buttons import AsyncButtonManager
 
 from coordinates import Coordinate
 from display import Display
-from radio_config import FUZZINESS, STICKINESS
+from radio_config import FUZZINESS, STICKINESS, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
 
 
 class App:
@@ -214,10 +214,10 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ("Jog", 27, handle_short_jog, None, on_jog_press),
-            ("Top", 5, handle_short_top, handle_long_top, on_sound_press),
-            ("Mid", 6, handle_short_mid, handle_long_mid, on_mid_press),
-            ("Bottom", 12, handle_short_bottom, handle_long_bottom, on_sound_press),
+            ("Jog",    PIN_BTN_JOG,    handle_short_jog,    None,             on_jog_press),
+            ("Top",    PIN_BTN_TOP,    handle_short_top,    handle_long_top,  on_sound_press),
+            ("Mid",    PIN_BTN_MID,    handle_short_mid,    handle_long_mid,  on_mid_press),
+            ("Bottom", PIN_BTN_BOTTOM, handle_short_bottom, handle_long_bottom, on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)

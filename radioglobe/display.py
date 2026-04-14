@@ -2,8 +2,7 @@ import asyncio
 import logging
 import liquidcrystal_i2c  # type: ignore
 from coordinates import Coordinate
-
-DISPLAY_I2C_ADDRESS = 0x27
+from radio_config import I2C_LCD_ADDR
 DISPLAY_I2C_PORT = 1
 DISPLAY_COLUMNS = 20
 DISPLAY_ROWS = 4
@@ -16,7 +15,7 @@ DISPLAY_ROWS = 4
 class Display:
     def __init__(self):
         self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(
-            DISPLAY_I2C_ADDRESS, DISPLAY_I2C_PORT, numlines=DISPLAY_ROWS
+            I2C_LCD_ADDR, DISPLAY_I2C_PORT, numlines=DISPLAY_ROWS
         )
         self.buffer = ["" for _ in range(DISPLAY_ROWS)]
         self.changed = asyncio.Event()

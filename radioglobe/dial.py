@@ -3,8 +3,7 @@ import logging
 
 import RPi.GPIO as GPIO  # type: ignore
 
-PIN17 = 17
-PIN18 = 18
+from radio_config import PIN_DIAL_CLOCK, PIN_DIAL_DIR
 
 
 class AsyncDial:
@@ -13,7 +12,7 @@ class AsyncDial:
         self._stop_event = asyncio.Event()
         self._task = None
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup([PIN17, PIN18], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup([PIN_DIAL_CLOCK, PIN_DIAL_DIR], GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     def get_direction(self):
         return_val = self.direction
@@ -26,11 +25,11 @@ class AsyncDial:
 
     async def run_encoder(self):
         while not self._stop_event.is_set():
-            await self._wait_for_edge(PIN17, GPIO.FALLING)
+            await self._wait_for_edge(PIN_DIAL_CLOCK, GPIO.FALLING)
             if self._stop_event.is_set():
                 break
 
-            new_direction = GPIO.input(PIN18)
+            new_direction = GPIO.input(PIN_DIAL_DIR)
             if not new_direction:
                 new_direction = -1
                 # new_direction = 1

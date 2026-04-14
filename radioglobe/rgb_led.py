@@ -3,6 +3,8 @@ import random
 import logging
 import RPi.GPIO as GPIO  # type: ignore
 
+from radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
+
 
 class RGBLed:
     COLOURS = {
@@ -13,7 +15,7 @@ class RGBLed:
         "off": (0, 0, 0),
     }
 
-    def __init__(self, red_pin=22, green_pin=23, blue_pin=24):
+    def __init__(self, red_pin=PIN_LED_R, green_pin=PIN_LED_G, blue_pin=PIN_LED_B):
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
         GPIO.setmode(GPIO.BCM)
         for pin in self.pins.values():
