@@ -6,9 +6,10 @@ class AudioPlayer:
     def __init__(self):
         self.instance = vlc.Instance(
             "--input-repeat=-1",
-            "--pulse-latency-msec=300",  # larger PulseAudio buffer prevents overflow/flush
-            "--network-caching=2000",    # 2 s network buffer absorbs stream jitter
+            "--network-caching=2000",  # 2 s network buffer absorbs stream jitter
         )
+        if self.instance is None:
+            raise RuntimeError("VLC failed to initialise — check VLC installation and options")
         self.player = self.instance.media_player_new()
         self.current_url = None
 

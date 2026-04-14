@@ -6,6 +6,7 @@ After=pulseaudio.service
 Type=simple
 WorkingDirectory=__RADIOGLOBE_DIR__
 Environment=RADIOGLOBE_VERSION=__VERSION__
+Environment=PULSE_LATENCY_MSEC=300
 ExecStart=/bin/bash -c 'echo "RadioGlobe $RADIOGLOBE_VERSION"; exec __RADIOGLOBE_DIR__/venv/bin/python main.py'
 Restart=always
 
