@@ -1,8 +1,20 @@
+"""
+LED hardware test — cycles through RED, GREEN, BLUE then blinks concurrently with async tasks.
+NOTE: Requires Raspberry Pi hardware.
+
+Usage:
+    python tests/integration/led_test.py
+"""
+
 import asyncio
 import time
-from radioglobe.rgb_led import RGB_LED
+import pytest
 
-# background coroutine task
+pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+
+from radioglobe.rgb_led import RGBLed, led_task
+
+
 async def scheduler():
     while True:
         start_t = time.monotonic()
@@ -10,28 +22,16 @@ async def scheduler():
         print(f"Scheduler task ran for {time.monotonic() - start_t:.1f}")
 
 
-async def led_init():
+async def led_cycle(led: RGBLed):
+    """Cycle through RED, GREEN, BLUE then off."""
     print("Testing LEDs...")
-    led = RGB_LED()
-    led.set_static("RED")
-    await asyncio.sleep(1)
-    led.set_static("GREEN")
-    await asyncio.sleep(1)
-    led.set_static("BLUE")
-    await asyncio.sleep(1)
-    led.set_static("OFF")
-    return led
+    for colour in ("red", "green", "blue"):
+        led.set_color(colour)
+        await asyncio.sleep(1)
+    led.off()
 
 
-def blink_led(led, colour, duration):
-    print("Led ON")
-    led.set_static(colour)
-    time.sleep(duration)
-    led.set_static("OFF")
-    print("Led OFF")
-
-
-async def first_thing(led):
+async def first_thing():
     print("Starting the first thing...")
     await asyncio.sleep(2)
     print("Finished first thing...")
@@ -43,29 +43,21 @@ async def second_thing():
     print("Finished second thing...")
 
 
-async def blinker(led, colour, duration):
-    blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
-    await blink
-
-
 async def main():
-    # Create led instance
-    led = await led_init()
+    led = RGBLed()
+    led_running = asyncio.Event()
 
-    # Startup scheduler task - runs without blocking
+    await led_cycle(led)
+
     asyncio.create_task(scheduler())
 
-    # Start main loop
     while True:
-        first_task = asyncio.create_task(first_thing(led))
-        # await blinker(led, "RED", 0.5)
-        blink = asyncio.to_thread(blink_led, led, "RED", 0.2)
-        await blink
+        first_task = asyncio.create_task(first_thing())
+        await led_task(led, led_running, "red", 0.2)
         await first_task
 
         second_task = asyncio.create_task(second_thing())
-        blink = asyncio.to_thread(blink_led, led, "BLUE", 0.2)
-        await blink
+        await led_task(led, led_running, "blue", 0.2)
         await second_task
 
 
