@@ -10,7 +10,7 @@ pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
-from radioglobe.rgb_led import led_init, blink_led
+from radioglobe.rgb_led import RGBLed, led_task
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
@@ -38,7 +38,8 @@ async def main():
     POLLING_SEC = 1
     AUDIO_SERVICE = "pulse"
 
-    led = await led_init()
+    led = RGBLed()
+    led_running = asyncio.Event()
 
     print("Starting up encoders...")
     encoders = PositionalEncoders()
@@ -66,8 +67,7 @@ async def main():
         if not encoders.is_latched():
             if city_list:
                 encoders.latch(*readings, STICKINESS)
-                blink = asyncio.to_thread(blink_led, led, "RED", 0.5)
-                await blink
+                await led_task(led, led_running, "red", 0.5)
                 first_city = city_list[0]
                 station_info = database.get_stations_info(first_city, stations)
                 print(f"Found: {city_list[0]} Station: {station_info}")
