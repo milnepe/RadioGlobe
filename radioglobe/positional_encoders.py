@@ -11,6 +11,7 @@ class PositionalEncoders:
         self.longitude = 0
         self.latitude_offset = latitude_offset
         self.longitude_offset = longitude_offset
+        self.updated = asyncio.Event()
 
         # Enable SPI
         self.spi = spidev.SpiDev()
@@ -81,6 +82,7 @@ class PositionalEncoders:
                 if self.latch_stickiness is None:
                     self.latitude = readings[0]
                     self.longitude = readings[1]
+                    self.updated.set()
                 else:
                     lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
                     lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
@@ -90,6 +92,7 @@ class PositionalEncoders:
                         or lon_difference > self.latch_stickiness
                     ):
                         self.latch_stickiness = None
+                        self.updated.set()
                         continue
 
             await asyncio.sleep(0.2)

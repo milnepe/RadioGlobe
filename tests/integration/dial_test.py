@@ -1,5 +1,4 @@
 import asyncio
-import sys
 import pytest
 
 pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
@@ -14,12 +13,10 @@ async def main():
     print("[INFO] Starting dial monitor...")
     try:
         while True:
-            direction = jog.get_direction()
-            if direction != 0:
-                print(
-                    f"[DIRECTION] Detected turn: {'Clockwise' if direction == 1 else 'Counter-clockwise'}"
-                )
-            await asyncio.sleep(0.1)
+            direction = await jog.queue.get()
+            print(
+                f"[DIRECTION] Detected turn: {'Clockwise' if direction == 1 else 'Counter-clockwise'}"
+            )
     except KeyboardInterrupt:
         pass
     finally:

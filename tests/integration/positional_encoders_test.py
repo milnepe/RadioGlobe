@@ -3,7 +3,6 @@ Test reading the encoders as a background task asynchronously
 """
 
 import asyncio
-import time
 import pytest
 
 pytest.importorskip("spidev", reason="Requires SPI hardware")
@@ -25,13 +24,12 @@ async def main():
     # Start continuous reading in background
     ps.start()
 
-    # Display the encoder values periodically
+    # Display the encoder values on each update
     while True:
-        start_t = time.monotonic()
+        await ps.updated.wait()
+        ps.updated.clear()
         readings = ps.get_readings()
-        await asyncio.sleep(2)
-        elapst_t = time.monotonic() - start_t
-        print(f"Coords: {readings} Latched: {ps.is_latched()} t={elapst_t:.1f}")
+        print(f"Coords: {readings} Latched: {ps.is_latched()}")
 
 
 if __name__ == "__main__":

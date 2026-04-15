@@ -7,17 +7,11 @@ from .radio_config import PIN_DIAL_CLOCK, PIN_DIAL_DIR
 
 class AsyncDial:
     def __init__(self):
-        self.direction = 0
+        self.queue: asyncio.Queue[int] = asyncio.Queue()
         self._stop_event = asyncio.Event()
         self._task = None
         GPIO.setmode(GPIO.BCM)
         GPIO.setup([PIN_DIAL_CLOCK, PIN_DIAL_DIR], GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-    def get_direction(self):
-        return_val = self.direction
-        self.direction = 0
-        # change sign
-        return return_val * -1
 
     async def _wait_for_edge(self, pin, edge=GPIO.FALLING):
         return await asyncio.to_thread(GPIO.wait_for_edge, pin, edge)
@@ -31,8 +25,7 @@ class AsyncDial:
             new_direction = GPIO.input(PIN_DIAL_DIR)
             if not new_direction:
                 new_direction = -1
-                # new_direction = 1
-            self.direction = new_direction
+            await self.queue.put(new_direction * -1)
 
             await asyncio.sleep(0.3)  # Debounce
 

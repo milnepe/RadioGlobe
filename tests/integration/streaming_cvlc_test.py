@@ -3,7 +3,6 @@ Test harness for async cvlc streamer
 """
 
 import asyncio
-import time
 import pytest
 
 pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
@@ -14,12 +13,6 @@ from radioglobe.rgb_led import RGBLed, led_task
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
-
-
-async def reader(encoders: PositionalEncoders):
-    print("Starting reader...")
-    while True:
-        await asyncio.sleep(0.2)  # 200 ms
 
 
 async def get_cities(lat, lon, city_map, fuzziness=2) -> list:
@@ -35,7 +28,6 @@ async def main():
     """
     STICKINESS = 2
     FUZZINESS = 5
-    POLLING_SEC = 1
     AUDIO_SERVICE = "pulse"
 
     led = RGBLed()
@@ -53,7 +45,6 @@ async def main():
     cities = database.build_cities_index(stations)
 
     encoders.start()
-    asyncio.create_task(reader(encoders))
 
     city_list = []
     station_info = None
@@ -61,13 +52,14 @@ async def main():
     streamer_task = None
     streamer = None
     while True:
-        start_t = time.monotonic()
+        await encoders.updated.wait()
+        encoders.updated.clear()
         readings = encoders.get_readings()
         city_list = await get_cities(*readings, cities, FUZZINESS)
         if not encoders.is_latched():
             if city_list:
                 encoders.latch(*readings, STICKINESS)
-                await led_task(led, led_running, "red", 0.5)
+                asyncio.create_task(led_task(led, led_running, "red", 0.5))
                 first_city = city_list[0]
                 station_info = database.get_stations_info(first_city, stations)
                 print(f"Found: {city_list[0]} Station: {station_info}")
@@ -78,9 +70,6 @@ async def main():
                     await streamer_task
                 streamer = StreamerCVLC(AUDIO_SERVICE, url)
                 streamer_task = asyncio.create_task(asyncio.to_thread(streamer.play))
-
-        await asyncio.sleep(POLLING_SEC)
-        elapst_t = time.monotonic() - start_t
 
 
 if __name__ == "__main__":

@@ -205,6 +205,66 @@ class App:
         self._stream_task = asyncio.create_task(self._monitor_stream(url))
 
     # ---------------------------------------------------------------------------
+    # Event-driven loops
+    # ---------------------------------------------------------------------------
+
+    async def _encoder_loop(self):
+        """Wake on each encoder update and handle city latching."""
+        while True:
+            await self.encoders.updated.wait()
+            self.encoders.updated.clear()
+
+            coords = self.encoders.get_readings()
+            zone = look_around(coords, FUZZINESS)
+            self.state.cities = self._find_all_cities(zone, self.cities_info)
+
+            if not self.encoders.is_latched() and self.state.cities:
+                logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
+                if not self.led_running.is_set():
+                    asyncio.create_task(led_task(self.led, self.led_running, "green", 0.5))
+
+                self.encoders.latch(*coords, stickiness=STICKINESS)
+                self.state.jog_idx = 0
+                logging.debug(
+                    f"Matching cities: jog:{self.state.jog_idx} "
+                    f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
+                )
+                self.state.city = self.state.cities[0]
+                self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+                self.state.jog_idx = 0
+                self.state.station = self.state.stations[0]
+                logging.info(f"Cities: {self.state.cities}")
+                logging.debug(
+                    f"📻 Tuning to: jog:{self.state.jog_idx} "
+                    f"{self.state.city} {self.state.station}\n{self.state.stations}"
+                )
+                coords = self._get_coords_by_city(self.state.city)
+                self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                self.audio_player.play(self.state.city, self.state.station)
+                self._start_monitor_stream(self.state.station[1])
+
+    async def _dial_loop(self):
+        """Wake on each dial movement and handle station/city navigation."""
+        while True:
+            direction = await self.dial.queue.get()
+            if not self.state.city or not self.state.station:
+                continue
+            asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.1))
+            logging.debug(
+                f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
+            )
+            if self.state.mode == "station":
+                self.next_station(direction)
+            elif self.state.mode == "city":
+                self.next_city(direction)
+                self.state.station = self.state.stations[0]
+
+            coords = self._get_coords_by_city(self.state.city)
+            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+            self.audio_player.play(self.state.city, self.state.station)
+            self._start_monitor_stream(self.state.station[1])
+
+    # ---------------------------------------------------------------------------
     # Button handlers
     # ---------------------------------------------------------------------------
 
@@ -285,6 +345,8 @@ class App:
         await button_manager.start()
         asyncio.create_task(button_manager.handle_events())
 
+        encoder_task = None
+        dial_task = None
         try:
             self.display.message(
                 line_1="Radio Globe",
@@ -323,61 +385,16 @@ class App:
             else:
                 self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
 
-            while True:
-                await asyncio.sleep(0.1)
-
-                coords = self.encoders.get_readings()
-                # The size of the look-around zone is determined by FUZZINESS
-                zone = look_around(coords, FUZZINESS)
-                self.state.cities = self._find_all_cities(zone, self.cities_info)
-
-                if not self.encoders.is_latched() and self.state.cities:
-                    logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
-                    # Flash LED to signal match
-                    if not self.led_running.is_set():
-                        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.5))
-
-                    # Freeze position until reticule moves again
-                    self.encoders.latch(*coords, stickiness=STICKINESS)
-                    self.state.jog_idx = 0
-                    logging.debug(
-                        f"Matching cities: jog:{self.state.jog_idx} "
-                        f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
-                    )
-                    self.state.city = self.state.cities[0]
-                    self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-                    self.state.jog_idx = 0
-                    self.state.station = self.state.stations[0]
-                    logging.info(f"Cities: {self.state.cities}")
-                    logging.debug(
-                        f"📻 Tuning to: jog:{self.state.jog_idx} "
-                        f"{self.state.city} {self.state.station}\n{self.state.stations}"
-                    )
-                    coords = self._get_coords_by_city(self.state.city)
-                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
-                    self.audio_player.play(self.state.city, self.state.station)
-                    self._start_monitor_stream(self.state.station[1])
-
-                # Modal dial: cycles stations (station mode) or cities (city mode)
-                direction = self.dial.get_direction()
-                if direction != 0 and self.state.city and self.state.station:
-                    asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.1))
-                    logging.debug(
-                        f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
-                    )
-                    if self.state.mode == "station":
-                        self.next_station(direction)
-                    elif self.state.mode == "city":
-                        self.next_city(direction)
-                        self.state.station = self.state.stations[0]
-
-                    coords = self._get_coords_by_city(self.state.city)
-                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
-                    self.audio_player.play(self.state.city, self.state.station)
-                    self._start_monitor_stream(self.state.station[1])
+            encoder_task = asyncio.create_task(self._encoder_loop())
+            dial_task = asyncio.create_task(self._dial_loop())
+            await asyncio.gather(encoder_task, dial_task)
 
         except KeyboardInterrupt:
             logging.debug("👋 Exiting on keyboard interrupt...")
+            if encoder_task is not None:
+                encoder_task.cancel()
+            if dial_task is not None:
+                dial_task.cancel()
         finally:
             if self._stream_task and not self._stream_task.done():
                 self._stream_task.cancel()
