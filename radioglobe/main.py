@@ -173,14 +173,28 @@ class App:
         await asyncio.sleep(0.5)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
-    async def _monitor_stream(self, expected_url: str):
-        """After a 3 s grace period, advance through stations on error.
+    def _remove_failed_station(self):
+        """Remove the current station from the session list and advance to the next.
 
-        Tries each station in turn until one plays without error or all have
-        been tried. Exits early if the user selects a different station.
+        The removal is temporary — every city-change code path rebuilds
+        self.state.stations from self.stations_info, restoring all stations.
         """
-        total = len(self.state.stations)
-        for attempt in range(total):
+        if not self.state.station or self.state.station not in self.state.stations:
+            return
+        self.state.stations = [s for s in self.state.stations if s != self.state.station]
+        if not self.state.stations:
+            self.state.station = None
+            return
+        self.state.jog_idx = self.state.jog_idx % len(self.state.stations)
+        self.state.station = self.state.stations[self.state.jog_idx]
+
+    async def _monitor_stream(self, expected_url: str):
+        """After a 3 s grace period, remove failed stations and try the next.
+
+        Loops until a station plays without error, all stations have been
+        removed, or the user selects a different station.
+        """
+        while self.state.stations:
             await asyncio.sleep(3)
 
             # User moved to a different station — stop watching
@@ -190,14 +204,14 @@ class App:
             if not self.audio_player.is_error():
                 return  # playing fine
 
-            if not self.state.city or not self.state.stations:
+            if not self.state.city:
                 return
 
-            logging.debug(f"⚠️ Stream error ({attempt + 1}/{total}): {expected_url}")
+            logging.debug(f"⚠️ Stream error: {expected_url}")
             asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
-            self.next_station(1)
+            self._remove_failed_station()
             if not self.state.station:
-                return
+                break
             coords = self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
