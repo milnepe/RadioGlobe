@@ -34,8 +34,11 @@ async def main(stickiness: int, fuzziness: int, polling_sec: float):
 
     print("Starting up encoders...")
     encoders = PositionalEncoders()
+    encoders.start()
+    await asyncio.sleep(0.5)  # wait for first SPI read before zeroing
     encoders.zero()
-    print(f"Initial index: {encoders.get_readings()}")
+    origin = encoders.get_readings()
+    print(f"Origin index: {origin} (expect (512, 512) at equator/prime meridian)")
 
     print("Loading stations data...")
     stations = database.load_stations(STATIONS_JSON)
@@ -44,7 +47,6 @@ async def main(stickiness: int, fuzziness: int, polling_sec: float):
     cities = database.build_cities_index(stations)
     print(f"Built city map with {len(cities)} entries")
 
-    encoders.start()
     print("Scanning — move the reticule to a city...\n")
 
     while True:
