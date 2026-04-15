@@ -2,11 +2,6 @@
 
 STATIONS_JSON = "stations/stations.json"
 
-DATADIR = "data"
-STATIONS_MAP = "data/map.dat"
-CHECKSUMS_JSON = "data/checksums.json"
-OFFSETS_JSON = "data/offsets.json"
-
 ENCODER_RESOLUTION = 1024
 
 # Higher values of fuzziness increases the search area.

@@ -18,10 +18,6 @@ class PositionalEncoders:
         # Used to safely stop the task
         self._task = None
 
-    @property
-    def has_offsets(self):
-        return self.latitude_offset != 0 or self.longitude_offset != 0
-
     def zero(self):
         self.latitude_offset = (ENCODER_RESOLUTION // 2) - self.latitude
         self.longitude_offset = (ENCODER_RESOLUTION // 2) - self.longitude

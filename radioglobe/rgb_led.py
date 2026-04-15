@@ -37,11 +37,6 @@ class RGBLed:
         """Turn the LED off."""
         self.off()
 
-    def cleanup(self):
-        """Turn the LED off and release GPIO resources (for standalone use)."""
-        self.off()
-        GPIO.cleanup()
-
 
 async def led_task(led: RGBLed, led_running: asyncio.Event, color: str, duration: float):
     if led_running.is_set():

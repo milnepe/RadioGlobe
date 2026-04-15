@@ -48,11 +48,6 @@ class Display:
             self.changed.clear()
             await asyncio.sleep(0.1)
 
-    def clear(self):
-        self.buffer = ["" for _ in range(DISPLAY_ROWS)]
-        self.changed.set()
-        logging.info("Display cleared")
-
     def message(self, line_1="", line_2="", line_3="", line_4=""):
         self.buffer[0] = line_1[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
         self.buffer[1] = line_2[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)

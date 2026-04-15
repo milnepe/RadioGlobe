@@ -95,40 +95,6 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
     return cities
 
 
-def get_station_by_index(stations_list: list, index: int = 0) -> tuple:
-    """
-    Get the station name and url for a given list index
-    """
-    urls = stations_list.get("urls")
-    if not urls:
-        return None  # No stations available
-    first_station = urls[index]
-    return first_station["name"], first_station["url"]
-
-
-def get_first_station(city: str, stations: dict) -> tuple:
-    """
-    Get the first station name and url for a given city,country string
-    """
-    station_info = stations.get(city)
-    if not station_info:
-        return None  # City not found
-    urls = station_info.get("urls")
-    if not urls:
-        return None  # No stations available
-    first_station = urls[0]
-    return first_station["name"], first_station["url"]
-
-
-def get_all_urls(city: str, stations: dict) -> list[str]:
-    urls_list = []
-    for key in stations:
-        if city.lower() == key.lower():
-            urls = stations[key].get("urls", [])
-            urls_list.extend([entry["url"] for entry in urls if "url" in entry])
-    return urls_list
-
-
 def get_stations_info(city, stations) -> list[tuple | None]:
     """
     Return a list of station name, url pairs for a given city,country
