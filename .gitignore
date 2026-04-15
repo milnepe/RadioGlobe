@@ -4,3 +4,7 @@ data
 .DS_Store
 __pycache__
 venv
+.venv
+*.egg-info
+dist/
+build/
