@@ -1,4 +1,14 @@
+"""
+Full stack integration test: encoders -> city lookup -> stream playback.
+NOTE: Start with the reticule set to the origin before running.
+
+Usage:
+    python tests/integration/main_test.py
+    python tests/integration/main_test.py --stickiness 3 --fuzziness 7 --polling-sec 0.5 --audio-service pulse
+"""
+
 import asyncio
+import argparse
 import time
 import pytest
 
@@ -24,15 +34,15 @@ async def get_cities(lat, lon, city_map, fuzziness=2) -> list:
     return cities
 
 
-async def main():
+async def main(stickiness: int, fuzziness: int, polling_sec: float, audio_service: str):
     """
     Returns the cities found when the reticule is moved
     NOTE: Start with the reticule set to the origin
     """
-    STICKINESS = 2
-    FUZZINESS = 5
-    POLLING_SEC = 1
-    AUDIO_SERVICE = "pulse"
+    STICKINESS = stickiness
+    FUZZINESS = fuzziness
+    POLLING_SEC = polling_sec
+    AUDIO_SERVICE = audio_service
 
     led = RGBLed()
     led_running = asyncio.Event()
@@ -77,7 +87,14 @@ async def main():
 
         await asyncio.sleep(POLLING_SEC)
         elapst_t = time.monotonic() - start_t
+        print(f"Coords: {readings} Cities: {city_list} Latched: {encoders.is_latched()} t={elapst_t:.1f}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="RadioGlobe main integration test")
+    parser.add_argument("--stickiness", type=int, default=2, help="Latch stickiness (default: 2)")
+    parser.add_argument("--fuzziness", type=int, default=5, help="Search area fuzziness (default: 5)")
+    parser.add_argument("--polling-sec", type=float, default=1.0, help="Poll interval in seconds (default: 1.0)")
+    parser.add_argument("--audio-service", default="pulse", help="Audio service (default: pulse)")
+    args = parser.parse_args()
+    asyncio.run(main(args.stickiness, args.fuzziness, args.polling_sec, args.audio_service))
