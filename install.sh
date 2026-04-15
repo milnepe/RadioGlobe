@@ -57,7 +57,7 @@ sudo -u $RADIOGLOBE_USER \
 # Copy application (SAFE: no delete)
 # -----------------------------
 echo "📂 Copying application..."
-sudo cp -r "$SRC_DIR/radioglobe/"* "$RADIOGLOBE_DIR/"
+sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 
 # Stations + version
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"

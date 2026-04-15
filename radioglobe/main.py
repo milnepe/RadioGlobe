@@ -10,23 +10,23 @@ from dataclasses import dataclass, field
 
 import RPi.GPIO as GPIO  # type: ignore
 
-from audio_async import AudioPlayer
-from dial import AsyncDial
-from positional_encoders import PositionalEncoders
+from radioglobe.audio_async import AudioPlayer
+from radioglobe.dial import AsyncDial
+from radioglobe.positional_encoders import PositionalEncoders
 
-from rgb_led import RGBLed
-from rgb_led import led_task
+from radioglobe.rgb_led import RGBLed
+from radioglobe.rgb_led import led_task
 
-from database import load_stations
-from database import build_cities_index
-from database import look_around
-from database import get_stations_by_city
+from radioglobe.database import load_stations
+from radioglobe.database import build_cities_index
+from radioglobe.database import look_around
+from radioglobe.database import get_stations_by_city
 
-from buttons import AsyncButtonManager
+from radioglobe.buttons import AsyncButtonManager
 
-from coordinates import Coordinate
-from display import Display
-from radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH
+from radioglobe.coordinates import Coordinate
+from radioglobe.display import Display
+from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON
 
 
 @dataclass
@@ -49,7 +49,7 @@ class App:
         self.led = RGBLed()
         self.led_running = asyncio.Event()
         self.state = AppState()
-        self.stations_info = load_stations("stations.json")
+        self.stations_info = load_stations(STATIONS_JSON)
         self.cities_info = build_cities_index(self.stations_info)
         self._stream_task: Optional[asyncio.Task] = None
 

@@ -3,7 +3,7 @@ import logging
 
 import RPi.GPIO as GPIO  # type: ignore
 
-from radioglobe.radio_config import PIN_DIAL_CLOCK, PIN_DIAL_DIR
+from .radio_config import PIN_DIAL_CLOCK, PIN_DIAL_DIR
 
 
 class AsyncDial:

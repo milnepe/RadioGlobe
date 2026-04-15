@@ -1,7 +1,7 @@
 import json
 import logging
 
-from radioglobe.radio_config import ENCODER_RESOLUTION
+from .radio_config import ENCODER_RESOLUTION
 
 
 def load_stations(stations_json: str) -> dict:
