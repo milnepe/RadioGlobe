@@ -6,10 +6,10 @@ ENCODER_RESOLUTION = 1024
 
 # Higher values of fuzziness increases the search area.
 # May include more than one city may be included if they are located close together.
-FUZZINESS = 3
+FUZZINESS = 5
 
 # Affects ability to latch on to cities
-STICKINESS = 10
+STICKINESS = 2
 
 # Edit these to suit your audio settings
 VOLUME_STEP = 10
