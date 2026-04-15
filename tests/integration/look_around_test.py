@@ -35,10 +35,14 @@ async def main(fuzziness: int):
     offsets = database.build_look_around_offsets(fuzziness)
     print(f"Fuzziness: {fuzziness} — {len(offsets)} surrounding coords\n")
 
+    last_coords = None
     while True:
         await encoders.updated.wait()
         encoders.updated.clear()
         coords = encoders.get_readings()
+        if coords == last_coords:
+            continue
+        last_coords = coords
         search_area = database.look_around(coords, offsets)
         print(f"Coords: {coords}  Search area: {search_area}")
 
