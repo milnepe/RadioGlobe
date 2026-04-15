@@ -26,7 +26,7 @@ from radioglobe.buttons import AsyncButtonManager
 
 from radioglobe.coordinates import Coordinate
 from radioglobe.display import Display
-from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON
+from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON, LOG_LEVEL
 
 
 @dataclass
@@ -389,7 +389,7 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s: %(message)s",
         datefmt="%H:%M:%S",
-        level=logging.DEBUG,
+        level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
     )
 
     logging.info("Starting RadioGlobe...")
