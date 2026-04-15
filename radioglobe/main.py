@@ -202,7 +202,7 @@ class App:
                 return
 
             if not self.audio_player.is_error():
-                return  # playing fine
+                continue  # playing fine — keep watching
 
             if not self.state.city:
                 return
