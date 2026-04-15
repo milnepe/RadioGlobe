@@ -108,39 +108,3 @@ class PositionalEncoders:
                 await self._task
             except asyncio.CancelledError:
                 pass
-
-
-async def main():
-    import logging
-
-    encoder_offsets = (0, 0)
-    encoders = PositionalEncoders(encoder_offsets[0], encoder_offsets[1])
-    encoders.start()
-
-    STICKINESS = 10
-
-    try:
-        await asyncio.sleep(0.5)
-        coords_lat, coords_long = encoders.get_readings()
-        logging.debug(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
-
-        encoders.zero()
-        logging.debug(
-            f"Encoder offsets set to: {encoders.latitude_offset}, {encoders.longitude_offset}"
-        )
-
-        while True:
-            await asyncio.sleep(1)
-            coords_lat, coords_long = encoders.get_readings()
-            encoders.latch(coords_lat, coords_long, stickiness=STICKINESS)
-            logging.debug(f"Current Coordinates: Latitude {coords_lat}, Longitude {coords_long}")
-
-    except KeyboardInterrupt:
-        logging.debug("Stopping encoder task...")
-    finally:
-        await encoders.stop()
-        logging.debug("Encoder task stopped.")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

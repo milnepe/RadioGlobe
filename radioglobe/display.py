@@ -84,25 +84,3 @@ class Display:
         # logging.debug(
         #     f"Display updated: coords={coords}, location='{location}', volume={volume}, station='{station}', arrows={arrows}"
         # )
-
-
-async def main():
-    display = Display()
-    display.start()
-
-    bristol = Coordinate(51.45, -2.59)
-    display.update(bristol, "Bristol, United Kingdom", 45, "BBC Radio Bristol", True)
-
-    await asyncio.sleep(5)
-
-    display.update(Coordinate(0, 0), "Clearing in 2s...", 0, "", False)
-    await asyncio.sleep(2)
-
-    display.clear()
-    await asyncio.sleep(1)
-
-    await display.stop()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

@@ -1,11 +1,8 @@
 import asyncio
 import time
 import inspect
-import logging
 
 import RPi.GPIO as GPIO  # type: ignore
-
-from .radio_config import PIN_BTN_JOG
 
 
 class AsyncButton:
@@ -111,48 +108,3 @@ class AsyncButtonManager:
             return self.event_queue.get_nowait()
         except asyncio.QueueEmpty:
             return None
-
-
-async def main():
-    # Async-compatible handlers
-
-    async def handle_short_jog():
-        logging.debug("🚶 Jog button short press: jog step")
-        await asyncio.sleep(0.1)  # simulate async work
-
-    async def handle_long_jog():
-        logging.debug("🏃 Jog button long press: start continuous jog")
-        await asyncio.sleep(0.2)
-
-    async def handle_short_shutdown():
-        logging.debug("🧯 Shutdown short press: ignored")
-        await asyncio.sleep(0.05)
-
-    async def handle_long_shutdown():
-        logging.debug("🛑 Shutdown long press: shutting down system!")
-
-    await asyncio.sleep(0.5)
-    loop = asyncio.get_running_loop()
-
-    button_definitions = [
-        ("Jog", PIN_BTN_JOG, handle_short_jog, handle_long_jog),
-        ("Shutdown", 26, handle_short_shutdown, handle_long_shutdown),
-    ]
-
-    button_manager = AsyncButtonManager(button_definitions, loop)
-    await button_manager.start()
-    asyncio.create_task(button_manager.handle_events())
-
-    try:
-        while True:
-            # Your normal tasks (dial, encoders, etc)
-            await asyncio.sleep(0.1)
-
-    except KeyboardInterrupt:
-        logging.debug("👋 Exiting...")
-    finally:
-        GPIO.cleanup()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
