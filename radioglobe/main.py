@@ -196,6 +196,8 @@ class App:
             logging.debug(f"⚠️ Stream error ({attempt + 1}/{total}): {expected_url}")
             asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
             self.next_station(1)
+            if not self.state.station:
+                return
             coords = self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
