@@ -55,8 +55,10 @@ async def main(stickiness: int, fuzziness: int, polling_sec: float, audio_servic
 
     print("Loading stations data...")
     stations = database.load_stations(STATIONS_JSON)
+    print(f"Loaded {len(stations)} stations")
     print("Building city map...")
     cities = database.build_cities_index(stations)
+    print(f"Built city map with {len(cities)} entries")
 
     encoders.start()
     asyncio.create_task(reader(encoders))

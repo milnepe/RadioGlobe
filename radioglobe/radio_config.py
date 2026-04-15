@@ -1,6 +1,6 @@
 """Global settings"""
 
-STATIONS_JSON = "stations.json"
+STATIONS_JSON = "stations/stations.json"
 
 DATADIR = "data"
 STATIONS_MAP = "data/map.dat"

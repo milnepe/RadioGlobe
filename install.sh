@@ -60,7 +60,8 @@ echo "📂 Copying application..."
 sudo cp -r "$SRC_DIR/radioglobe/"* "$RADIOGLOBE_DIR/"
 
 # Stations + version
-sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/"
+sudo mkdir -p "$RADIOGLOBE_DIR/stations"
+sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
 sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
@@ -69,9 +70,9 @@ sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 # Clean stations file
 # -----------------------------
 echo "🧹 Cleaning stations..."
-sed -i 's/: NaN/: "No Name"/g' "$RADIOGLOBE_DIR/stations.json"
-sed -i -E 's#("url": *"[^"?]+)\?[^"]*"#\1"#g' "$RADIOGLOBE_DIR/stations.json"
-jq empty "$RADIOGLOBE_DIR/stations.json"
+sed -i 's/: NaN/: "No Name"/g' "$RADIOGLOBE_DIR/stations/stations.json"
+sed -i -E 's#("url": *"[^"?]+)\?[^"]*"#\1"#g' "$RADIOGLOBE_DIR/stations/stations.json"
+jq empty "$RADIOGLOBE_DIR/stations/stations.json"
 
 # -----------------------------
 # Install systemd user service
