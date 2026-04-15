@@ -174,31 +174,34 @@ class App:
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
     async def _monitor_stream(self, expected_url: str):
-        """Monitor a stream for failures until the station changes.
+        """After a 3 s grace period, advance through stations on error.
 
-        Polls every 5 s after an initial 3 s grace period. Shows a red LED
-        flash and 'Stream error' on the display on the first failed poll, then
-        continues watching in case VLC recovers (--input-repeat=-1 retries).
-        Exits silently when the URL changes (user selected a different station).
+        Tries each station in turn until one plays without error or all have
+        been tried. Exits early if the user selects a different station.
         """
-        await asyncio.sleep(3)
-        error_shown = False
-        while self.audio_player.current_url == expected_url:
-            if self.audio_player.is_error():
-                if not error_shown:
-                    logging.debug(f"⚠️ Stream error detected for {expected_url}")
-                    asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
-                    coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-                    self.display.update(coords, self.state.city or "", 0, "Stream error", False)
-                    error_shown = True
-            else:
-                if error_shown:
-                    logging.debug(f"✅ Stream recovered for {expected_url}")
-                    coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-                    station_name = self.state.station[0] if self.state.station else ""
-                    self.display.update(coords, self.state.city or "", 0, station_name, False)
-                    error_shown = False
-            await asyncio.sleep(5)
+        total = len(self.state.stations)
+        for attempt in range(total):
+            await asyncio.sleep(3)
+
+            # User moved to a different station — stop watching
+            if self.audio_player.current_url != expected_url:
+                return
+
+            if not self.audio_player.is_error():
+                return  # playing fine
+
+            if not self.state.city or not self.state.stations:
+                return
+
+            logging.debug(f"⚠️ Stream error ({attempt + 1}/{total}): {expected_url}")
+            asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
+            self.next_station(1)
+            coords = self._get_coords_by_city(self.state.city)
+            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+            self.audio_player.play(self.state.city, self.state.station)
+            expected_url = self.state.station[1]
+
+        logging.debug("⚠️ All stations failed for this city")
 
     def _start_monitor_stream(self, url: str):
         """Cancel any running stream monitor and start a fresh one for url."""
