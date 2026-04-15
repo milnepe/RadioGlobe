@@ -39,33 +39,41 @@ def build_cities_index(stations_data: dict) -> dict:
     return cities_index
 
 
-def look_around(origin: tuple, fuzziness: int) -> list:
-    """Returns a search area list of lat, long pairs arround for the origin coords.
-    Fuzziness increases the area surrounding the origin.
+def build_look_around_offsets(fuzziness: int) -> list[tuple[int, int]]:
+    """Pre-compute the (dx, dy) offsets for a given fuzziness.
+
+    The offset pattern is fixed for a given fuzziness value, so this only
+    needs to be called once at startup. Pass the result to look_around.
 
     For example:
-    fuzziness 2 returns the surrounding 9 locations,
-    fuzziness 3 returns the surrounding 25 locations"""
+    fuzziness 2 returns 9 unique offsets,
+    fuzziness 3 returns 25 unique offsets"""
 
-    search_area = []
+    offsets: list[tuple[int, int]] = []
+    ODD_NUMBERS = [(i * 2 + 1) for i in range(fuzziness)]
+
+    for layer in range(fuzziness):
+        for y in range(ODD_NUMBERS[layer]):
+            for x in range(ODD_NUMBERS[layer]):
+                dx = x - ODD_NUMBERS[layer] // 2
+                dy = y - ODD_NUMBERS[layer] // 2
+                if (dx, dy) not in offsets:
+                    offsets.append((dx, dy))
+
+    logging.info(f"Built look-around offsets: fuzziness={fuzziness}, {len(offsets)} offsets")
+    return offsets
+
+
+def look_around(origin: tuple, offsets: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Returns the search area around origin by applying pre-computed offsets.
+
+    Build offsets once at startup with build_look_around_offsets(fuzziness)."""
+
     latitude, longitude = origin
-
-    # Work out how big the perimeter is for each layer out from the origin
-    ODD_NUMBERS = [((i * 2) + 1) for i in range(0, fuzziness)]
-
-    # With each 'layer' of fuzziness we need a starting point.  70% of people are right-eye dominant and
-    # the globe is likely to be below the user, so go down and left first then scan horizontally, moving up
-    for layer in range(0, fuzziness):
-        for y in range(0, ODD_NUMBERS[layer]):
-            for x in range(0, ODD_NUMBERS[layer]):
-                coord_x = (latitude + x - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
-                coord_y = (longitude + y - (ODD_NUMBERS[layer] // 2)) % ENCODER_RESOLUTION
-                exp_coords = (coord_x, coord_y)
-                if exp_coords not in search_area:
-                    search_area.append(exp_coords)
-
-    # logging.debug(f"Search area: {search_area}")
-    return search_area
+    return [
+        ((latitude + dx) % ENCODER_RESOLUTION, (longitude + dy) % ENCODER_RESOLUTION)
+        for dx, dy in offsets
+    ]
 
 
 def get_stations_by_city(stations: dict, city_country: str) -> list:

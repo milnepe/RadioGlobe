@@ -40,6 +40,7 @@ async def main(stickiness: int, fuzziness: int):
     print("Building city map...")
     city_map = database.build_cities_index(stations)
     print(f"Built city map with {len(city_map)} entries")
+    offsets = database.build_look_around_offsets(fuzziness)
 
     print("Scanning — move the reticule to a city...\n")
 
@@ -47,7 +48,7 @@ async def main(stickiness: int, fuzziness: int):
         await encoders.updated.wait()
         encoders.updated.clear()
         readings = encoders.get_readings()
-        search_area = database.look_around(readings, fuzziness=fuzziness)
+        search_area = database.look_around(readings, offsets)
         city_list = database.get_found_cities(search_area, city_map)
         if not encoders.is_latched() and city_list:
             encoders.latch(*readings, stickiness)

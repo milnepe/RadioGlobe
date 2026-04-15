@@ -19,6 +19,7 @@ from radioglobe.rgb_led import led_task
 
 from radioglobe.database import load_stations
 from radioglobe.database import build_cities_index
+from radioglobe.database import build_look_around_offsets
 from radioglobe.database import look_around
 from radioglobe.database import get_stations_by_city
 
@@ -51,6 +52,7 @@ class App:
         self.state = AppState()
         self.stations_info = load_stations(STATIONS_JSON)
         self.cities_info = build_cities_index(self.stations_info)
+        self.look_around_offsets = build_look_around_offsets(FUZZINESS)
         self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
@@ -215,7 +217,7 @@ class App:
             self.encoders.updated.clear()
 
             coords = self.encoders.get_readings()
-            zone = look_around(coords, FUZZINESS)
+            zone = look_around(coords, self.look_around_offsets)
             self.state.cities = self._find_all_cities(zone, self.cities_info)
 
             if not self.encoders.is_latched() and self.state.cities:

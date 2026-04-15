@@ -15,8 +15,8 @@ from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
 
 
-async def get_cities(lat, lon, city_map, fuzziness=2) -> list:
-    search_area = database.look_around((lat, lon), fuzziness=fuzziness)
+async def get_cities(lat, lon, city_map, offsets) -> list:
+    search_area = database.look_around((lat, lon), offsets)
     cities = database.get_found_cities(search_area, city_map)
     return cities
 
@@ -43,6 +43,7 @@ async def main():
     stations = database.load_stations(STATIONS_JSON)
     print("Building city map...")
     cities = database.build_cities_index(stations)
+    offsets = database.build_look_around_offsets(FUZZINESS)
 
     encoders.start()
 
@@ -55,7 +56,7 @@ async def main():
         await encoders.updated.wait()
         encoders.updated.clear()
         readings = encoders.get_readings()
-        city_list = await get_cities(*readings, cities, FUZZINESS)
+        city_list = await get_cities(*readings, cities, offsets)
         if not encoders.is_latched():
             if city_list:
                 encoders.latch(*readings, STICKINESS)
