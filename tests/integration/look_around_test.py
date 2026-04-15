@@ -1,12 +1,12 @@
 """
 look_around integration test: prints the current encoder position and the
-surrounding search area for each encoder update.
+surrounding search area each time the reticule moves significantly.
 
 NOTE: Set the reticule to the origin (equator / prime meridian) before running.
 
 Usage:
     python tests/integration/look_around_test.py
-    python tests/integration/look_around_test.py --fuzziness 3
+    python tests/integration/look_around_test.py --fuzziness 3 --stickiness 2
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from radioglobe import database
 from radioglobe.positional_encoders import PositionalEncoders
 
 
-async def main(fuzziness: int):
+async def main(fuzziness: int, stickiness: int):
     print("Starting up encoders...")
     encoders = PositionalEncoders()
     encoders.start()
@@ -33,16 +33,17 @@ async def main(fuzziness: int):
     print(f"Origin: {origin} (expect (512, 512) at equator/prime meridian)")
 
     offsets = database.build_look_around_offsets(fuzziness)
-    print(f"Fuzziness: {fuzziness} — {len(offsets)} surrounding coords\n")
+    print(f"Fuzziness: {fuzziness} — {len(offsets)} surrounding coords")
+    print(f"Stickiness: {stickiness} — move >{stickiness} units to trigger update\n")
 
-    last_coords = None
+    # Latch at origin so updated only fires on significant movement
+    encoders.latch(*origin, stickiness)
+
     while True:
         await encoders.updated.wait()
         encoders.updated.clear()
         coords = encoders.get_readings()
-        if coords == last_coords:
-            continue
-        last_coords = coords
+        encoders.latch(*coords, stickiness)
         search_area = database.look_around(coords, offsets)
         print(f"Coords: {coords}  Search area: {search_area}")
 
@@ -50,5 +51,6 @@ async def main(fuzziness: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RadioGlobe look_around diagnostic")
     parser.add_argument("--fuzziness", type=int, default=5, help="Search area fuzziness (default: 5)")
+    parser.add_argument("--stickiness", type=int, default=2, help="Minimum movement to trigger update (default: 2)")
     args = parser.parse_args()
-    asyncio.run(main(args.fuzziness))
+    asyncio.run(main(args.fuzziness, args.stickiness))
