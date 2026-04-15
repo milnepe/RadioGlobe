@@ -15,13 +15,12 @@ import argparse
 import sys
 import time
 import logging
+import pytest
 
-import RPi.GPIO as GPIO  # type: ignore
+GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-sys.path.insert(0, ".")  # allow running from radioglobe/
-
-from buttons import AsyncButtonManager
-from radio_config import PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
+from radioglobe.buttons import AsyncButtonManager
+from radioglobe.radio_config import PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
 
 BUTTONS = {
     "top":    PIN_BTN_TOP,

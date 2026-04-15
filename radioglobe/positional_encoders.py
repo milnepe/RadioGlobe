@@ -1,7 +1,7 @@
 import asyncio
 import spidev  # type: ignore
 
-from radio_config import ENCODER_RESOLUTION
+from radioglobe.radio_config import ENCODER_RESOLUTION
 
 
 class PositionalEncoders:

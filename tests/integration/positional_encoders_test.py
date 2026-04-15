@@ -4,33 +4,26 @@ Test reading the encoders as a background task asynchronously
 
 import asyncio
 import time
-from positional_encoders_async_alt import Positional_Encoders
+import pytest
 
+pytest.importorskip("spidev", reason="Requires SPI hardware")
 
-async def reader(encoders: Positional_Encoders):
-    print("Starting reader...")
-    while True:
-        # Get a new pair of readings
-        encoders.update()
-        # Don't poll too quickly to allow for next reading
-        await asyncio.sleep(0.2)  # 200 ms
+from radioglobe.positional_encoders import PositionalEncoders
 
 
 async def main():
     # Initialise encoders
-    ps = Positional_Encoders()
+    ps = PositionalEncoders()
     # Note the globe should be set to the origin when starting main
     ps.zero()
-    ps.update()
     initial_readings = ps.get_readings()
 
     # Start by setting the latch so we can see when it unlatches
     ps.latch(*initial_readings, 1)
     print(initial_readings)
-    time.sleep(2)
 
-    # Start reading the encoders continuosly in background
-    asyncio.create_task(reader(ps))
+    # Start continuous reading in background
+    ps.start()
 
     # Display the encoder values periodically
     while True:

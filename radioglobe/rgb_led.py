@@ -3,7 +3,7 @@ import random
 import logging
 import RPi.GPIO as GPIO  # type: ignore
 
-from radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
+from radioglobe.radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
 
 
 class RGBLed:

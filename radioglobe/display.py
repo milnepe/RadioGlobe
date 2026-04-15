@@ -2,7 +2,7 @@ import asyncio
 import logging
 import liquidcrystal_i2c  # type: ignore
 from coordinates import Coordinate
-from radio_config import I2C_LCD_ADDR
+from radioglobe.radio_config import I2C_LCD_ADDR
 DISPLAY_I2C_PORT = 1
 DISPLAY_COLUMNS = 20
 DISPLAY_ROWS = 4

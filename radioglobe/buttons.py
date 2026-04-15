@@ -5,7 +5,7 @@ import logging
 
 import RPi.GPIO as GPIO  # type: ignore
 
-from radio_config import PIN_BTN_JOG
+from radioglobe.radio_config import PIN_BTN_JOG
 
 
 class AsyncButton:

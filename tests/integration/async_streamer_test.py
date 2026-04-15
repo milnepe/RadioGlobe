@@ -1,4 +1,7 @@
 import asyncio
+import pytest
+
+pytest.importorskip("aiohttp", reason="Requires aiohttp")
 from streaming.async_streamer import AsyncStationPlayer
 
 
@@ -33,4 +36,5 @@ async def main():
         await player.close()
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

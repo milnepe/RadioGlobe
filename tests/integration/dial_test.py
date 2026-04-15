@@ -1,34 +1,31 @@
-import time
-import signal
+import asyncio
 import sys
+import pytest
 
-from dial_new import Dial
+pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-# Instantiate the Dial thread
-jog = Dial(threadID=1, name="TestDial")
+from radioglobe.dial import AsyncDial
 
 
-def signal_handler(sig, frame):
-    print("\n[INFO] Stopping Dial thread and cleaning up GPIO.")
+async def main():
+    jog = AsyncDial()
+    jog.start()
+
+    print("[INFO] Starting dial monitor...")
     try:
-        del dial
-    except NameError:
+        while True:
+            direction = jog.get_direction()
+            if direction != 0:
+                print(
+                    f"[DIRECTION] Detected turn: {'Clockwise' if direction == 1 else 'Counter-clockwise'}"
+                )
+            await asyncio.sleep(0.1)
+    except KeyboardInterrupt:
         pass
-    sys.exit(0)
+    finally:
+        await jog.stop()
+        print("[INFO] Stopped.")
 
 
-signal.signal(signal.SIGINT, signal_handler)
-
-print("[INFO] Starting Dial thread...")
-jog.start()
-
-try:
-    while True:
-        direction = jog.get_direction()
-        if direction != 0:
-            print(
-                f"[DIRECTION] Detected turn: {'Counter-clockwise' if direction == 1 else 'Clockwise'}"
-            )
-        time.sleep(1)
-except KeyboardInterrupt:
-    signal_handler(None, None)
+if __name__ == "__main__":
+    asyncio.run(main())
