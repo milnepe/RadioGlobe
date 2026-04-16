@@ -36,7 +36,6 @@ class AppState:
     station: Optional[tuple] = None
     cities: list = field(default_factory=list)
     city: Optional[str] = None
-    coords: Optional[Coordinate] = None
     jog_idx: int = 0
     mode: str = "station"
 
@@ -55,6 +54,7 @@ class App:
         self.cities_info = build_cities_index(self.stations_info)
         self.look_around_offsets = build_look_around_offsets(FUZZINESS)
         self._stream_task: Optional[asyncio.Task] = None
+        self._current_coords: Optional[Coordinate] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
@@ -96,7 +96,7 @@ class App:
         # Re-query stations from the live database so stale snapshots in the
         # cache never cause wrong URLs or indices after a stations.json update.
         if self.state.city:
-            self.state.coords = self._get_coords_by_city(self.state.city)
+            self._current_coords = self._get_coords_by_city(self.state.city)
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
             match = next(
@@ -127,7 +127,7 @@ class App:
             return
         self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
         self.state.city = self.state.cities[self.state.jog_idx]
-        self.state.coords = self._get_coords_by_city(self.state.city)
+        self._current_coords = self._get_coords_by_city(self.state.city)
         self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
         logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city} {self.state.stations}")
 
@@ -154,9 +154,9 @@ class App:
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
-        coords = self.state.coords
-        if not self.state.city or not self.state.station or coords is None:
+        if not self.state.city or not self.state.station:
             return
+        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume(delta)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
@@ -164,9 +164,9 @@ class App:
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
-        coords = self.state.coords
-        if not self.state.city or not self.state.station or coords is None:
+        if not self.state.city or not self.state.station:
             return
+        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume_level(level)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
@@ -203,8 +203,7 @@ class App:
             if not self.audio_player.is_error():
                 continue  # playing fine — keep watching
 
-            coords = self.state.coords
-            if not self.state.city or coords is None:
+            if not self.state.city:
                 return
 
             logging.debug(f"⚠️ Stream error: {expected_url}")
@@ -212,6 +211,7 @@ class App:
             self._remove_failed_station()
             if not self.state.station:
                 break
+            coords = self._current_coords or self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
             expected_url = self.state.station[1]
@@ -249,7 +249,7 @@ class App:
                     f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
                 )
                 self.state.city = self.state.cities[0]
-                self.state.coords = self._get_coords_by_city(self.state.city)
+                self._current_coords = self._get_coords_by_city(self.state.city)
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
                 self.state.station = self.state.stations[0]
                 logging.info(f"Cities: {self.state.cities}")
@@ -257,7 +257,7 @@ class App:
                     f"📻 Tuning to: jog:{self.state.jog_idx} "
                     f"{self.state.city} {self.state.station}\n{self.state.stations}"
                 )
-                self.display.update(self.state.coords, self.state.city, 0, self.state.station[0], False)
+                self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
                 self._start_monitor_stream(self.state.station[1])
 
@@ -277,9 +277,7 @@ class App:
                 self.next_city(direction)
                 self.state.station = self.state.stations[0]
 
-            coords = self.state.coords
-            if coords is None:
-                continue
+            coords = self._current_coords or self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
             self._start_monitor_stream(self.state.station[1])
@@ -394,8 +392,8 @@ class App:
                     self.encoders.reset_latch()
                     self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
                 else:
-                    self.state.coords = self._get_coords_by_city(self.state.city)
-                    self.display.update(self.state.coords, self.state.city, 0, self.state.station[0], False)
+                    self._current_coords = self._get_coords_by_city(self.state.city)
+                    self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
                     self._start_monitor_stream(self.state.station[1])
                     logging.debug(
