@@ -20,7 +20,7 @@ from radioglobe.rgb_led import led_task
 from radioglobe.database import load_stations
 from radioglobe.database import build_cities_index
 from radioglobe.database import build_look_around_offsets
-from radioglobe.database import look_around
+from radioglobe.database import find_cities_near
 from radioglobe.database import get_stations_by_city
 
 from radioglobe.buttons import AsyncButtonManager
@@ -149,10 +149,6 @@ class App:
             return Coordinate(0, 0)
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
-    def _find_all_cities(self, coords, cities):
-        """Return all cities whose grid coordinates appear in coords."""
-        return [city for coord in coords if coord in cities for city in cities[coord]]
-
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
         if not self.state.city or not self.state.station:
@@ -236,8 +232,7 @@ class App:
             self.encoders.updated.clear()
 
             coords = self.encoders.get_readings()
-            zone = look_around(coords, self.look_around_offsets)
-            self.state.cities = self._find_all_cities(zone, self.cities_info)
+            self.state.cities = find_cities_near(coords, self.look_around_offsets, self.cities_info)
 
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
