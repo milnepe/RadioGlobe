@@ -252,7 +252,6 @@ class App:
                 )
                 self.state.city = self.state.cities[0]
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-                self.state.jog_idx = 0
                 self.state.station = self.state.stations[0]
                 logging.info(f"Cities: {self.state.cities}")
                 logging.debug(
