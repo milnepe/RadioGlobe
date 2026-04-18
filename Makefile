@@ -56,6 +56,12 @@ deploy: build
 		./ $(REMOTE):$(REMOTE_DIR)/
 
 # -----------------------------
+# Update on device
+# -----------------------------
+update:
+	ssh $(REMOTE) "cd $(REMOTE_DIR) && ./update.sh"
+
+# -----------------------------
 # Install on device
 # -----------------------------
 install:
@@ -68,5 +74,15 @@ release: bump-patch deploy install
 	@git push
 	@git push --tags
 
+# -----------------------------
+# Remove version file
+# -----------------------------
 clean:
 	rm -f VERSION
+
+# -----------------------------
+# Check version on device
+# -----------------------------
+device-version:
+	@echo "Device version:"
+	@ssh $(REMOTE) "cd $(REMOTE_DIR) && cat VERSION"
