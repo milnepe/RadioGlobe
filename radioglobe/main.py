@@ -131,7 +131,18 @@ class App:
     def switch_mode(self):
         """Toggle between application modes."""
         self.state.mode = "city" if self.state.mode == "station" else "station"
-        self.state.jog_idx = 0
+        if self.state.mode == "city":
+            self.state.jog_idx = (
+                self.state.cities.index(self.state.city)
+                if self.state.city in self.state.cities
+                else 0
+            )
+        else:
+            self.state.jog_idx = (
+                self.state.stations.index(self.state.station)
+                if self.state.station in self.state.stations
+                else 0
+            )
         logging.debug(
             f"🌀 Mode switched to: {self.state.mode} jog:{self.state.jog_idx} "
             f"{self.state.city} {self.state.station}"
@@ -317,16 +328,20 @@ class App:
             f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
-        self.display.update(Coordinate(0, 0), "Calibrated", 0, "", False)
-        await asyncio.sleep(0.5)
-        self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
+        self.display.update(Coordinate(0, 0), "Calibrating", 0, "", False)
+        await asyncio.sleep(2)
+        self.display.update(Coordinate(0, 0), "CALIBRATED", 0, "", False)
 
     async def _handle_long_mid(self):
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
-        self.display.update(Coordinate(0, 0), "Shutdown", 0, "", False)
+        coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
+        self.display.update(coords, "Shutdown", 0, "", False)
         await asyncio.sleep(2)
+        if self.state.city and self.state.station:
+            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        await asyncio.sleep(0.5)
         subprocess.run(["sudo", "poweroff"])
 
     # ---------------------------------------------------------------------------

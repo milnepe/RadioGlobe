@@ -6,7 +6,7 @@ ENCODER_RESOLUTION = 1024
 
 # Higher values of fuzziness increases the search area.
 # May include more than one city may be included if they are located close together.
-FUZZINESS = 5
+FUZZINESS = 3
 
 # Affects ability to latch on to cities
 STICKINESS = 2
@@ -32,4 +32,4 @@ I2C_LCD_ADDR   = 0x27
 STATE_CACHE_PATH = "~/cache/radioglobe.json"
 
 # Logging
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "DEBUG"
