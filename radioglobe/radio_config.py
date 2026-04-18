@@ -32,4 +32,4 @@ I2C_LCD_ADDR   = 0x27
 STATE_CACHE_PATH = "~/cache/radioglobe.json"
 
 # Logging
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "DEBUG"
