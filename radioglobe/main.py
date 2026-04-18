@@ -325,8 +325,12 @@ class App:
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
-        self.display.update(Coordinate(0, 0), "Shutdown", 0, "", False)
+        coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
+        self.display.update(coords, "Shutdown", 0, "", False)
         await asyncio.sleep(2)
+        if self.state.city and self.state.station:
+            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        await asyncio.sleep(0.5)
         subprocess.run(["sudo", "poweroff"])
 
     # ---------------------------------------------------------------------------
