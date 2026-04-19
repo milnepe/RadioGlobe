@@ -76,6 +76,25 @@ def look_around(origin: tuple, offsets: list[tuple[int, int]]) -> list[tuple[int
     ]
 
 
+def find_cities_near(origin: tuple, offsets: list[tuple[int, int]], cities_index: dict) -> list:
+    """Return all cities within the search area around origin, ordered closest-first.
+
+    Combines look_around and city index lookup into a single pass, avoiding the
+    intermediate list of grid coordinates. Proximity order is preserved because
+    offsets are built innermost-first by build_look_around_offsets."""
+    lat, lon = origin
+    seen: set = set()
+    cities = []
+    for dx, dy in offsets:
+        coord = ((lat + dx) % ENCODER_RESOLUTION, (lon + dy) % ENCODER_RESOLUTION)
+        if coord in cities_index:
+            for city in cities_index[coord]:
+                if city not in seen:
+                    seen.add(city)
+                    cities.append(city)
+    return cities
+
+
 def get_stations_by_city(stations: dict, city_country: str) -> list:
     """Return all the stations for the given city"""
     station_info = stations.get(city_country)
