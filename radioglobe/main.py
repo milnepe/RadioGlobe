@@ -20,7 +20,7 @@ from radioglobe.rgb_led import led_task
 from radioglobe.database import load_stations
 from radioglobe.database import build_cities_index
 from radioglobe.database import build_look_around_offsets
-from radioglobe.database import look_around
+from radioglobe.database import find_cities_near
 from radioglobe.database import get_stations_by_city
 
 from radioglobe.buttons import AsyncButtonManager
@@ -54,6 +54,7 @@ class App:
         self.cities_info = build_cities_index(self.stations_info)
         self.look_around_offsets = build_look_around_offsets(FUZZINESS)
         self._stream_task: Optional[asyncio.Task] = None
+        self._current_coords: Optional[Coordinate] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
@@ -95,6 +96,7 @@ class App:
         # Re-query stations from the live database so stale snapshots in the
         # cache never cause wrong URLs or indices after a stations.json update.
         if self.state.city:
+            self._current_coords = self._get_coords_by_city(self.state.city)
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
             match = next(
@@ -125,6 +127,7 @@ class App:
             return
         self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
         self.state.city = self.state.cities[self.state.jog_idx]
+        self._current_coords = self._get_coords_by_city(self.state.city)
         self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
         logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city} {self.state.stations}")
 
@@ -160,16 +163,12 @@ class App:
             return Coordinate(0, 0)
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
-    def _find_all_cities(self, coords, cities):
-        """Return all cities whose grid coordinates appear in coords."""
-        return [city for coord in coords if coord in cities for city in cities[coord]]
-
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
         if not self.state.city or not self.state.station:
             return
+        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume(delta)
-        coords = self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
@@ -178,20 +177,34 @@ class App:
         """Set volume to an absolute level and briefly show it on the display."""
         if not self.state.city or not self.state.station:
             return
+        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume_level(level)
-        coords = self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
-    async def _monitor_stream(self, expected_url: str):
-        """After a 3 s grace period, advance through stations on error.
+    def _remove_failed_station(self):
+        """Remove the current station from the session list and advance to the next.
 
-        Tries each station in turn until one plays without error or all have
-        been tried. Exits early if the user selects a different station.
+        The removal is temporary — every city-change code path rebuilds
+        self.state.stations from self.stations_info, restoring all stations.
         """
-        total = len(self.state.stations)
-        for attempt in range(total):
+        if not self.state.station or self.state.station not in self.state.stations:
+            return
+        self.state.stations = [s for s in self.state.stations if s != self.state.station]
+        if not self.state.stations:
+            self.state.station = None
+            return
+        self.state.jog_idx = self.state.jog_idx % len(self.state.stations)
+        self.state.station = self.state.stations[self.state.jog_idx]
+
+    async def _monitor_stream(self, expected_url: str):
+        """After a 3 s grace period, remove failed stations and try the next.
+
+        Loops until a station plays without error, all stations have been
+        removed, or the user selects a different station.
+        """
+        while self.state.stations:
             await asyncio.sleep(3)
 
             # User moved to a different station — stop watching
@@ -201,15 +214,15 @@ class App:
             if not self.audio_player.is_error():
                 return  # playing fine
 
-            if not self.state.city or not self.state.stations:
+            if not self.state.city:
                 return
 
-            logging.debug(f"⚠️ Stream error ({attempt + 1}/{total}): {expected_url}")
+            logging.debug(f"⚠️ Stream error: {expected_url}")
             asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
-            self.next_station(1)
+            self._remove_failed_station()
             if not self.state.station:
-                return
-            coords = self._get_coords_by_city(self.state.city)
+                break
+            coords = self._current_coords or self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
             expected_url = self.state.station[1]
@@ -233,8 +246,7 @@ class App:
             self.encoders.updated.clear()
 
             coords = self.encoders.get_readings()
-            zone = look_around(coords, self.look_around_offsets)
-            self.state.cities = self._find_all_cities(zone, self.cities_info)
+            self.state.cities = find_cities_near(coords, self.look_around_offsets, self.cities_info)
 
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
@@ -248,16 +260,15 @@ class App:
                     f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
                 )
                 self.state.city = self.state.cities[0]
+                self._current_coords = self._get_coords_by_city(self.state.city)
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-                self.state.jog_idx = 0
                 self.state.station = self.state.stations[0]
                 logging.info(f"Cities: {self.state.cities}")
                 logging.debug(
                     f"📻 Tuning to: jog:{self.state.jog_idx} "
                     f"{self.state.city} {self.state.station}\n{self.state.stations}"
                 )
-                coords = self._get_coords_by_city(self.state.city)
-                self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
                 self._start_monitor_stream(self.state.station[1])
 
@@ -277,7 +288,7 @@ class App:
                 self.next_city(direction)
                 self.state.station = self.state.stations[0]
 
-            coords = self._get_coords_by_city(self.state.city)
+            coords = self._current_coords or self._get_coords_by_city(self.state.city)
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
             self.audio_player.play(self.state.city, self.state.station)
             self._start_monitor_stream(self.state.station[1])
@@ -396,8 +407,8 @@ class App:
                     self.encoders.reset_latch()
                     self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
                 else:
-                    coords = self._get_coords_by_city(self.state.city)
-                    self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+                    self._current_coords = self._get_coords_by_city(self.state.city)
+                    self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
                     self.audio_player.play(self.state.city, self.state.station)
                     self._start_monitor_stream(self.state.station[1])
                     logging.debug(

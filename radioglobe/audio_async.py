@@ -43,13 +43,16 @@ class AudioPlayer:
         return level
 
     def is_error(self) -> bool:
-        """Return True if VLC has encountered a stream error.
+        """Return True if the stream is not playing after the grace period.
 
-        A 404 / unreachable URL causes VLC to enter Ended rather than Error,
-        so both states are treated as failures for a live radio stream.
+        VLC enters Error or Ended for a clean failure, but with
+        --input-repeat=-1 a network-unreachable error causes it to cycle
+        through Opening/Buffering indefinitely without ever settling.
+        Treating anything other than Playing or Paused as a failure catches
+        both cases once the caller's grace period has elapsed.
         """
         state = self.player.get_state()
-        return state in (vlc.State.Error, vlc.State.Ended)
+        return state not in (vlc.State.Playing, vlc.State.Paused)
 
     async def stop(self):
         """Stop playback if something is playing."""
