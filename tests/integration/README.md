@@ -2,6 +2,8 @@
 
 Hardware integration tests for RadioGlobe. Each test targets a specific subsystem and must be run directly as a script on the Raspberry Pi. They are excluded from the normal `pytest` run (`norecursedirs = ["integration"]` in `pyproject.toml`) and will skip automatically if the required hardware libraries are not present.
 
+See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
+
 ## Tests
 
 | Script | Hardware required | Purpose |
