@@ -13,6 +13,8 @@ Full details of how to 3D print and build RadioGlobe were published on Instructa
 
 [GitHub development repository](https://github.com/milnepe/RadioGlobe)
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit code changes.
+
 ![RadioGlobe image](/img/radioglobe.webp)
 
 ## Installation
