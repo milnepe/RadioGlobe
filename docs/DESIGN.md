@@ -1,4 +1,6 @@
 #Asyncio design
+See [../CONTRIBUTING.md](../CONTRIBUTING.md) for how to submit changes.
+
 The user is asking about the best way to structure a Python asyncio main function for monitoring hardware events from multiple components (encoders, buttons, display, audio player) and executing different functions based on these events. This implies a need for concurrent event handling and potentially a reactive architecture.
 
 Here's a breakdown of the information needed to formulate a comprehensive answer:
