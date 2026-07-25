@@ -113,7 +113,7 @@ RadioGlobe/
 
 The application is a single-process asyncio program. One event loop runs on the main thread, and all hardware I/O runs as asyncio Tasks or is bridged into the loop from GPIO interrupt threads.
 
-**The central concept is the reticule position.** Every 100ms the main loop reads the encoder position, searches the spatial city index for any city near that position, and if one is found, starts playing its radio stream. The dial and buttons adjust the experience once a city is latched.
+**The central concept is the reticule position.** `PositionalEncoders.run_encoder()` polls SPI every 200ms. While unlatched, every successful reading sets an `asyncio.Event` (`encoders.updated`); the `_encoder_loop()` task wakes on that event, searches the spatial city index for any city near the current position, and if one is found, latches and starts playing its radio stream. Once latched, the event only fires again when the reticule drifts far enough to unlatch. The dial and buttons adjust the experience once a city is latched.
 
 **Two operating modes** are toggled by the jog button:
 - `station` mode — the dial cycles through stations within the current city
@@ -153,26 +153,27 @@ The `streaming/` directory is intentionally omitted — none of its modules are 
 
 ### 4.1 `main.py` — App Controller
 
-The `App` class is the central controller. `__init__` instantiates all hardware objects and loads the station database. `run()` contains the main loop and wires button definitions.
+The `App` class is the central controller. `__init__` instantiates all hardware objects and loads the station database. `run()` wires up button definitions, restores any saved state, and then starts and gathers the `_encoder_loop()` and `_dial_loop()` tasks — these two event-driven loops are the app's actual "main loop."
 
-**State** is held in an `AppState` dataclass (`self.state`) with eight fields. `save_state()` uses `dataclasses.asdict(self.state)` for serialisation; `load_state()` reconstructs `AppState(...)` directly from the JSON. On boot, if a saved state is found, the latch is restored and the last station resumes playing immediately (warm-restart path).
+**State** is held in an `AppState` dataclass (`self.state`) with six fields. `save_state()` uses `dataclasses.asdict(self.state)` for serialisation; `load_state()` reconstructs `AppState(...)` directly from the JSON. On boot, if a saved state is found, the latch is restored and the last station resumes playing immediately (warm-restart path).
 
 **Key methods:**
 
 | Method | Purpose |
 |---|---|
-| `run()` | Main async loop: poll encoders, search cities, drive display and audio |
+| `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
+| `_encoder_loop()` | Wake on `encoders.updated`, search for nearby cities, latch and start playback when one is found |
+| `_dial_loop()` | Wake on `dial.queue`, navigate stations/cities and update playback |
 | `next_station(direction)` | Cycle `jog_idx` within `self.state.stations` |
 | `next_city(direction)` | Cycle `jog_idx` within `self.state.cities`, reload station list |
 | `switch_mode()` | Toggle `self.state.mode` between `"station"` and `"city"` |
 | `save_state()` | Serialise `AppState` + encoder offsets to `~/cache/radioglobe.json` |
 | `load_state()` | Restore state from cache on startup |
 | `_get_coords_by_city(city)` | Look up a `Coordinate` for a city string |
-| `_find_all_cities(coords, cities)` | Return all city names whose grid coords appear in `coords` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
-| `_monitor_stream(expected_url)` | Poll VLC state every 5 s; flash LED red and show "Stream error" on first failure; clear on recovery; exits when URL changes |
+| `_monitor_stream(expected_url)` | Check VLC state every 3 s; on failure, flash LED red, drop the failed station (`_remove_failed_station()`), and play the next; exits once a station plays cleanly, all stations are exhausted, or the user switches away |
 | `_handle_short_jog` / `_handle_long_jog` | Jog button handlers |
 | `_handle_short_top` / `_handle_long_top` | Top button handlers |
 | `_handle_short_mid` / `_handle_long_mid` | Mid button handlers |
@@ -196,15 +197,17 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 |---|---|---|
 | `load_stations(path)` | `dict` keyed by `"City,CC"` | Returns empty dict on FileNotFoundError |
 | `build_cities_index(stations_data)` | `dict[(lat_idx, lon_idx) → list[city_name]]` | Converts lat/lon degrees to 0–1023 grid indices; multiple cities per cell are supported |
-| `look_around(origin, fuzziness)` | `list` of `(lat, lon)` tuples | Returns search zone around a point |
+| `build_look_around_offsets(fuzziness)` | `list` of `(dx, dy)` tuples | Pre-computes the search-zone offset pattern once, at startup (`App.__init__`) |
+| `look_around(origin, offsets)` | `list` of `(lat, lon)` tuples | Applies the pre-computed offsets to an origin point — cheap enough to call on every encoder event |
+| `find_cities_near(origin, offsets, cities_index)` | `list` of city strings, closest-first | The production city search, called from `_encoder_loop()` in `main.py` |
 | `get_stations_by_city(stations, city)` | `list` of `(name, url)` tuples | The canonical station list format |
-| `get_found_cities(search_area, city_map)` | `list` of city strings | Used in some test scripts; superseded by `find_all_cities` in `main.py` |
+| `get_found_cities(search_area, city_map)` | `list` of city strings | Used only by integration test scripts; superseded in production by `find_cities_near` |
 
 **Coordinate formula:** `index = round((degrees + 180) * 1024 / 360)`. This maps −180°→0 and +180°→1024.
 
-**`look_around()` detail:** `fuzziness=1` returns just the origin point; `fuzziness=2` returns 9 points (3×3 area); `fuzziness=3` returns 25 points (5×5 area). The search starts bottom-left and scans horizontally — this matches ergonomics (70% of people are right-eye dominant and hold the globe below eye level).
+**`build_look_around_offsets()` detail:** `fuzziness=1` returns just the origin offset; `fuzziness=2` returns 9 offsets (3×3 area); `fuzziness=3` returns 25 offsets (5×5 area) — the app's default (`FUZZINESS = 3`, see [§8](#8-configuration-reference)). The pattern is built innermost-first, so `find_cities_near()` returns matches closest-first. The search starts bottom-left and scans horizontally — this matches ergonomics (70% of people are right-eye dominant and hold the globe below eye level).
 
-**Legacy functions** at the bottom of the file (`get_station_by_index`, `get_first_station`, `get_all_urls`, `get_stations_info`) are not used by the main application. They exist for test scripts and older code paths.
+**Legacy functions** at the bottom of the file (`get_stations_info`) are not used by the main application — only by integration test scripts.
 
 ---
 
@@ -217,13 +220,14 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 - Raw readings are 16 bits; the top 10 bits (after shifting right by 6) give the 0–1023 position.
 - `check_parity()` validates each reading. If parity fails, the entire read returns `None` and is discarded.
 - Latitude is inverted: `readings[0] = ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
+- `run_encoder()` is an event-driven task, not a target the app polls: while unlatched, it sets `self.updated` (an `asyncio.Event`) on every successful read; `main.py`'s `_encoder_loop()` awaits this event instead of polling on its own. Once latched, the event only fires again when the position drifts past `latch_stickiness`.
 
 **The latch mechanism:**
 - `latch(lat, lon, stickiness)` stores the latched position and sets `latch_stickiness` to the threshold value.
 - While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. If it does, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
-**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so the main loop can re-detect cities after zeroing — `zero()` alone does not clear the latch.
+**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
 
 **Note:** The `if __name__ == "__main__":` block at the bottom of this file (lines 109–142) is a hardware test script, not part of the class. It hardcodes `STICKINESS = 10`.
 
@@ -233,9 +237,9 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction).
 
-- `run_encoder()` uses `asyncio.to_thread(GPIO.wait_for_edge, pin, GPIO.FALLING)` to avoid blocking the event loop. On each falling edge it reads the direction pin and stores the result (debounced at 300ms).
-- `get_direction()` is a one-shot read: it returns the stored direction and resets the internal value to 0. The main loop calls this every 100ms.
-- The returned value is inverted (`* -1`) to correct for physical wiring convention. +1 means clockwise, −1 means counter-clockwise.
+- `run_encoder()` uses `asyncio.to_thread(GPIO.wait_for_edge, pin, GPIO.FALLING)` to avoid blocking the event loop. On each falling edge it reads the direction pin, inverts it (`* -1`) to correct for physical wiring convention, and pushes it onto `self.queue` (an `asyncio.Queue[int]`). +1 means clockwise, −1 means counter-clockwise.
+- After each edge it sleeps 300ms before waiting for the next one (debounce).
+- `main.py`'s `_dial_loop()` consumes the queue with `await self.dial.queue.get()` — it wakes only when the dial actually turns, rather than polling.
 
 ---
 
@@ -293,7 +297,7 @@ class AudioPlayer:
 - `--network-caching=2000` adds a 2 s jitter buffer to absorb network hiccups without triggering error state.
 - Volume is managed via VLC's `audio_get_volume` / `audio_set_volume`, range 0–100.
 - `is_error()` returns `True` if VLC is in `State.Error` **or** `State.Ended`. Both indicate failure for a live stream: `Error` for codec/protocol failures, `Ended` for HTTP 404 responses.
-- Dead-stream detection is handled by `App._monitor_stream(expected_url)` in `main.py`. After a 3 s grace period it polls `is_error()` every 5 s. On the first failed poll it flashes the LED red and shows "Stream error" on the display. If VLC subsequently recovers (via `--input-repeat=-1`), the display is restored. The loop exits silently when `current_url` changes (user selected a different station).
+- Dead-stream detection is handled by `App._monitor_stream(expected_url)` in `main.py`. It checks `is_error()` every 3 s. On failure it flashes the LED red, removes the failed station from the session list (`_remove_failed_station()`), and immediately plays and displays the next station — looping until one plays cleanly, all stations for the city are exhausted, or the user selects something else, at which point the loop exits silently.
 
 ---
 
@@ -354,23 +358,22 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 ### Flow A: Globe Spun to a New City
 
-1. `PositionalEncoders.run_encoder()` reads SPI every 200ms and updates `self.latitude` / `self.longitude` (unless latched).
-2. The main loop (100ms sleep) calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
-3. `look_around(coords, FUZZINESS=2)` generates 9 grid coordinates (3×3) surrounding the current position.
-4. `_find_all_cities(zone, self.cities_info)` checks each coordinate against the spatial index dict, flattening the per-cell city lists.
-5. If cities are found and the encoders are not already latched:
+1. `PositionalEncoders.run_encoder()` polls SPI every 200ms. While unlatched, each successful read sets `encoders.updated` (an `asyncio.Event`).
+2. `_encoder_loop()` wakes on that event, clears it, and calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
+3. `find_cities_near(coords, self.look_around_offsets, self.cities_info)` applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — and returns matching cities, closest-first.
+4. If cities are found and the encoders are not already latched:
    - `encoders.latch(*coords, stickiness=STICKINESS)` freezes the position.
-   - `jog_idx` and `city_idx` reset to 0.
+   - `jog_idx` resets to 0.
    - The LED flashes green.
-6. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
-7. `audio_player.play(city, station)` passes the URL to VLC.
-8. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
-9. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one (3 s grace, then 5 s polls).
+5. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
+6. `audio_player.play(city, station)` passes the URL to VLC.
+7. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
+8. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one, which checks playback every 3 s and switches to the next station on failure.
 
 ### Flow B: User Turns the Dial
 
-1. `AsyncDial.run_encoder()` detects a falling edge on GPIO 17, reads direction from GPIO 18.
-2. The main loop reads `dial.get_direction()` — non-zero means rotation.
+1. `AsyncDial.run_encoder()` detects a falling edge on GPIO 17, reads direction from GPIO 18, and pushes it onto `dial.queue`.
+2. `_dial_loop()` wakes with `await self.dial.queue.get()` — no polling.
 3. The LED flashes blue.
 4. If `mode == "station"`: `next_station(direction)` increments/decrements `jog_idx` within `self.stations` (wraps around).
 5. If `mode == "city"`: `next_city(direction)` increments/decrements `jog_idx` within `self.cities`, fetches the first station for the new city.
@@ -386,10 +389,8 @@ Application state is held in an `AppState` dataclass on `self.state`:
 |---|---|---|
 | `stations` | `list[(name, url)]` | Stations for the current city |
 | `station` | `tuple \| None` | Currently playing station |
-| `station_idx` | `int` | Index of `station` in `stations` |
 | `cities` | `list[str]` | Cities found in the current search zone |
 | `city` | `str \| None` | Currently selected city (e.g. `"London,GB"`) |
-| `city_idx` | `int` | Index of `city` in `cities` |
 | `jog_idx` | `int` | Shared index used by both station and city navigation |
 | `mode` | `str` | `"station"` or `"city"` |
 
@@ -401,16 +402,19 @@ On shutdown (long press of mid button), `save_state()` calls `dataclasses.asdict
 
 ## 7. Concurrency Model
 
-The entire application runs on a single asyncio event loop. Understanding this is essential before modifying any hardware module.
+The entire application runs on a single asyncio event loop, made up of several independent, event-driven tasks rather than one polling "main loop." Understanding this is essential before modifying any hardware module.
 
-**Tasks running concurrently:**
+**Tasks running concurrently (started from `run()` and component `start()` calls):**
 ```python
-asyncio.create_task(dial.run_encoder())           # polls GPIO, 300ms debounce
-asyncio.create_task(encoders.run_encoder())       # reads SPI every 200ms
-asyncio.create_task(display._display_loop())      # writes LCD on change event
-asyncio.create_task(button_manager.handle_events()) # dispatches button callbacks
-# main while loop sleeps 100ms between iterations
+asyncio.create_task(dial.run_encoder())              # polls GPIO edge, 300ms debounce, pushes to dial.queue
+asyncio.create_task(encoders.run_encoder())          # polls SPI every 200ms, sets encoders.updated
+asyncio.create_task(display._display_loop())         # writes LCD on `changed` event
+asyncio.create_task(button_manager._poll_buttons())  # polls button state every 50ms, pushes to event_queue
+asyncio.create_task(button_manager.handle_events())  # dispatches queued button events
+asyncio.create_task(self._encoder_loop())            # wakes on encoders.updated — latches cities
+asyncio.create_task(self._dial_loop())               # wakes on dial.queue — navigates stations/cities
 ```
+`run()` only awaits the last two (`await asyncio.gather(encoder_task, dial_task)`); the others run in the background for the app's lifetime.
 
 **GPIO interrupt bridging:** RPi.GPIO fires button callbacks on a separate interrupt thread. These callbacks call `loop.call_soon_threadsafe(...)` to schedule coroutines back onto the asyncio event loop. This is the correct pattern — do not call `asyncio.create_task()` directly from a GPIO callback thread.
 
@@ -418,7 +422,7 @@ asyncio.create_task(button_manager.handle_events()) # dispatches button callback
 
 **LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. The `led_running` Event prevents concurrent flashes.
 
-**What to be careful about:** Do not put any blocking call (file I/O, `time.sleep()`, synchronous network calls) directly in the main loop body. Every blocking call holds up all other hardware tasks.
+**What to be careful about:** Do not put any blocking call (file I/O, `time.sleep()`, synchronous network calls) directly in any of these loop bodies. Every blocking call holds up all other hardware tasks.
 
 ---
 
@@ -480,7 +484,7 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
 self.state.station = self.state.stations[0]   # IndexError if list is empty
 ```
-If a city key exists in `stations.json` but its station list is empty (malformed entry, partial database update), this raises an unhandled `IndexError` that crashes the main loop.
+If a city key exists in `stations.json` but its station list is empty (malformed entry, partial database update), this raises an unhandled `IndexError` that crashes the `_encoder_loop()` task (and, via the second call site below, `_dial_loop()`).
 
 The same unguarded pattern exists in `_dial_loop()`, after `next_city()`:
 ```python
@@ -504,7 +508,7 @@ else:
 
 ### Improvement B: `save_state()` serialises `stations` and `cities` snapshots that are ignored on restore
 
-**Problem:** `save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. Since `load_state()` now re-queries `stations` from the live database and `cities` is repopulated by the first main-loop iteration, the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
+**Problem:** `save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. `load_state()` re-queries `stations` from the live database on startup, and `cities` is repopulated by `_encoder_loop()` the next time `encoders.updated` fires — so the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
 
 **Fix:** Build the dict manually in `save_state()`, omitting the two lists:
 ```python
@@ -522,9 +526,9 @@ state = {
 
 ---
 
-### Improvement C: Volume display updates can be overwritten by the main loop
+### Improvement C: Volume display updates can be overwritten by a concurrent display update
 
-**Problem:** `_update_volume()` calls `display.update()`, then `await asyncio.sleep(0.5)`, then calls `display.update()` again to clear the volume bar. During the 0.5 s yield, the main loop (running every 100 ms) may also call `display.update()` — for example if a city is freshly latched. The second volume call then overwrites that update with a stale "volume cleared" view.
+**Problem:** `_update_volume()` calls `display.update()`, then `await asyncio.sleep(0.5)`, then calls `display.update()` again to clear the volume bar. During the 0.5 s yield, `_encoder_loop()` or `_dial_loop()` may also call `display.update()` — for example if a city is freshly latched while the volume overlay is showing. The second volume call then overwrites that update with a stale "volume cleared" view.
 
 This is cosmetic and non-crashing, but the display momentarily shows the wrong city or station after the sleep. A fix requires either a timestamp/generation counter to skip the second update if the display has moved on, or removing the two-call pattern entirely in favour of a timed overlay in `_display_loop`.
 
@@ -534,11 +538,11 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 ## 12. What's Already Good
 
-**`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`) is the right trade-off — it makes every 100ms poll O(1).
+**`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`) is the right trade-off — it makes every city lookup in `_encoder_loop()` O(1).
 
-**The spatial search approach.** Building a 1024×1024 grid dict at startup and doing dict lookups in the main loop is efficient and simple. `look_around()` with fuzziness is the right way to handle the physical imprecision of pointing at a globe.
+**The spatial search approach.** Building a 1024×1024 grid dict at startup and doing dict lookups in `find_cities_near()` is efficient and simple. `build_look_around_offsets()` with fuzziness is the right way to handle the physical imprecision of pointing at a globe.
 
-**The asyncio architecture is fundamentally sound.** GPIO interrupt callbacks are correctly bridged back to the event loop via `call_soon_threadsafe`. Blocking GPIO calls are wrapped in `asyncio.to_thread`. The cooperative sleep pattern in the main loop gives all tasks CPU time.
+**The asyncio architecture is fundamentally sound.** GPIO interrupt callbacks are correctly bridged back to the event loop via `call_soon_threadsafe`. Blocking GPIO calls are wrapped in `asyncio.to_thread`. Event-driven waits (`encoders.updated`, `dial.queue`) mean idle tasks cost nothing, rather than burning CPU on a fixed-interval poll.
 
 **The latch mechanism.** Freezing the encoder position until the user moves significantly is a genuinely clever UX solution. Without it, browsing stations while holding the globe still would be impossible — any tiny vibration would trigger a city change.
 
