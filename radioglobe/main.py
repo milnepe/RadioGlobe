@@ -262,6 +262,10 @@ class App:
                 self.state.city = self.state.cities[0]
                 self._current_coords = self._get_coords_by_city(self.state.city)
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+                if not self.state.stations:
+                    logging.warning(f"No stations for {self.state.city!r} — skipping latch")
+                    self.encoders.reset_latch()
+                    continue
                 self.state.station = self.state.stations[0]
                 logging.info(f"Cities: {self.state.cities}")
                 logging.debug(
@@ -286,6 +290,9 @@ class App:
                 self.next_station(direction)
             elif self.state.mode == "city":
                 self.next_city(direction)
+                if not self.state.stations:
+                    logging.warning(f"No stations for {self.state.city!r} — keeping previous station")
+                    continue
                 self.state.station = self.state.stations[0]
 
             coords = self._current_coords or self._get_coords_by_city(self.state.city)
