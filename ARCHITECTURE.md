@@ -2,7 +2,7 @@
 
 This document is a guide for developers joining the project. It explains the physical hardware, how the software maps onto it, and what each module does. It also surfaces concrete improvement suggestions to make the code easier to maintain and extend.
 
-This is not the setup guide — that's [README.md](README.md). For a brief asyncio design sketch, see [docs/DESIGN.md](docs/DESIGN.md).
+This is not the setup guide — that's [README.md](README.md). For a brief asyncio design sketch, see [docs/DESIGN.md](docs/DESIGN.md). For how to submit changes, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -17,8 +17,9 @@ This is not the setup guide — that's [README.md](README.md). For a brief async
 7. [Concurrency Model](#7-concurrency-model)
 8. [Configuration Reference](#8-configuration-reference)
 9. [Testing](#9-testing)
-10. [Suggested Improvements](#10-suggested-improvements)
-11. [What's Already Good](#11-whats-already-good)
+10. [Contributing](#10-contributing)
+11. [Suggested Improvements](#11-suggested-improvements)
+12. [What's Already Good](#12-whats-already-good)
 
 ---
 
@@ -460,7 +461,13 @@ uv run pytest
 
 ---
 
-## 10. Suggested Improvements
+## 10. Contributing
+
+Branching, PR, and release conventions live in [CONTRIBUTING.md](CONTRIBUTING.md) — feature branches off `develop`, PRs into `develop`, releases cut from `master` via the `Makefile` version bump targets.
+
+---
+
+## 11. Suggested Improvements
 
 These are ordered from lowest to highest effort. None require a rewrite — all are incremental changes.
 
@@ -519,7 +526,7 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 ---
 
-## 11. What's Already Good
+## 12. What's Already Good
 
 **`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`) is the right trade-off — it makes every 100ms poll O(1).
 
