@@ -229,8 +229,6 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 **Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
 
-**Note:** The `if __name__ == "__main__":` block at the bottom of this file (lines 109–142) is a hardware test script, not part of the class. It hardcodes `STICKINESS = 10`.
-
 ---
 
 ### 4.4 `dial.py` — Station / City Selector
@@ -433,7 +431,7 @@ All constants are defined in `radio_config.py` and imported where used. There ar
 | Parameter | Value | Where used |
 |---|---|---|
 | `FUZZINESS` | 3 | `main.py` — 25-point (5×5) search zone |
-| `STICKINESS` | 10 | `main.py` — unlatch threshold in encoder steps |
+| `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
 | `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
 | `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
