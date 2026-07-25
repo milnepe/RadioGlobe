@@ -475,14 +475,20 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ### Improvement A: `IndexError` if a city has no stations at latch time
 
-**Problem:** In the latch block in `run()`:
+**Problem:** In the latch block in `_encoder_loop()`:
 ```python
 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
 self.state.station = self.state.stations[0]   # IndexError if list is empty
 ```
 If a city key exists in `stations.json` but its station list is empty (malformed entry, partial database update), this raises an unhandled `IndexError` that crashes the main loop.
 
-**Fix:** Guard before indexing:
+The same unguarded pattern exists in `_dial_loop()`, after `next_city()`:
+```python
+self.next_city(direction)
+self.state.station = self.state.stations[0]   # IndexError if list is empty
+```
+
+**Fix:** Guard before indexing at both call sites:
 ```python
 if not self.state.stations:
     logging.warning(f"No stations for {self.state.city!r} — skipping latch")
@@ -492,7 +498,7 @@ else:
     # ... display, play, monitor
 ```
 
-**Effort:** 10 minutes.
+**Effort:** 15 minutes.
 
 ---
 
