@@ -105,7 +105,7 @@ RadioGlobe/
 
 **Key notes:**
 - `streaming/` is a development lab. The production audio code is `audio_async.py`, which does not import from `streaming/`.
-- `tests/` contains both proper unit tests (runnable on any machine) and hardware integration scripts. They are not yet separated — see [Improvement 11](#improvement-11-separate-integration-test-scripts).
+- `tests/` contains unit tests (runnable on any machine) alongside `tests/integration/`, which holds the hardware integration scripts.
 
 ---
 
