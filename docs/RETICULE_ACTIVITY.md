@@ -8,8 +8,9 @@ absolute `(lat, lon)` position rather than a raw, uncalibrated one.
 
 It complements [ARCHITECTURE.md](../ARCHITECTURE.md) — see
 [§5 Flow A](../ARCHITECTURE.md#5-key-data-flows) for the prose version of
-the happy path, and [§11 Improvement A](../ARCHITECTURE.md#11-suggested-improvements)
-for the unguarded-`IndexError` bug shown below.
+the happy path. The empty-stations guard shown below was originally
+[§11 Improvement A](../ARCHITECTURE.md#11-suggested-improvements) (an
+unguarded `IndexError`); it shipped in `v0.5.1`.
 
 ## Legend
 
@@ -117,15 +118,13 @@ so encoders.get_readings() returns the absolute (lat, lon) position.
       +----------------------------------------------------+
                                  |    no
                                  |    +----------------------------------+
-                                 |    |    ** Known bug, unguarded **    |
-                                 |    |      station = stations[0]       |
-                                 |    |       raises IndexError --       |
-                                 |    |     _encoder_loop() crashes;     |
-                                 |    |       app needs a restart.       |
-                                 |    |       See ARCHITECTURE.md,       |
-                                 |    |          Improvement A.          |
+                                 |    |          Log a warning.          |
+                                 |    |      encoders.reset_latch()      |
+                                 |    |       (releases the frozen       |
+                                 |    |     position so the reticule     |
+                                 |    |         can search again)        |
                                  |    +----------------------------------+
-                                 |    (( end: crash ))
+                                 |    ----> back to LOOP-A
                                  v   (yes)
       +----------------------------------------------------+
       |               station = stations[0]                |
@@ -173,13 +172,14 @@ behaviour of "spinning between cities" — nothing is ever a hard error.
 **2. A city is found, but its station list is empty.** This can only
 happen with malformed data — a city key present in `stations.json` with
 no (or an empty) `"urls"` entry, e.g. from a partial database update.
-Unlike case 1, this path is **not** guarded in the current code:
-`self.state.station = self.state.stations[0]` runs unconditionally
-right after the latch, so an empty list raises an unhandled
-`IndexError`. Because this happens inside `_encoder_loop()`, that task
-dies — reticule movement stops working until the app is restarted. This
-is a known, documented bug (see
-[ARCHITECTURE.md §11, Improvement A](../ARCHITECTURE.md#11-suggested-improvements)),
-along with a second, identical unguarded call site in `_dial_loop()`
-and the proposed fix (guard on `if not self.state.stations` before
-indexing).
+As of `v0.5.1`, this is guarded: right after the latch,
+`_encoder_loop()` checks `if not self.state.stations`, logs a warning,
+calls `encoders.reset_latch()` to release the frozen position, and
+loops back to `LOOP-A` instead of indexing into the empty list — no
+crash, no restart needed. The same guard was added to the identical
+call site in `_dial_loop()` (after `next_city()`), where it instead
+skips the display/playback update and leaves the previous station
+playing. This closed what was originally
+[ARCHITECTURE.md §11, Improvement A](../ARCHITECTURE.md#11-suggested-improvements)
+(an unguarded `IndexError`), verified on real hardware before merging —
+see `radioglobe/main.py`'s `_encoder_loop()`/`_dial_loop()`.
