@@ -1,9 +1,14 @@
 import asyncio
 import pytest
 
-pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+pytest.importorskip("evdev", reason="Requires python-evdev (pip install evdev)")
 
 from radioglobe.dial import AsyncDial
+
+try:
+    AsyncDial._find_rotary_device()
+except RuntimeError:
+    pytest.skip("No rotary-encoder input device found — requires the dial overlay loaded", allow_module_level=True)
 
 
 async def main():

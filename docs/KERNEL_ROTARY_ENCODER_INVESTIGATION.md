@@ -224,8 +224,8 @@ slave over SPI."
 ## 6. Where the kernel driver genuinely would help: the dial
 
 Not the original question, but worth recording since it's directly relevant and low-risk.
-`dial.py`'s current approach — `GPIO.wait_for_edge()` blocked on a thread-pool thread via
-`asyncio.to_thread`, plus a 300ms software debounce sleep — could be replaced with:
+`dial.py`'s previous approach — `GPIO.wait_for_edge()` blocked on a thread-pool thread via
+`asyncio.to_thread`, plus a 300ms software debounce sleep — has been replaced with:
 
 ```
 # /boot/firmware/config.txt
@@ -239,6 +239,40 @@ fixed sleep. This is a genuine architectural improvement to `dial.py` (removes a
 call and a thread hop from the hot path), but it improves *dial responsiveness*, not
 *reticule/globe responsiveness* — they are unrelated code paths (`_dial_loop()` vs.
 `_encoder_loop()` in `main.py`). Flagging it here so it isn't confused with the actual ask.
+
+**Implementation (2026-07-26):**
+
+- `radioglobe/dial.py` was rewritten: `AsyncDial._find_rotary_device()` discovers the
+  overlay's evdev device via `evdev.list_devices()`, matching by capability (`EV_REL`
+  containing `REL_X`, no `EV_KEY`) rather than a hardcoded device name — the exact name
+  the overlay registers can't be confirmed without hardware, so matching is
+  name-tolerant with a warning log if the name doesn't contain "rotary". `start()`
+  registers the device fd via `loop.add_reader`; `stop()` calls `loop.remove_reader`.
+  The public interface (`self.queue`, `start()`, `async stop()`) is unchanged, so
+  `main.py` needed zero changes.
+- **A real bug was found and fixed along the way, not just parity with the old code:**
+  the old `stop()` did `await self._task` while that task was blocked inside
+  `asyncio.to_thread(GPIO.wait_for_edge, ...)`, which cannot be cancelled — `stop()`
+  could hang until the next physical edge (or forever, if the dial wasn't turned again
+  before shutdown). `loop.remove_reader(fd)` is synchronous and immediate regardless of
+  pending events, so this hang cannot occur in the new design.
+- `evdev>=1.7.0` added to `pyproject.toml` and pinned (`evdev==1.9.3`) in
+  `requirements.txt` — the file `install.sh` actually installs from.
+- `install.sh` now idempotently appends the dtoverlay line to
+  `/boot/firmware/config.txt` if not already present (matching the venv-creation
+  idempotency style already used elsewhere in the script). No `input`-group change was
+  needed — the `radioglobe` user was already a member (confirmed live on-device before
+  writing any code).
+- `tests/integration/dial_test.py`'s hardware guard changed from
+  `pytest.importorskip("RPi.GPIO", ...)` to `pytest.importorskip("evdev", ...)` plus a
+  second skip if `AsyncDial._find_rotary_device()` raises (overlay not loaded/rebooted
+  yet) — reusing the production discovery helper rather than duplicating matching logic.
+
+**Not yet done:** on-device verification (confirming the overlay's registered device
+name, the actual `REL_X` sign for a given physical turn direction, and the `stop()` fix
+observed live) — see the plan's verification section. Once run, results belong here as a
+"Result (applied YYYY-MM-DD)" block in the same style as §7.2/§7.3, not assumed in
+advance.
 
 ---
 
@@ -442,8 +476,9 @@ it unless profiling in §7.1 proves otherwise.
    encoders** — it's the wrong device class (GPIO quadrature vs. SPI absolute, confirmed
    Bourns EMS22A50-D28-LT6) and the part has no interrupt/data-ready signal to hook into
    regardless (§3).
-2. **Do** consider it opportunistically for `dial.py` (§6) — separate, low-risk, already
-   works out of the box on this kernel/OS combination.
+2. **Done** for `dial.py` (§6) — separate, low-risk, and confirmed to work out of the box
+   on this kernel/OS combination. Implemented 2026-07-26; on-device verification
+   (device name, `REL_X` polarity, `stop()` shutdown-hang fix) is the one remaining step.
 3. For the actual responsiveness goal, **§7.2 and §7.3 are both done.**
    `asyncio.sleep(0.2)` is now `asyncio.sleep(0.05)` in `positional_encoders.py`
    (~3.5x faster detection), with a debounce fix (`UNLATCH_CONFIRM_THRESHOLD`) to stop

@@ -32,6 +32,16 @@ sudo apt install -y \
     jq
 
 # -----------------------------
+# Rotary encoder dtoverlay (idempotent)
+# -----------------------------
+CONFIG_TXT=/boot/firmware/config.txt
+OVERLAY_LINE="dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1"
+if ! grep -qxF "$OVERLAY_LINE" "$CONFIG_TXT"; then
+    echo "⚙️ Adding rotary-encoder dtoverlay to $CONFIG_TXT..."
+    echo "$OVERLAY_LINE" | sudo tee -a "$CONFIG_TXT" > /dev/null
+fi
+
+# -----------------------------
 # Prepare install directory
 # -----------------------------
 echo "📁 Preparing install dir..."

@@ -10,7 +10,7 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 |--------|-------------------|---------|
 | `led_test.py` | GPIO | Cycles RED → GREEN → BLUE then blinks concurrently with async tasks to verify LED wiring and `led_task` behaviour |
 | `button_test.py` | GPIO | Confirms short and long press detection for a single named button |
-| `dial_test.py` | GPIO | Prints Clockwise / Counter-clockwise on each encoder pulse to verify dial wiring and direction |
+| `dial_test.py` | GPIO (kernel `rotary-encoder` overlay + evdev) | Prints Clockwise / Counter-clockwise on each encoder pulse to verify dial wiring and direction |
 | `positional_encoders_test.py` | SPI | Reads the two SPI positional encoders and prints coordinates continuously |
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
 | `streaming_cvlc_test.py` | GPIO + SPI + cvlc | Full stack test: encoders → city lookup → cvlc audio stream |
@@ -89,6 +89,14 @@ The positional encoders use SPI bus 0, devices 0 (latitude) and 1 (longitude). E
 ```bash
 sudo raspi-config   # Interface Options → SPI → Enable
 ```
+
+### Dial (kernel rotary-encoder overlay)
+
+The dial is read via the kernel's `rotary_encoder` driver, not directly via `RPi.GPIO`.
+`install.sh` adds the required `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1`
+line to `/boot/firmware/config.txt` idempotently — a reboot is required for it to take
+effect (covered by the same reboot prompt `install.sh` already prints). No `raspi-config`
+step is needed for this; `rotary-encoder` isn't one of its interface toggles.
 
 ### Calibration note
 
