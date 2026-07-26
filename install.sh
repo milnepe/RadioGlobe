@@ -29,6 +29,7 @@ sudo apt install -y \
     python3-venv \
     python3-dev \
     pulseaudio-module-bluetooth \
+    rfkill \
     jq
 
 # -----------------------------
@@ -39,6 +40,18 @@ OVERLAY_LINE="dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1"
 if ! grep -qxF "$OVERLAY_LINE" "$CONFIG_TXT"; then
     echo "⚙️ Adding rotary-encoder dtoverlay to $CONFIG_TXT..."
     echo "$OVERLAY_LINE" | sudo tee -a "$CONFIG_TXT" > /dev/null
+fi
+
+# -----------------------------
+# Ensure Bluetooth radio isn't soft-blocked (idempotent)
+# Some images/imagers leave hci0 rfkill-blocked, which silently
+# breaks Bluetooth speaker pairing until manually unblocked.
+# systemd-rfkill saves this state on change and restores it on
+# boot, so unblocking once here keeps it enabled across reboots.
+# -----------------------------
+if rfkill list bluetooth | grep -q "Soft blocked: yes"; then
+    echo "📶 Unblocking Bluetooth radio..."
+    sudo rfkill unblock bluetooth
 fi
 
 # -----------------------------
