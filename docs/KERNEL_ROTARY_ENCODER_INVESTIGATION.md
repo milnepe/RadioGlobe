@@ -367,6 +367,21 @@ that transfer time is a non-trivial fraction of the cycle. Worth testing increme
 check for signal integrity issues on the actual wiring/cable length used on the physical
 board.
 
+**Result (applied 2026-07-26):** Tested incrementally on-device as recommended, checking
+`check_parity()` failures at each step (logged as `PROFILE spi_read_ms=... parity_fail=True`
+whenever a reading is rejected):
+
+| Clock speed | `spi_read_ms` | Parity failures |
+|---|---|---|
+| 5000 Hz (original) | ~5–10ms | 0 |
+| 100,000 Hz | ~0.75–2.2ms | 0 (32s idle) |
+| 1,000,000 Hz (datasheet max, `T_CLK/2` ≥ 500ns) | ~0.17–0.34ms | 0 across 2304 samples (1152 read cycles), including an active multi-city spin (35 latches) |
+
+No signal integrity issues at the datasheet's maximum clock speed on this board's actual
+wiring. `max_speed_hz` in `read_spi()` is now `1000000`. Combined with §7.2, SPI transfer
+time dropped from ~5-10ms to ~0.2ms — now a negligible fraction of the ~50ms poll cycle,
+which is the only meaningful latency term left in the encoder path.
+
 ### 7.4 Event-driven reads: not available on this hardware
 
 Ruled out definitively in §3 — the EMS22A50 has no data-ready, interrupt, or index output
@@ -429,14 +444,15 @@ it unless profiling in §7.1 proves otherwise.
    regardless (§3).
 2. **Do** consider it opportunistically for `dial.py` (§6) — separate, low-risk, already
    works out of the box on this kernel/OS combination.
-3. For the actual responsiveness goal, **§7.2 is done** — `asyncio.sleep(0.2)` is now
-   `asyncio.sleep(0.05)` in `positional_encoders.py`, deployed and confirmed live
-   (~3.5x faster detection, see §7.2's Result). It also required a small debounce fix
-   (`UNLATCH_CONFIRM_THRESHOLD`) to stop the faster poll rate from exposing latent
-   sensor noise as false relatches — confirmed resolved on-device. **§7.3** (raise
-   `max_speed_hz` from 5000 toward the datasheet's ~1 MHz ceiling) remains open — cheap,
-   no new dependencies, worth doing next. Only escalate to §7.5 if measurement shows
-   these insufficient.
+3. For the actual responsiveness goal, **§7.2 and §7.3 are both done.**
+   `asyncio.sleep(0.2)` is now `asyncio.sleep(0.05)` in `positional_encoders.py`
+   (~3.5x faster detection), with a debounce fix (`UNLATCH_CONFIRM_THRESHOLD`) to stop
+   the faster poll rate from exposing latent sensor noise as false relatches, and
+   `max_speed_hz` is now `1000000` (up from 5000) with zero parity failures observed at
+   the datasheet's maximum clock speed, including under an active spin. All confirmed
+   live on-device — see the Result notes under §7.2 and §7.3. SPI transfer time is now
+   ~0.2ms, negligible against the ~50ms poll cycle, which is the only meaningful latency
+   term left. Only escalate to §7.5 if further measurement shows this insufficient.
 
 ---
 

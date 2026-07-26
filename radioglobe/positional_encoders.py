@@ -62,7 +62,7 @@ class PositionalEncoders:
 
         for device in [0, 1]:
             self.spi.open(BUS, device)
-            self.spi.max_speed_hz = 5000
+            self.spi.max_speed_hz = 1000000
             self.spi.mode = 1
             reading = self.spi.readbytes(2)
             self.spi.close()
