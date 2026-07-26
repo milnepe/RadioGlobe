@@ -113,7 +113,7 @@ RadioGlobe/
 
 The application is a single-process asyncio program. One event loop runs on the main thread, and all hardware I/O runs as asyncio Tasks or is bridged into the loop from GPIO interrupt threads.
 
-**The central concept is the reticule position.** `PositionalEncoders.run_encoder()` polls SPI every 200ms. While unlatched, every successful reading sets an `asyncio.Event` (`encoders.updated`); the `_encoder_loop()` task wakes on that event, searches the spatial city index for any city near the current position, and if one is found, latches and starts playing its radio stream. Once latched, the event only fires again when the reticule drifts far enough to unlatch. The dial and buttons adjust the experience once a city is latched.
+**The central concept is the reticule position.** `PositionalEncoders.run_encoder()` polls SPI every 50ms. While unlatched, every successful reading sets an `asyncio.Event` (`encoders.updated`); the `_encoder_loop()` task wakes on that event, searches the spatial city index for any city near the current position, and if one is found, latches and starts playing its radio stream. Once latched, the event only fires again when the reticule drifts far enough to unlatch. The dial and buttons adjust the experience once a city is latched.
 
 **Two operating modes** are toggled by the jog button:
 - `station` mode — the dial cycles through stations within the current city
@@ -216,7 +216,7 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 Reads two SPI absolute rotary encoders and maintains the current lat/lon position.
 
 **Key behaviour:**
-- Each encoder is read via SPI bus 0, device 0 (latitude) and device 1 (longitude), at 5000 Hz, SPI mode 1.
+- Each encoder is read via SPI bus 0, device 0 (latitude) and device 1 (longitude), at 1,000,000 Hz, SPI mode 1 — the datasheet maximum for the Bourns EMS22A50-D28-LT6 (raised from an original 5000 Hz; see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md`).
 - Raw readings are 16 bits; the top 10 bits (after shifting right by 6) give the 0–1023 position.
 - `check_parity()` validates each reading. If parity fails, the entire read returns `None` and is discarded.
 - Latitude is inverted: `readings[0] = ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
@@ -224,7 +224,7 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 **The latch mechanism:**
 - `latch(lat, lon, stickiness)` stores the latched position and sets `latch_stickiness` to the threshold value.
-- While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. If it does, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
+- While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. A deviation must be seen on `UNLATCH_CONFIRM_THRESHOLD` (2) consecutive readings before it actually unlatches — added to stop the faster 50ms poll rate from reacting to single-sample sensor noise (the EMS22A50 datasheet specifies ~0.12° RMS output transition noise) as if it were real movement. Once confirmed, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
 **Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
@@ -356,7 +356,7 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 ### Flow A: Globe Spun to a New City
 
-1. `PositionalEncoders.run_encoder()` polls SPI every 200ms. While unlatched, each successful read sets `encoders.updated` (an `asyncio.Event`).
+1. `PositionalEncoders.run_encoder()` polls SPI every 50ms. While unlatched, each successful read sets `encoders.updated` (an `asyncio.Event`).
 2. `_encoder_loop()` wakes on that event, clears it, and calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
 3. `find_cities_near(coords, self.look_around_offsets, self.cities_info)` applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — and returns matching cities, closest-first.
 4. If cities are found and the encoders are not already latched:
@@ -405,7 +405,7 @@ The entire application runs on a single asyncio event loop, made up of several i
 **Tasks running concurrently (started from `run()` and component `start()` calls):**
 ```python
 asyncio.create_task(dial.run_encoder())              # polls GPIO edge, 300ms debounce, pushes to dial.queue
-asyncio.create_task(encoders.run_encoder())          # polls SPI every 200ms, sets encoders.updated
+asyncio.create_task(encoders.run_encoder())          # polls SPI every 50ms, sets encoders.updated
 asyncio.create_task(display._display_loop())         # writes LCD on `changed` event
 asyncio.create_task(button_manager._poll_buttons())  # polls button state every 50ms, pushes to event_queue
 asyncio.create_task(button_manager.handle_events())  # dispatches queued button events
@@ -426,7 +426,10 @@ asyncio.create_task(self._dial_loop())               # wakes on dial.queue — n
 
 ## 8. Configuration Reference
 
-All constants are defined in `radio_config.py` and imported where used. There are no dead constants and no import side-effects.
+Most constants are defined in `radio_config.py` and imported where used, with no dead
+constants and no import side-effects. A few reticule/globe encoder timing values are
+hardcoded directly in `positional_encoders.py` instead (noted below) rather than routed
+through `radio_config.py`.
 
 | Parameter | Value | Where used |
 |---|---|---|
@@ -437,6 +440,9 @@ All constants are defined in `radio_config.py` and imported where used. There ar
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
 | GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module |
 | I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
+| SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded, not in `radio_config.py`. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
+| SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded, not in `radio_config.py`. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
+| `UNLATCH_CONFIRM_THRESHOLD` | 2 | `positional_encoders.py` class constant — consecutive out-of-band readings required before unlatching, added to filter sensor noise at the faster poll rate |
 
 ---
 
