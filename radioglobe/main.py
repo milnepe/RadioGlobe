@@ -4,6 +4,7 @@ import subprocess
 import logging
 import os
 import json
+import time
 from typing import Optional
 
 from dataclasses import dataclass, field
@@ -243,10 +244,12 @@ class App:
         """Wake on each encoder update and handle city latching."""
         while True:
             await self.encoders.updated.wait()
+            t_wake = time.perf_counter()
             self.encoders.updated.clear()
 
             coords = self.encoders.get_readings()
             self.state.cities = find_cities_near(coords, self.look_around_offsets, self.cities_info)
+            logging.debug(f"PROFILE lookup_ms={(time.perf_counter() - t_wake) * 1000:.2f}")
 
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
@@ -274,6 +277,7 @@ class App:
                 )
                 self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
                 self.audio_player.play(self.state.city, self.state.station)
+                logging.debug(f"PROFILE wake_to_play_ms={(time.perf_counter() - t_wake) * 1000:.2f}")
                 self._start_monitor_stream(self.state.station[1])
 
     async def _dial_loop(self):

@@ -1,4 +1,7 @@
 import asyncio
+import logging
+import time
+
 import spidev  # type: ignore
 
 from .radio_config import ENCODER_RESOLUTION
@@ -55,6 +58,7 @@ class PositionalEncoders:
     def read_spi(self):
         BUS = 0
         readings = []
+        t0 = time.perf_counter()
 
         for device in [0, 1]:
             self.spi.open(BUS, device)
@@ -68,12 +72,29 @@ class PositionalEncoders:
             if self.check_parity(raw_reading):
                 readings.append(raw_reading >> 6)
             else:
+                logging.debug(
+                    f"PROFILE spi_read_ms={(time.perf_counter() - t0) * 1000:.2f} parity_fail=True"
+                )
                 return None
+
+        logging.debug(f"PROFILE spi_read_ms={(time.perf_counter() - t0) * 1000:.2f}")
         return readings
+
+    # Number of consecutive out-of-band readings required before unlatching.
+    # Filters single-sample sensor noise (the EMS22A50 datasheet specifies
+    # ~0.12 deg RMS output transition noise) from genuine sustained movement,
+    # without having to raise STICKINESS itself.
+    UNLATCH_CONFIRM_THRESHOLD = 2
 
     async def run_encoder(self):
         # while self._running:
+        last_loop = time.perf_counter()
+        unlatch_confirm_count = 0
         while self._task:
+            now = time.perf_counter()
+            logging.debug(f"PROFILE loop_gap_ms={(now - last_loop) * 1000:.2f}")
+            last_loop = now
+
             readings = self.read_spi()
 
             if readings:
@@ -83,6 +104,7 @@ class PositionalEncoders:
                     self.latitude = readings[0]
                     self.longitude = readings[1]
                     self.updated.set()
+                    logging.debug(f"PROFILE updated_set_at={time.perf_counter():.4f}")
                 else:
                     lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
                     lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
@@ -91,11 +113,19 @@ class PositionalEncoders:
                         lat_difference > self.latch_stickiness
                         or lon_difference > self.latch_stickiness
                     ):
-                        self.latch_stickiness = None
-                        self.updated.set()
-                        continue
+                        unlatch_confirm_count += 1
+                        if unlatch_confirm_count >= self.UNLATCH_CONFIRM_THRESHOLD:
+                            self.latch_stickiness = None
+                            self.updated.set()
+                            logging.debug(
+                                f"PROFILE updated_set_at={time.perf_counter():.4f} (unlatch)"
+                            )
+                            unlatch_confirm_count = 0
+                            continue
+                    else:
+                        unlatch_confirm_count = 0
 
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.05)
 
     def start(self):
         self._task = asyncio.create_task(self.run_encoder())

@@ -252,11 +252,64 @@ where that polling happens and how efficiently.
 
 There's no documented responsiveness complaint in the repo — `RETICULE_ACTIVITY.md` and
 `ARCHITECTURE.md` describe the 200ms poll as normal behaviour, not a bug. Before spending
-effort, measure the actual reticule-move-to-city-found latency (e.g. timestamp at
-`run_encoder()`'s `self.updated.set()` vs. the moment the position last changed physically)
-to confirm the 200ms poll is the dominant term, rather than VLC stream startup or network
-jitter, which are much larger (VLC's `--network-caching=2000` alone is a 2-second buffer,
-`audio_async.py`).
+effort, measure the actual reticule-move-to-city-found latency to confirm the 200ms poll
+is the dominant term, rather than VLC stream startup or network jitter, which are much
+larger (VLC's `--network-caching=2000` alone is a 2-second buffer, `audio_async.py`).
+Responsiveness splits into three things that each need a different measurement technique:
+the poll loop's own timing/jitter, the raw SPI transfer cost, and the true
+physical-movement-to-detection latency, which no software timestamp can see on its own
+since nothing marks the instant the user actually turned the globe.
+
+**a) Zero-code-change sanity check — `strace` on the live service.** No deploy needed:
+
+```bash
+PID=$(systemctl --user show -p MainPID radioglobe.service | cut -d= -f2)
+sudo strace -T -tt -f -p $PID -e trace=read,openat,close 2>&1 | grep spidev
+```
+
+`-T` prints each syscall's real duration; `-tt` gives wall-clock timestamps. This shows
+the actual SPI `read()` time per transfer and, more usefully, the real gap between
+successive polls — revealing whether `asyncio.sleep(0.2)` fires every ~200ms or drifts
+under load from the other concurrent tasks (`_display_loop`, `_poll_buttons`, the VLC
+monitor).
+
+**b) asyncio's built-in scheduling-jitter detector.** Set `PYTHONASYNCIODEBUG=1` (or
+`loop.set_debug(True)` + `loop.slow_callback_duration = 0.05` near the top of `run()` in
+`main.py`) before starting the service. asyncio logs a warning whenever any
+callback/task holds the event loop longer than the threshold — this directly tests
+whether Python/asyncio scheduling jitter (the premise of §7.5) is actually significant,
+with no new instrumentation.
+
+**c) Instrumented timestamps — the precise breakdown.** This has already been added,
+gated behind `logging.debug()` (prefixed `PROFILE` so it's easy to `grep` out from the
+app's other debug logging):
+
+- `positional_encoders.py`'s `read_spi()` logs `PROFILE spi_read_ms=...` — the real SPI
+  transfer time per read (both devices).
+- `run_encoder()` logs `PROFILE loop_gap_ms=...` at the top of every iteration — the
+  actual wall-clock time since the previous iteration (transfer time + sleep +
+  scheduling overhead combined), and `PROFILE updated_set_at=...` each time
+  `self.updated` fires.
+- `main.py`'s `_encoder_loop()` logs `PROFILE lookup_ms=...` (time from waking on
+  `encoders.updated` to `find_cities_near()` returning) and, on a successful latch,
+  `PROFILE wake_to_play_ms=...` (wake to `audio_player.play()` — the full app-side
+  reaction time, excluding VLC/network startup which is a separate concern).
+
+Note: `radio_config.py`'s `LOG_LEVEL` currently defaults to `"DEBUG"`, so these lines
+already appear in production logging with no config change. Deploy as usual
+(`make deploy && make update`, restart the service), spin the globe for a bit, then pull
+the log:
+
+```bash
+journalctl --user-unit=radioglobe.service --since "5 min ago" | grep PROFILE
+```
+
+**d) Ground-truth check — the part software can't time.** None of the above knows *when
+the user actually moved the reticule*. Film the globe and status LED together in
+slow-mo, spin to a city, and count frames between "reticule visually aligned" and "LED
+flashes green" (the existing latch-feedback flash in `_encoder_loop()`). Divide by frame
+rate for a real end-to-end number, and use it to sanity-check that the internal
+timestamps in (c) actually correspond to what a user perceives.
 
 ### 7.2 Shrink the poll interval (cheapest, highest-leverage change)
 
@@ -272,6 +325,36 @@ a 20-50ms loop with room to spare. This alone could cut worst-case detection lat
 against CPU usage (the loop now runs 4–10x more often) and against false-positive
 re-latching (check whether `STICKINESS`/jitter suppression, added in commits
 `71acccc`/`99ae389`, still holds at a tighter poll rate).
+
+**Result (applied 2026-07-26):** §7.2 has been carried out and deployed. `asyncio.sleep(0.2)`
+was changed to `asyncio.sleep(0.05)` in `positional_encoders.py`. Measured live on the
+device (profiling instrumentation from §7.1c):
+
+| Metric | Before (200ms poll) | After (50ms poll) |
+|---|---|---|
+| `loop_gap_ms` | ~206–212ms | ~58–62ms (~3.5x faster) |
+| `lookup_ms` (`find_cities_near()`) | 0.09–0.29ms | unchanged — negligible either way |
+| `wake_to_play_ms` (wake → `audio_player.play()`) | 6.45–20.09ms | unchanged — negligible either way |
+| CPU (process) | not captured before the change | 13.5–15.2% |
+
+A real-world spin test (crossing ~10 cities across the England/France/Belgium/Germany
+border region in ~85 seconds) confirmed `wake_to_play_ms` stayed in the same 6-20ms range
+under continuous fast latching, so the win is real and not just an idle-state artifact.
+
+**A regression surfaced and was fixed.** The faster poll rate quadrupled the rate of
+false relatches while the reticule sat physically untouched (~1 every 2.3s, confirmed
+against a stationary globe) — a latent issue exposed by polling 4x more often against the
+same per-sample sensor noise (the EMS22A50 datasheet specifies ~0.12° RMS output
+transition noise), not a new problem introduced by the change itself. The unlatch check
+in `run_encoder()` compared the latch position against a single raw SPI reading with no
+debouncing, so any noisy outlier sample immediately unlatched. Fixed by requiring
+`UNLATCH_CONFIRM_THRESHOLD = 2` consecutive out-of-band readings before actually
+unlatching, rather than raising `STICKINESS` (which would have also slowed genuine
+small-movement detection, regressing the browsing-while-still UX `STICKINESS` exists for).
+Confirmed on-device: exactly one real unlatch fired during the post-restart transient
+(expected — `systemctl restart` doesn't call `save_state()`, so the reloaded cached
+position didn't match where the globe had actually been left after testing), then zero
+further false relatches over the following 143+ seconds of confirmed-idle observation.
 
 ### 7.3 Raise the SPI clock speed
 
@@ -346,11 +429,14 @@ it unless profiling in §7.1 proves otherwise.
    regardless (§3).
 2. **Do** consider it opportunistically for `dial.py` (§6) — separate, low-risk, already
    works out of the box on this kernel/OS combination.
-3. For the actual responsiveness goal, **start with §7.2** (shrink `asyncio.sleep(0.2)`
-   in `positional_encoders.py:98`) and **§7.3** (raise `max_speed_hz` from 5000 toward the
-   datasheet's ~1 MHz ceiling) — both near-zero effort, no new dependencies, and together
-   they directly target the only two latency terms this hardware actually allows anyone
-   to control. Only escalate to §7.5 if measurement shows these insufficient.
+3. For the actual responsiveness goal, **§7.2 is done** — `asyncio.sleep(0.2)` is now
+   `asyncio.sleep(0.05)` in `positional_encoders.py`, deployed and confirmed live
+   (~3.5x faster detection, see §7.2's Result). It also required a small debounce fix
+   (`UNLATCH_CONFIRM_THRESHOLD`) to stop the faster poll rate from exposing latent
+   sensor noise as false relatches — confirmed resolved on-device. **§7.3** (raise
+   `max_speed_hz` from 5000 toward the datasheet's ~1 MHz ceiling) remains open — cheap,
+   no new dependencies, worth doing next. Only escalate to §7.5 if measurement shows
+   these insufficient.
 
 ---
 
