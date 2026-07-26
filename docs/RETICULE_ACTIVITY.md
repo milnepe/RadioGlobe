@@ -41,7 +41,7 @@ so encoders.get_readings() returns the absolute (lat, lon) position.
                                  v
       +----------------------------------------------------+
       |           run_encoder() polls SPI bus 0            |
-      |        (background task, runs every 200 ms)        |
+      |        (background task, runs every 50 ms)         |
       +----------------------------------------------------+
                                  |
                                  v
@@ -58,7 +58,7 @@ so encoders.get_readings() returns the absolute (lat, lon) position.
                                  |    |       Discard the reading.       |
                                  |    +----------------------------------+
                                  |    (loops back to LOOP-A on the
-                                 |     next 200 ms SPI poll)
+                                 |     next 50 ms SPI poll)
                                  v   (yes)
       +----------------------------------------------------+
       |       Update self.latitude / self.longitude        |
