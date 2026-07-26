@@ -56,7 +56,7 @@ Once logged in, open `raspi-config` as root and setup the interfaces and auto-lo
 sudo raspi-config
 ```
 1. Enable `SPI` in `Interfacing Options` - used by the encoders.
-2. Enable `I2C` in `Interfacing Options` - used by the jog wheel, etc.
+2. Enable `I2C` in `Interfacing Options` - used by the LCD display.
 3. Enable `Auto Login` in `System Options`, choose `Console Auto Login` required for pulseaudio sound server.
 4. Reboot
 
@@ -82,12 +82,16 @@ You can run the installer multiple times if you have any issues.
 cd RadioGlobe
 bash -x install.sh
 ```
-The system will reboot after completing and if all went well RadioGlobe will start with the welcome screen after about 30 seconds.
+`install.sh` does not reboot automatically — reboot manually once it completes:
+```
+sudo reboot
+```
+This is required, not just recommended: the dial's kernel `rotary-encoder` device-tree overlay (added to `/boot/firmware/config.txt` by `install.sh`) only takes effect after a reboot. If all went well RadioGlobe will start with the welcome screen after about 30 seconds.
 
 ### Step 7 - Calibration
 When starting for the first time the encoders need calibrating. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines. Now press and hold the middle button until the LED flashes `GREEN` and the display shows `Calibrated`.
 
-The system will retains the calibration in `data/offsets.json` so you only need to do this once. You can re-calibrate at any time. 
+The system retains the calibration, along with the current station/city selection, in `~/cache/radioglobe.json` so you only need to do this once. You can re-calibrate at any time. 
 
 ### Step 8 - Play
 Once calibrated, move the reticule near to a large city, for example London GB (51.51N, 0.13W). When a city is close, the LED will flash `RED` and the first station should start playing. You can change stations using the jog wheel. Set the volume up or down with the `top` and `bottom` buttons.
