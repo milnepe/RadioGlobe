@@ -1,39 +1,44 @@
 import asyncio
+import logging
 
-import RPi.GPIO as GPIO  # type: ignore
+import evdev
+from evdev import ecodes
 
-from .radio_config import PIN_DIAL_CLOCK, PIN_DIAL_DIR
+_POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 
 
 class AsyncDial:
     def __init__(self):
         self.queue: asyncio.Queue[int] = asyncio.Queue()
-        self._stop_event = asyncio.Event()
-        self._task = None
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup([PIN_DIAL_CLOCK, PIN_DIAL_DIR], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        self._device = self._find_rotary_device()
+        self._loop = None
 
-    async def _wait_for_edge(self, pin, edge=GPIO.FALLING):
-        return await asyncio.to_thread(GPIO.wait_for_edge, pin, edge)
+    @staticmethod
+    def _find_rotary_device() -> evdev.InputDevice:
+        for path in evdev.list_devices():
+            dev = evdev.InputDevice(path)
+            caps = dev.capabilities()
+            has_rel_x = ecodes.EV_REL in caps and ecodes.REL_X in caps[ecodes.EV_REL]
+            has_keys = ecodes.EV_KEY in caps
+            if has_rel_x and not has_keys:
+                if "rotary" not in dev.name.lower():
+                    logging.warning(f"Matched rotary encoder by capability, unexpected name: {dev.name!r}")
+                return dev
+        raise RuntimeError(
+            "No rotary-encoder input device found — check "
+            "'dtoverlay=rotary-encoder,...' in /boot/firmware/config.txt and reboot"
+        )
 
-    async def run_encoder(self):
-        while not self._stop_event.is_set():
-            await self._wait_for_edge(PIN_DIAL_CLOCK, GPIO.FALLING)
-            if self._stop_event.is_set():
-                break
-
-            new_direction = GPIO.input(PIN_DIAL_DIR)
-            if not new_direction:
-                new_direction = -1
-            await self.queue.put(new_direction * -1)
-
-            await asyncio.sleep(0.3)  # Debounce
+    def _on_readable(self):
+        for event in self._device.read():
+            if event.type == ecodes.EV_REL and event.code == ecodes.REL_X:
+                self.queue.put_nowait(_POLARITY * (1 if event.value > 0 else -1))
 
     def start(self):
-        self._task = asyncio.create_task(self.run_encoder())
+        self._loop = asyncio.get_running_loop()
+        self._loop.add_reader(self._device.fd, self._on_readable)
 
     async def stop(self):
-        self._stop_event.set()
-        if self._task:
-            await self._task
-        GPIO.cleanup()
+        if self._loop is not None:
+            self._loop.remove_reader(self._device.fd)
+        self._device.close()

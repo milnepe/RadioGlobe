@@ -166,6 +166,12 @@ wheels = [
 ]
 
 [[package]]
+name = "evdev"
+version = "1.9.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/f5/397b61091120a9ca5001041dd7bf76c385b3bfd67a0e5bcb74b852bd22a4/evdev-1.9.3.tar.gz", hash = "sha256:2c140e01ac8437758fa23fe5c871397412461f42d421aa20241dc8fe8cfccbc9", size = 32723 }
+
+[[package]]
 name = "frozenlist"
 version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -486,6 +492,7 @@ version = "0.5.1"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "evdev" },
     { name = "lgpio" },
     { name = "python-vlc" },
     { name = "requests" },
@@ -502,6 +509,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.13" },
+    { name = "evdev", specifier = ">=1.7.0" },
     { name = "lgpio", specifier = ">=0.2.2.0" },
     { name = "python-vlc", specifier = ">=3.0.21203" },
     { name = "requests", specifier = ">=2.32.4" },

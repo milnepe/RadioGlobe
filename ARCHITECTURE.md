@@ -38,7 +38,7 @@ The Raspberry Pi 4B runs Raspberry Pi OS Bookworm Lite. Audio plays through VLC 
 | Physical Component | Interface | GPIO / Address | Module |
 |---|---|---|---|
 | Globe reticule encoders (lat, lon) | SPI bus 0, devices 0 & 1 | — | `positional_encoders.py` |
-| Station/city select dial | GPIO quadrature | Pins 17 (clock), 18 (direction) | `dial.py` |
+| Station/city select dial | GPIO quadrature (kernel `rotary_encoder` driver + evdev) | Pins 17 (clock), 18 (direction) | `dial.py` |
 | Jog button (mode toggle) | GPIO | Pin 27 | `buttons.py` |
 | Top button (volume up) | GPIO | Pin 5 | `buttons.py` |
 | Mid button (calibrate / shutdown) | GPIO | Pin 6 | `buttons.py` |
@@ -69,7 +69,7 @@ RadioGlobe/
 │   ├── coordinates.py                # Coordinate value object (lat/lon → display string)
 │   ├── audio_async.py                # AudioPlayer: wraps python-vlc directly
 │   ├── display.py              # 20×4 I2C LCD driver
-│   ├── dial.py                 # Quadrature encoder for station/city selection
+│   ├── dial.py                 # evdev reader for kernel rotary-encoder device (station/city dial)
 │   ├── dial_button.py (deleted)          # Combined dial + button (historical, unused in prod)
 │   ├── positional_encoders.py  # SPI encoders → lat/lon + latch mechanism
 │   ├── buttons.py              # Multi-button manager with short/long press
@@ -128,7 +128,7 @@ graph TD
     main["main.py\n(App)"]
 
     main --> positional["positional_encoders.py\nSPI → lat/lon + latch"]
-    main --> dial["dial.py\nGPIO quadrature encoder"]
+    main --> dial["dial.py\nkernel rotary-encoder + evdev"]
     main --> buttons["buttons.py\nGPIO button manager"]
     main --> display["display.py\nI2C LCD display"]
     main --> led["rgb_led.py\nGPIO LED"]
@@ -141,7 +141,7 @@ graph TD
     positional --> spidev[("spidev")]
     display --> i2c[("liquidcrystal_i2c")]
     buttons --> gpio[("lgpio / RPi.GPIO")]
-    dial --> gpio
+    dial --> input[("evdev /dev/input/eventN")]
     led --> gpio
 ```
 
@@ -233,11 +233,30 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 ### 4.4 `dial.py` — Station / City Selector
 
-Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction).
+Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction) — but unlike
+every other GPIO device in this project, decoding happens in the **kernel**, not in Python.
+`install.sh` adds `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1` to
+`/boot/firmware/config.txt`, which binds the stock `drivers/input/misc/rotary_encoder.c`
+driver to those two pins. The driver's IRQ handler runs a gray-code state machine and only
+reports a clean, fully-completed transition — this is a correct per-edge debounce, not a
+time-based approximation. Investigated in full in
+`docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` §6.
 
-- `run_encoder()` uses `asyncio.to_thread(GPIO.wait_for_edge, pin, GPIO.FALLING)` to avoid blocking the event loop. On each falling edge it reads the direction pin, inverts it (`* -1`) to correct for physical wiring convention, and pushes it onto `self.queue` (an `asyncio.Queue[int]`). +1 means clockwise, −1 means counter-clockwise.
-- After each edge it sleeps 300ms before waiting for the next one (debounce).
-- `main.py`'s `_dial_loop()` consumes the queue with `await self.dial.queue.get()` — it wakes only when the dial actually turns, rather than polling.
+- `AsyncDial._find_rotary_device()` locates the resulting `/dev/input/eventN` device via
+  `evdev.list_devices()`, matching by capability (`EV_REL`/`REL_X` present, `EV_KEY`
+  absent) rather than a hardcoded device name or event-number, so it survives reboots and
+  eventN renumbering.
+- `start()` registers the device's file descriptor directly on the asyncio event loop with
+  `loop.add_reader(fd, callback)` — no background task, no thread pool. The loop calls the
+  callback whenever the fd is readable; each `REL_X` event's sign becomes `+1` (clockwise)
+  or `-1` (counter-clockwise) and is pushed onto `self.queue` (an `asyncio.Queue[int]`) via
+  `put_nowait`. A single `_POLARITY` constant corrects for physical wiring, same role as
+  the old code's sign inversion.
+- `stop()` calls `loop.remove_reader(fd)`, which is synchronous and immediate — this fixed
+  a real bug in the old GPIO-based version, where `stop()` awaited a task blocked inside
+  `asyncio.to_thread(GPIO.wait_for_edge, ...)` and could hang until the next physical edge.
+- `main.py`'s `_dial_loop()` is unchanged: it still consumes `await self.dial.queue.get()`
+  — the migration is entirely internal to `dial.py`.
 
 ---
 
@@ -370,7 +389,7 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 ### Flow B: User Turns the Dial
 
-1. `AsyncDial.run_encoder()` detects a falling edge on GPIO 17, reads direction from GPIO 18, and pushes it onto `dial.queue`.
+1. The kernel's `rotary_encoder` driver decodes GPIO 17/18 transitions and emits an `EV_REL`/`REL_X` evdev event; `AsyncDial`'s `loop.add_reader` callback reads it and pushes the direction onto `dial.queue`.
 2. `_dial_loop()` wakes with `await self.dial.queue.get()` — no polling.
 3. The LED flashes blue.
 4. If `mode == "station"`: `next_station(direction)` increments/decrements `jog_idx` within `self.stations` (wraps around).
@@ -404,7 +423,9 @@ The entire application runs on a single asyncio event loop, made up of several i
 
 **Tasks running concurrently (started from `run()` and component `start()` calls):**
 ```python
-asyncio.create_task(dial.run_encoder())              # polls GPIO edge, 300ms debounce, pushes to dial.queue
+# dial.start() is NOT a task — it's a loop.add_reader(fd, callback) registration.
+# The kernel's rotary_encoder driver does the decode/debounce; the event loop invokes
+# the callback directly whenever the evdev fd is readable, pushing to dial.queue.
 asyncio.create_task(encoders.run_encoder())          # polls SPI every 50ms, sets encoders.updated
 asyncio.create_task(display._display_loop())         # writes LCD on `changed` event
 asyncio.create_task(button_manager._poll_buttons())  # polls button state every 50ms, pushes to event_queue
@@ -416,7 +437,7 @@ asyncio.create_task(self._dial_loop())               # wakes on dial.queue — n
 
 **GPIO interrupt bridging:** RPi.GPIO fires button callbacks on a separate interrupt thread. These callbacks call `loop.call_soon_threadsafe(...)` to schedule coroutines back onto the asyncio event loop. This is the correct pattern — do not call `asyncio.create_task()` directly from a GPIO callback thread.
 
-**Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `dial.py`. Any new hardware code that polls with blocking calls must do the same.
+**Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `buttons.py`'s underlying GPIO callback dispatch. Any new hardware code that polls with blocking calls must do the same. For anything that exposes a pollable file descriptor instead (evdev devices, sockets, pipes), prefer `loop.add_reader(fd, callback)` — this is what `dial.py` now does, avoiding a thread entirely rather than wrapping a blocking call in one.
 
 **LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. The `led_running` Event prevents concurrent flashes.
 
@@ -438,7 +459,7 @@ through `radio_config.py`.
 | `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
 | `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
-| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module |
+| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` are also duplicated as literal pin numbers in `install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line — nothing enforces these two stay in sync if the constants ever change |
 | I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded, not in `radio_config.py`. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
 | SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded, not in `radio_config.py`. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
@@ -461,7 +482,7 @@ uv run pytest
 | Script | What it tests |
 |---|---|
 | `button_test.py` | GPIO button short/long press detection — `python ../tests/integration/button_test.py mid` |
-| `dial_test.py` | Quadrature encoder direction detection |
+| `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
 | `positional_encoders_test.py` | SPI encoder reading and latch mechanism |
 | `simulation_test.py` | End-to-end main loop simulation |
 | `async_streamer_test.py` | Async playlist resolver (requires network) |
@@ -546,7 +567,7 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 **The spatial search approach.** Building a 1024×1024 grid dict at startup and doing dict lookups in `find_cities_near()` is efficient and simple. `build_look_around_offsets()` with fuzziness is the right way to handle the physical imprecision of pointing at a globe.
 
-**The asyncio architecture is fundamentally sound.** GPIO interrupt callbacks are correctly bridged back to the event loop via `call_soon_threadsafe`. Blocking GPIO calls are wrapped in `asyncio.to_thread`. Event-driven waits (`encoders.updated`, `dial.queue`) mean idle tasks cost nothing, rather than burning CPU on a fixed-interval poll.
+**The asyncio architecture is fundamentally sound.** GPIO interrupt callbacks are correctly bridged back to the event loop via `call_soon_threadsafe`. Blocking GPIO calls are wrapped in `asyncio.to_thread` — `dial.py` is the one exception, since it reads a pollable evdev fd via `loop.add_reader` instead of a blocking GPIO call, needing neither a thread nor `call_soon_threadsafe`. Event-driven waits (`encoders.updated`, `dial.queue`) mean idle tasks cost nothing, rather than burning CPU on a fixed-interval poll.
 
 **The latch mechanism.** Freezing the encoder position until the user moves significantly is a genuinely clever UX solution. Without it, browsing stations while holding the globe still would be impossible — any tiny vibration would trigger a city change.
 
