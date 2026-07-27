@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.7] - 2026-07-27
+### Changed
+- Replaced positional button-definition tuples with a `ButtonDefinition`
+  NamedTuple (`radioglobe/buttons.py`), removing the `len(definition) == 5`
+  arity-branching hack in `AsyncButtonManager.__init__` in favor of a
+  default `press_cb=None` field.
+
+No user-facing behavior change — physically tested all four buttons
+(Jog, Top, Mid, Bottom, short and long press) on real hardware.
+
 ## [0.5.6] - 2026-07-27
 ### Changed
 - Organized `radioglobe/main.py` imports into stdlib/third-party/local groups
