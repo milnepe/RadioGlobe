@@ -101,7 +101,13 @@ class App:
         # Re-query stations from the live database so stale snapshots in the
         # cache never cause wrong URLs or indices after a stations.json update.
         if self.state.city:
-            self._current_coords = self._get_coords_by_city(self.state.city)
+            try:
+                self._current_coords = self._get_coords_by_city(self.state.city)
+            except KeyError as e:
+                logging.warning(f"{e} — discarding stale saved city")
+                self.state.city = None
+                self.state.station = None
+                return
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
             self.state.station, self.state.jog_idx = self._match_saved_station(
@@ -162,11 +168,16 @@ class App:
     # ---------------------------------------------------------------------------
 
     def _get_coords_by_city(self, city: str) -> Coordinate:
-        """Return a Coordinate for the given city string."""
+        """Return a Coordinate for the given city string.
+
+        Raises KeyError if the city isn't present in the stations data —
+        callers that can encounter a stale/removed city (e.g. from a cached
+        state file) must catch this explicitly rather than relying on a
+        silent fallback.
+        """
         entry = self.stations_info.get(city)
         if entry is None:
-            logging.warning(f"City not found in stations data: {city!r}")
-            return Coordinate(0, 0)
+            raise KeyError(f"City not found in stations data: {city!r}")
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
     def _has_essential_state(self) -> bool:
