@@ -169,9 +169,13 @@ class App:
             return Coordinate(0, 0)
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
+    def _has_essential_state(self) -> bool:
+        """Whether a city and station are both selected."""
+        return bool(self.state.city and self.state.station)
+
     async def _show_volume_briefly(self, volume: int):
         """Display volume level temporarily, then revert to station info."""
-        if not self.state.city or not self.state.station:
+        if not self._has_essential_state():
             return
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
@@ -180,14 +184,14 @@ class App:
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
-        if not self.state.city or not self.state.station:
+        if not self._has_essential_state():
             return
         volume = self.audio_player.change_volume(delta)
         await self._show_volume_briefly(volume)
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
-        if not self.state.city or not self.state.station:
+        if not self._has_essential_state():
             return
         volume = self.audio_player.change_volume_level(level)
         await self._show_volume_briefly(volume)
@@ -289,7 +293,7 @@ class App:
         """Wake on each dial movement and handle station/city navigation."""
         while True:
             direction = await self.dial.queue.get()
-            if not self.state.city or not self.state.station:
+            if not self._has_essential_state():
                 continue
             asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.1))
             logging.debug(
@@ -418,7 +422,7 @@ class App:
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                if not self.state.city or not self.state.station:
+                if not self._has_essential_state():
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
                     self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
