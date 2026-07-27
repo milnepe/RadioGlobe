@@ -186,18 +186,18 @@ class App:
 
     def _display_current_station(self, coords: Coordinate):
         """Show the current city and station on the display."""
-        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        self.display.update(coords, self.state.city, volume=0, station=self.state.station[0], arrows=False)
 
     def _display_status(self, status: str, coords: Optional[Coordinate] = None):
         """Show a status message (e.g. calibrating, shutdown) on the display."""
-        self.display.update(coords or Coordinate(0, 0), status, 0, "", False)
+        self.display.update(coords or Coordinate(0, 0), status, volume=0, station="", arrows=False)
 
     async def _show_volume_briefly(self, volume: int):
         """Display volume level temporarily, then revert to station info."""
         if not self._has_essential_state():
             return
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
-        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
+        self.display.update(coords, self.state.city, volume, self.state.station[0], arrows=False)
         await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         self._display_current_station(coords)
 
