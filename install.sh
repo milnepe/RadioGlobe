@@ -30,7 +30,9 @@ sudo apt install -y \
     python3-dev \
     pulseaudio-module-bluetooth \
     rfkill \
-    jq
+    jq \
+    swig \
+    liblgpio-dev
 
 # -----------------------------
 # Rotary encoder dtoverlay (idempotent)
@@ -49,7 +51,7 @@ fi
 # systemd-rfkill saves this state on change and restores it on
 # boot, so unblocking once here keeps it enabled across reboots.
 # -----------------------------
-if rfkill list bluetooth | grep -q "Soft blocked: yes"; then
+if sudo rfkill list bluetooth | grep -q "Soft blocked: yes"; then
     echo "📶 Unblocking Bluetooth radio..."
     sudo rfkill unblock bluetooth
 fi
@@ -85,7 +87,7 @@ sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 # Stations + version
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
+echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
