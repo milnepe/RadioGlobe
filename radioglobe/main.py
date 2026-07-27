@@ -28,6 +28,11 @@ from radioglobe.buttons import AsyncButtonManager
 from radioglobe.coordinates import Coordinate
 from radioglobe.display import Display
 from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON, LOG_LEVEL
+from radioglobe.constants import (
+    MODE_STATION, MODE_CITY,
+    STATUS_CALIBRATING, STATUS_CALIBRATED, STATUS_CALIBRATE, STATUS_SHUTDOWN,
+    COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE,
+)
 
 
 @dataclass
@@ -37,7 +42,7 @@ class AppState:
     cities: list = field(default_factory=list)
     city: Optional[str] = None
     jog_idx: int = 0
-    mode: str = "station"
+    mode: str = MODE_STATION
 
 
 class App:
@@ -85,7 +90,7 @@ class App:
             cities=state.get("cities") or [],
             city=state.get("city"),
             jog_idx=state.get("jog_idx") or 0,
-            mode=state.get("mode") or "station",
+            mode=state.get("mode") or MODE_STATION,
         )
         self.encoders.latitude = state.get("lat")
         self.encoders.longitude = state.get("lon")
@@ -133,8 +138,8 @@ class App:
 
     def switch_mode(self):
         """Toggle between application modes."""
-        self.state.mode = "city" if self.state.mode == "station" else "station"
-        if self.state.mode == "city":
+        self.state.mode = MODE_CITY if self.state.mode == MODE_STATION else MODE_STATION
+        if self.state.mode == MODE_CITY:
             self.state.jog_idx = (
                 self.state.cities.index(self.state.city)
                 if self.state.city in self.state.cities
@@ -218,7 +223,7 @@ class App:
                 return
 
             logging.debug(f"⚠️ Stream error: {expected_url}")
-            asyncio.create_task(led_task(self.led, self.led_running, "red", 0.5))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, 0.5))
             self._remove_failed_station()
             if not self.state.station:
                 break
@@ -251,7 +256,7 @@ class App:
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
                 if not self.led_running.is_set():
-                    asyncio.create_task(led_task(self.led, self.led_running, "green", 0.5))
+                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.5))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
                 self.state.jog_idx = 0
@@ -282,13 +287,13 @@ class App:
             direction = await self.dial.queue.get()
             if not self.state.city or not self.state.station:
                 continue
-            asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.1))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.1))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )
-            if self.state.mode == "station":
+            if self.state.mode == MODE_STATION:
                 self.next_station(direction)
-            elif self.state.mode == "city":
+            elif self.state.mode == MODE_CITY:
                 self.next_city(direction)
                 if not self.state.stations:
                     logging.warning(f"No stations for {self.state.city!r} — keeping previous station")
@@ -305,11 +310,11 @@ class App:
     # ---------------------------------------------------------------------------
 
     async def _on_jog_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
 
     async def _handle_short_jog(self):
         self.switch_mode()
-        result = self.state.stations if self.state.mode == "station" else self.state.cities
+        result = self.state.stations if self.state.mode == MODE_STATION else self.state.cities
         logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.state.jog_idx} {result}")
 
     async def _handle_long_jog(self):
@@ -317,7 +322,7 @@ class App:
         await asyncio.sleep(0.2)
 
     async def _on_sound_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, "blue", 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.2))
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
@@ -336,7 +341,7 @@ class App:
         await self._update_volume_level(0)
 
     async def _on_mid_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, "green", 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
 
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
@@ -346,16 +351,16 @@ class App:
             f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
-        self.display.update(Coordinate(0, 0), "Calibrating", 0, "", False)
+        self.display.update(Coordinate(0, 0), STATUS_CALIBRATING, 0, "", False)
         await asyncio.sleep(2)
-        self.display.update(Coordinate(0, 0), "CALIBRATED", 0, "", False)
+        self.display.update(Coordinate(0, 0), STATUS_CALIBRATED, 0, "", False)
 
     async def _handle_long_mid(self):
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
         coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-        self.display.update(coords, "Shutdown", 0, "", False)
+        self.display.update(coords, STATUS_SHUTDOWN, 0, "", False)
         await asyncio.sleep(2)
         if self.state.city and self.state.station:
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
@@ -412,7 +417,7 @@ class App:
                 if not self.state.city or not self.state.station:
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
-                    self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
+                    self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
                 else:
                     self._current_coords = self._get_coords_by_city(self.state.city)
                     self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
@@ -423,7 +428,7 @@ class App:
                         f"{self.state.cities} {self.state.stations}"
                     )
             else:
-                self.display.update(Coordinate(0, 0), "CALIBRATE", 0, "", False)
+                self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
 
             encoder_task = asyncio.create_task(self._encoder_loop())
             dial_task = asyncio.create_task(self._dial_loop())

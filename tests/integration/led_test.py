@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
 from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.constants import COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
 
 
 async def scheduler():
@@ -25,7 +26,7 @@ async def scheduler():
 async def led_cycle(led: RGBLed):
     """Cycle through RED, GREEN, BLUE then off."""
     print("Testing LEDs...")
-    for colour in ("red", "green", "blue"):
+    for colour in (COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE):
         led.set_color(colour)
         await asyncio.sleep(1)
     led.off()
@@ -53,11 +54,11 @@ async def main():
 
     while True:
         first_task = asyncio.create_task(first_thing())
-        await led_task(led, led_running, "red", 0.2)
+        await led_task(led, led_running, COLOUR_RED, 0.2)
         await first_task
 
         second_task = asyncio.create_task(second_thing())
-        await led_task(led, led_running, "blue", 0.2)
+        await led_task(led, led_running, COLOUR_BLUE, 0.2)
         await second_task
 
 

@@ -10,6 +10,7 @@ pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
 from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.constants import COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
@@ -60,7 +61,7 @@ async def main():
         if not encoders.is_latched():
             if city_list:
                 encoders.latch(*readings, STICKINESS)
-                asyncio.create_task(led_task(led, led_running, "red", 0.5))
+                asyncio.create_task(led_task(led, led_running, COLOUR_RED, 0.5))
                 first_city = city_list[0]
                 station_info = database.get_stations_info(first_city, stations)
                 print(f"Found: {city_list[0]} Station: {station_info}")

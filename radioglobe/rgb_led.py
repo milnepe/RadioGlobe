@@ -3,6 +3,7 @@ import logging
 import RPi.GPIO as GPIO  # type: ignore
 
 from .radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
+from .constants import COLOUR_OFF
 
 
 class RGBLed:
@@ -28,7 +29,7 @@ class RGBLed:
         GPIO.output(self.pins["blue"], GPIO.HIGH if color[2] else GPIO.LOW)
 
     def off(self):
-        self.set_color("off")
+        self.set_color(COLOUR_OFF)
 
     def start(self):
         pass  # GPIO pins are configured at construction time
