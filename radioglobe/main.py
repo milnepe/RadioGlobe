@@ -9,7 +9,7 @@ from typing import Optional
 import RPi.GPIO as GPIO  # type: ignore
 
 from radioglobe.audio_async import AudioPlayer
-from radioglobe.buttons import AsyncButtonManager
+from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
 from radioglobe.constants import (
     COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
     MODE_CITY, MODE_STATION,
@@ -407,10 +407,10 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ("Jog",    PIN_BTN_JOG,    self._handle_short_jog,    None,                    self._on_jog_press),
-            ("Top",    PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
-            ("Mid",    PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
-            ("Bottom", PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
+            ButtonDefinition("Jog",    PIN_BTN_JOG,    self._handle_short_jog,    None,                     self._on_jog_press),
+            ButtonDefinition("Top",    PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
+            ButtonDefinition("Mid",    PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
+            ButtonDefinition("Bottom", PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
