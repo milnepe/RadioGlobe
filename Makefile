@@ -53,6 +53,12 @@ deploy: build
 		--exclude ".git" \
 		--exclude "__pycache__" \
 		--exclude "*.pyc" \
+		--exclude ".venv" \
+		--exclude ".pytest_cache" \
+		--exclude ".ruff_cache" \
+		--exclude ".claude" \
+		--exclude ".python-version" \
+		--exclude ".lgd-nfy0" \
 		./ $(REMOTE):$(REMOTE_DIR)/
 
 # -----------------------------
