@@ -61,6 +61,23 @@ if sudo rfkill list bluetooth | grep -q "Soft blocked: yes"; then
 fi
 
 # -----------------------------
+# Allow passwordless poweroff (idempotent)
+# The mid-button long-press shutdown handler runs `sudo poweroff`
+# from radioglobe.service, which has no TTY to answer a password
+# prompt. Some images grant the default user blanket NOPASSWD sudo;
+# scope it to just poweroff here instead of relying on that.
+# -----------------------------
+SUDOERS_FILE=/etc/sudoers.d/radioglobe-poweroff
+SUDOERS_LINE="$RADIOGLOBE_USER ALL=(root) NOPASSWD: /usr/sbin/poweroff"
+if [[ ! -f "$SUDOERS_FILE" ]] || ! grep -qxF "$SUDOERS_LINE" "$SUDOERS_FILE"; then
+    echo "🔑 Granting passwordless poweroff to $RADIOGLOBE_USER..."
+    echo "$SUDOERS_LINE" | sudo tee "$SUDOERS_FILE.tmp" > /dev/null
+    sudo visudo -c -f "$SUDOERS_FILE.tmp" > /dev/null
+    sudo chmod 0440 "$SUDOERS_FILE.tmp"
+    sudo mv "$SUDOERS_FILE.tmp" "$SUDOERS_FILE"
+fi
+
+# -----------------------------
 # Prepare install directory
 # -----------------------------
 echo "📁 Preparing install dir..."
