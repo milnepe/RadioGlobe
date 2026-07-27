@@ -104,16 +104,21 @@ class App:
             self._current_coords = self._get_coords_by_city(self.state.city)
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
-            match = next(
-                (s for s in self.state.stations if s[0] == saved_name),
-                None,
+            self.state.station, self.state.jog_idx = self._match_saved_station(
+                saved_name, self.state.stations
             )
-            if match:
-                self.state.station = match
-                self.state.jog_idx = self.state.stations.index(match)
-            else:
-                self.state.station = self.state.stations[0] if self.state.stations else None
-                self.state.jog_idx = 0
+
+    @staticmethod
+    def _match_saved_station(saved_name, stations):
+        """Find the saved station by name in the refreshed stations list.
+
+        Falls back to the first station (or None) if the saved name is no
+        longer present, e.g. after a stations.json update.
+        """
+        match = next((s for s in stations if s[0] == saved_name), None)
+        if match:
+            return match, stations.index(match)
+        return (stations[0] if stations else None), 0
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -138,19 +143,15 @@ class App:
 
     def switch_mode(self):
         """Toggle between application modes."""
-        self.state.mode = MODE_CITY if self.state.mode == MODE_STATION else MODE_STATION
-        if self.state.mode == MODE_CITY:
-            self.state.jog_idx = (
-                self.state.cities.index(self.state.city)
-                if self.state.city in self.state.cities
-                else 0
-            )
+        if self.state.mode == MODE_STATION:
+            self.state.mode = MODE_CITY
+            items, current = self.state.cities, self.state.city
         else:
-            self.state.jog_idx = (
-                self.state.stations.index(self.state.station)
-                if self.state.station in self.state.stations
-                else 0
-            )
+            self.state.mode = MODE_STATION
+            items, current = self.state.stations, self.state.station
+
+        self.state.jog_idx = items.index(current) if current in items else 0
+
         logging.debug(
             f"🌀 Mode switched to: {self.state.mode} jog:{self.state.jog_idx} "
             f"{self.state.city} {self.state.station}"
@@ -168,25 +169,32 @@ class App:
             return Coordinate(0, 0)
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
-    async def _update_volume(self, delta):
-        """Adjust volume by delta and briefly show the level on the display."""
-        if not self.state.city or not self.state.station:
+    def _has_essential_state(self) -> bool:
+        """Whether a city and station are both selected."""
+        return bool(self.state.city and self.state.station)
+
+    async def _show_volume_briefly(self, volume: int):
+        """Display volume level temporarily, then revert to station info."""
+        if not self._has_essential_state():
             return
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
-        volume = self.audio_player.change_volume(delta)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
         await asyncio.sleep(0.5)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
+    async def _update_volume(self, delta):
+        """Adjust volume by delta and briefly show the level on the display."""
+        if not self._has_essential_state():
+            return
+        volume = self.audio_player.change_volume(delta)
+        await self._show_volume_briefly(volume)
+
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
-        if not self.state.city or not self.state.station:
+        if not self._has_essential_state():
             return
-        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume_level(level)
-        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
-        await asyncio.sleep(0.5)
-        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        await self._show_volume_briefly(volume)
 
     def _remove_failed_station(self):
         """Remove the current station from the session list and advance to the next.
@@ -285,7 +293,7 @@ class App:
         """Wake on each dial movement and handle station/city navigation."""
         while True:
             direction = await self.dial.queue.get()
-            if not self.state.city or not self.state.station:
+            if not self._has_essential_state():
                 continue
             asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.1))
             logging.debug(
@@ -414,7 +422,7 @@ class App:
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                if not self.state.city or not self.state.station:
+                if not self._has_essential_state():
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
                     self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
