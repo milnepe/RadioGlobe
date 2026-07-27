@@ -27,8 +27,10 @@ from radioglobe.dial import AsyncDial
 from radioglobe.display import Display
 from radioglobe.positional_encoders import PositionalEncoders
 from radioglobe.radio_config import (
-    FUZZINESS, LOG_LEVEL, PIN_BTN_BOTTOM, PIN_BTN_JOG, PIN_BTN_MID, PIN_BTN_TOP,
-    STATE_CACHE_PATH, STATIONS_JSON, STICKINESS, VOLUME_STEP,
+    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
+    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, PIN_BTN_BOTTOM, PIN_BTN_JOG,
+    PIN_BTN_MID, PIN_BTN_TOP, STATE_CACHE_PATH, STATIONS_JSON, STICKINESS,
+    STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
 from radioglobe.rgb_led import RGBLed, led_task
 
@@ -47,7 +49,7 @@ class App:
     def __init__(self):
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
-        self.audio_player.change_volume_level(50)
+        self.audio_player.change_volume_level(DEFAULT_VOLUME)
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.led = RGBLed()
@@ -177,7 +179,7 @@ class App:
             return
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], False)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         self.display.update(coords, self.state.city, 0, self.state.station[0], False)
 
     async def _update_volume(self, delta):
@@ -216,7 +218,7 @@ class App:
         removed, or the user selects a different station.
         """
         while self.state.stations:
-            await asyncio.sleep(3)
+            await asyncio.sleep(STREAM_CHECK_INTERVAL)
 
             # User moved to a different station — stop watching
             if self.audio_player.current_url != expected_url:
@@ -229,7 +231,7 @@ class App:
                 return
 
             logging.debug(f"⚠️ Stream error: {expected_url}")
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, 0.5))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, LED_FLASH_LONG))
             self._remove_failed_station()
             if not self.state.station:
                 break
@@ -262,7 +264,7 @@ class App:
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
                 if not self.led_running.is_set():
-                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.5))
+                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
                 self.state.jog_idx = 0
@@ -293,7 +295,7 @@ class App:
             direction = await self.dial.queue.get()
             if not self._has_essential_state():
                 continue
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.1))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_DIAL))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )
@@ -316,7 +318,7 @@ class App:
     # ---------------------------------------------------------------------------
 
     async def _on_jog_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_jog(self):
         self.switch_mode()
@@ -325,10 +327,10 @@ class App:
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(LED_FLASH_SHORT)
 
     async def _on_sound_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_SHORT))
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
@@ -336,7 +338,7 @@ class App:
 
     async def _handle_long_top(self):
         logging.debug("🖲️ Top button long press! Set volume on")
-        await self._update_volume_level(80)
+        await self._update_volume_level(VOLUME_ON_LEVEL)
 
     async def _handle_short_bottom(self):
         logging.debug("🖲️ Bottom button short press! Lowering volume.")
@@ -344,10 +346,10 @@ class App:
 
     async def _handle_long_bottom(self):
         logging.debug("🖲️ Bottom button long press! Set volume off")
-        await self._update_volume_level(0)
+        await self._update_volume_level(VOLUME_OFF_LEVEL)
 
     async def _on_mid_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
@@ -358,7 +360,7 @@ class App:
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
         self.display.update(Coordinate(0, 0), STATUS_CALIBRATING, 0, "", False)
-        await asyncio.sleep(2)
+        await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         self.display.update(Coordinate(0, 0), STATUS_CALIBRATED, 0, "", False)
 
     async def _handle_long_mid(self):
@@ -367,10 +369,10 @@ class App:
         logging.debug("Saved state...")
         coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
         self.display.update(coords, STATUS_SHUTDOWN, 0, "", False)
-        await asyncio.sleep(2)
+        await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         if self.state.city and self.state.station:
             self.display.update(coords, self.state.city, 0, self.state.station[0], False)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         subprocess.run(["sudo", "poweroff"])
 
     # ---------------------------------------------------------------------------
@@ -405,7 +407,7 @@ class App:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne",
             )
-            await asyncio.sleep(2)
+            await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
 
             try:
                 self.load_state()
