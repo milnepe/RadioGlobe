@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.10] - 2026-07-27
+### Fixed
+- `make deploy`'s rsync only excluded `.git`, `__pycache__`, and `*.pyc`,
+  so it shipped the entire local dev environment to the device's
+  `~/RadioGlobe` staging checkout: the x86_64 `.venv` (wrong architecture,
+  irrelevant since the device has its own venv under `/opt/radioglobe`),
+  `.pytest_cache`, `.ruff_cache`, `.claude` (local Claude Code settings),
+  `.python-version`, and `.lgd-nfy0`. Added the missing excludes.
+
+Found and fixed while deploying v0.5.9 to real hardware this session;
+already-deployed stray files were cleaned up by hand on the device, and
+`make deploy` was re-run afterward to confirm only `Makefile`/`VERSION`
+transferred.
+
 ## [0.5.9] - 2026-07-27
 ### Fixed
 - Shutdown (Mid button long-press) had stopped working on real hardware:
