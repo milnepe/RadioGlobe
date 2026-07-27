@@ -1,10 +1,9 @@
 import asyncio
-import dataclasses
 import json
 import logging
 import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 import RPi.GPIO as GPIO  # type: ignore
@@ -62,7 +61,7 @@ class App:
 
     def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
-        state = dataclasses.asdict(self.state)
+        state = asdict(self.state)
         state.update({
             "lat": self.encoders.latitude,
             "lon": self.encoders.longitude,
