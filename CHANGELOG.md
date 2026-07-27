@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.6] - 2026-07-27
+### Changed
+- Organized `radioglobe/main.py` imports into stdlib/third-party/local groups
+  (PEP 8), consolidating repeated single-name imports.
+- Removed the redundant `import dataclasses` module import alongside
+  `from dataclasses import dataclass, field`.
+- Replaced hardcoded sleep/LED-flash/volume-level magic numbers in async
+  methods with named constants in `radio_config.py`.
+- Extracted ten duplicated `self.display.update(...)` call shapes into
+  `_display_current_station()` and `_display_status()`.
+- `Display.update()` call sites now pass `volume`/`station`/`arrows` as
+  keyword arguments instead of unclear bare positionals.
+
+### Fixed
+- `_get_coords_by_city()` now raises `KeyError` instead of silently logging
+  a warning and returning a fake `Coordinate(0, 0)` when a city isn't found.
+  Only `load_state()` (the one place a cached city can go stale after a
+  `stations.json` update) catches it, falling back to the existing
+  calibrate-mode recovery path.
+
+No user-facing behavior changes — internal readability/robustness cleanup.
+
 ## [0.5.5] - 2026-07-27
 ### Changed
 - Extracted mode (`station`/`city`) and LED colour magic strings into a new
