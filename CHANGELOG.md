@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.8] - 2026-07-27
+### Fixed
+- `install.sh` failed on Raspberry Pi OS Trixie: the bluetooth `rfkill`
+  check used the bare command, but the `radioglobe` user's non-interactive
+  `PATH` excludes `/usr/sbin` on Trixie, causing "command not found"; now
+  run via `sudo`, whose `secure_path` includes it.
+- Added `swig` and `liblgpio-dev` to the apt dependency list — building the
+  `lgpio` Python wheel needs `swig`, and linking it needs `liblgpio-dev`
+  (only `liblgpio1`, the runtime lib, is pulled in transitively on Trixie).
+- `install.sh` crashed copying a missing `VERSION` file even though it
+  already had a fallback to report `"unknown"` for display; now writes the
+  resolved version string instead of copying the file.
+- `install.sh` now falls back to `git describe --tags --always --dirty`
+  for `VERSION` when run from a real git clone on the target host (no
+  `VERSION` file, but a real `.git` dir), instead of always reporting
+  `"unknown"` in that case.
+
+Physically tested end to end on real RadioGlobe hardware (Debian 13/Trixie)
+after each fix; confirmed `install.sh` completes cleanly and
+`/opt/radioglobe/VERSION` / the rendered `radioglobe.service` unit show the
+correct resolved version.
+
 ## [0.5.7] - 2026-07-27
 ### Changed
 - Replaced positional button-definition tuples with a `ButtonDefinition`
