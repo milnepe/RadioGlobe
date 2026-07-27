@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.9] - 2026-07-27
+### Fixed
+- Shutdown (Mid button long-press) had stopped working on real hardware:
+  `radioglobe.service` runs with no TTY, so `sudo poweroff` had no way to
+  prompt for a password, and no `NOPASSWD` rule existed for the
+  `radioglobe` user. `install.sh` now installs a scoped
+  `/etc/sudoers.d/radioglobe-poweroff` drop-in (`NOPASSWD` for
+  `/usr/sbin/poweroff` only, validated with `visudo -c` before being put
+  in place) instead of relying on the default user having blanket
+  passwordless sudo.
+
+### Changed
+- README updated to reflect testing on Raspberry Pi OS Trixie: OS
+  installation, upgrading, and troubleshooting sections no longer assume
+  Bookworm only.
+
+Verified on real hardware via `sudo -n -l`, which now lists
+`(root) NOPASSWD: /usr/sbin/poweroff` for `radioglobe`. Did not trigger an
+actual `poweroff` during verification, to avoid requiring a physical
+power-cycle of the device.
+
 ## [0.5.8] - 2026-07-27
 ### Fixed
 - `install.sh` failed on Raspberry Pi OS Trixie: the bluetooth `rfkill`
