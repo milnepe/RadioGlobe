@@ -19,7 +19,7 @@ import pytest
 
 GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-from radioglobe.buttons import AsyncButtonManager
+from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
 from radioglobe.radio_config import PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
 
 BUTTONS = {
@@ -69,7 +69,7 @@ async def main():
     loop = asyncio.get_running_loop()
 
     button_definitions = [
-        (args.button, pin, on_short, on_long, on_press),
+        ButtonDefinition(args.button, pin, on_short, on_long, on_press),
     ]
 
     manager = AsyncButtonManager(

@@ -1,8 +1,17 @@
 import asyncio
 import time
 import inspect
+from typing import Callable, NamedTuple, Optional
 
 import RPi.GPIO as GPIO  # type: ignore
+
+
+class ButtonDefinition(NamedTuple):
+    name: str
+    pin: int
+    short_cb: Optional[Callable] = None
+    long_cb: Optional[Callable] = None
+    press_cb: Optional[Callable] = None
 
 
 class AsyncButton:
@@ -69,15 +78,12 @@ class AsyncButtonManager:
         self.event_queue = asyncio.Queue()
 
         for definition in button_definitions:
-            if len(definition) == 5:
-                name, pin, short_cb, long_cb, press_cb = definition
-            else:
-                name, pin, short_cb, long_cb = definition
-                press_cb = None
-            btn = AsyncButton(name, pin, loop, long_press_threshold, press_cb)
+            btn = AsyncButton(
+                definition.name, definition.pin, loop, long_press_threshold, definition.press_cb
+            )
             self.buttons.append(btn)
-            setattr(btn, "short_cb", short_cb)
-            setattr(btn, "long_cb", long_cb)
+            setattr(btn, "short_cb", definition.short_cb)
+            setattr(btn, "long_cb", definition.long_cb)
 
     async def start(self):
         asyncio.create_task(self._poll_buttons())
