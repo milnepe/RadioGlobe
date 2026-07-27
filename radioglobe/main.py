@@ -1,38 +1,37 @@
 import asyncio
 import dataclasses
-import subprocess
+import json
 import logging
 import os
-import json
-from typing import Optional
-
+import subprocess
 from dataclasses import dataclass, field
+from typing import Optional
 
 import RPi.GPIO as GPIO  # type: ignore
 
 from radioglobe.audio_async import AudioPlayer
-from radioglobe.dial import AsyncDial
-from radioglobe.positional_encoders import PositionalEncoders
-
-from radioglobe.rgb_led import RGBLed
-from radioglobe.rgb_led import led_task
-
-from radioglobe.database import load_stations
-from radioglobe.database import build_cities_index
-from radioglobe.database import build_look_around_offsets
-from radioglobe.database import find_cities_near
-from radioglobe.database import get_stations_by_city
-
 from radioglobe.buttons import AsyncButtonManager
-
-from radioglobe.coordinates import Coordinate
-from radioglobe.display import Display
-from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON, LOG_LEVEL
 from radioglobe.constants import (
-    MODE_STATION, MODE_CITY,
-    STATUS_CALIBRATING, STATUS_CALIBRATED, STATUS_CALIBRATE, STATUS_SHUTDOWN,
-    COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE,
+    COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
+    MODE_CITY, MODE_STATION,
+    STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
+from radioglobe.coordinates import Coordinate
+from radioglobe.database import (
+    build_cities_index,
+    build_look_around_offsets,
+    find_cities_near,
+    get_stations_by_city,
+    load_stations,
+)
+from radioglobe.dial import AsyncDial
+from radioglobe.display import Display
+from radioglobe.positional_encoders import PositionalEncoders
+from radioglobe.radio_config import (
+    FUZZINESS, LOG_LEVEL, PIN_BTN_BOTTOM, PIN_BTN_JOG, PIN_BTN_MID, PIN_BTN_TOP,
+    STATE_CACHE_PATH, STATIONS_JSON, STICKINESS, VOLUME_STEP,
+)
+from radioglobe.rgb_led import RGBLed, led_task
 
 
 @dataclass
