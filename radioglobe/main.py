@@ -168,25 +168,28 @@ class App:
             return Coordinate(0, 0)
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
+    async def _show_volume_briefly(self, volume: int):
+        """Display volume level temporarily, then revert to station info."""
+        if not self.state.city or not self.state.station:
+            return
+        coords = self._current_coords or self._get_coords_by_city(self.state.city)
+        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
+        await asyncio.sleep(0.5)
+        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
         if not self.state.city or not self.state.station:
             return
-        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume(delta)
-        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
-        await asyncio.sleep(0.5)
-        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        await self._show_volume_briefly(volume)
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
         if not self.state.city or not self.state.station:
             return
-        coords = self._current_coords or self._get_coords_by_city(self.state.city)
         volume = self.audio_player.change_volume_level(level)
-        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
-        await asyncio.sleep(0.5)
-        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        await self._show_volume_briefly(volume)
 
     def _remove_failed_station(self):
         """Remove the current station from the session list and advance to the next.
