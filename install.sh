@@ -8,10 +8,14 @@ SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "🚀 Installing RadioGlobe..."
 
 # -----------------------------
-# Version (injected from dev machine)
+# Version: prefer VERSION injected by `make deploy` from the dev
+# machine; fall back to `git describe` when running from a real
+# clone on the target host (e.g. installed directly via git clone).
 # -----------------------------
 if [[ -f "$SRC_DIR/VERSION" ]]; then
     VERSION=$(cat "$SRC_DIR/VERSION")
+elif [[ -d "$SRC_DIR/.git" ]]; then
+    VERSION=$(git -C "$SRC_DIR" describe --tags --always --dirty 2>/dev/null || echo "unknown")
 else
     VERSION="unknown"
 fi
