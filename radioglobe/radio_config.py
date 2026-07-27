@@ -13,6 +13,21 @@ STICKINESS = 2
 
 # Edit these to suit your audio settings
 VOLUME_STEP = 10
+DEFAULT_VOLUME = 50
+VOLUME_ON_LEVEL = 80
+VOLUME_OFF_LEVEL = 0
+
+# Display hold durations (seconds)
+BRIEF_DISPLAY_DURATION = 0.5   # volume level / final shutdown display hold
+MESSAGE_DISPLAY_DURATION = 2   # startup splash, calibrating, shutdown message hold
+
+# Stream health check grace period (seconds)
+STREAM_CHECK_INTERVAL = 3
+
+# LED flash durations (seconds)
+LED_FLASH_SHORT = 0.2   # button press feedback
+LED_FLASH_LONG = 0.5    # city latch / stream error indication
+LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
 
 # GPIO pin assignments (BCM numbering)
 PIN_DIAL_CLOCK = 17

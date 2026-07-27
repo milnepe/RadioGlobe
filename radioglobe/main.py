@@ -1,38 +1,38 @@
 import asyncio
-import dataclasses
-import subprocess
+import json
 import logging
 import os
-import json
+import subprocess
+from dataclasses import asdict, dataclass, field
 from typing import Optional
-
-from dataclasses import dataclass, field
 
 import RPi.GPIO as GPIO  # type: ignore
 
 from radioglobe.audio_async import AudioPlayer
-from radioglobe.dial import AsyncDial
-from radioglobe.positional_encoders import PositionalEncoders
-
-from radioglobe.rgb_led import RGBLed
-from radioglobe.rgb_led import led_task
-
-from radioglobe.database import load_stations
-from radioglobe.database import build_cities_index
-from radioglobe.database import build_look_around_offsets
-from radioglobe.database import find_cities_near
-from radioglobe.database import get_stations_by_city
-
 from radioglobe.buttons import AsyncButtonManager
-
-from radioglobe.coordinates import Coordinate
-from radioglobe.display import Display
-from radioglobe.radio_config import FUZZINESS, STICKINESS, VOLUME_STEP, PIN_BTN_JOG, PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM, STATE_CACHE_PATH, STATIONS_JSON, LOG_LEVEL
 from radioglobe.constants import (
-    MODE_STATION, MODE_CITY,
-    STATUS_CALIBRATING, STATUS_CALIBRATED, STATUS_CALIBRATE, STATUS_SHUTDOWN,
-    COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE,
+    COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
+    MODE_CITY, MODE_STATION,
+    STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
+from radioglobe.coordinates import Coordinate
+from radioglobe.database import (
+    build_cities_index,
+    build_look_around_offsets,
+    find_cities_near,
+    get_stations_by_city,
+    load_stations,
+)
+from radioglobe.dial import AsyncDial
+from radioglobe.display import Display
+from radioglobe.positional_encoders import PositionalEncoders
+from radioglobe.radio_config import (
+    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
+    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, PIN_BTN_BOTTOM, PIN_BTN_JOG,
+    PIN_BTN_MID, PIN_BTN_TOP, STATE_CACHE_PATH, STATIONS_JSON, STICKINESS,
+    STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
+)
+from radioglobe.rgb_led import RGBLed, led_task
 
 
 @dataclass
@@ -49,7 +49,7 @@ class App:
     def __init__(self):
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
-        self.audio_player.change_volume_level(50)
+        self.audio_player.change_volume_level(DEFAULT_VOLUME)
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.led = RGBLed()
@@ -63,7 +63,7 @@ class App:
 
     def save_state(self, cache=STATE_CACHE_PATH):
         logging.debug(f"STATIONS: {self.state.stations}")
-        state = dataclasses.asdict(self.state)
+        state = asdict(self.state)
         state.update({
             "lat": self.encoders.latitude,
             "lon": self.encoders.longitude,
@@ -101,7 +101,13 @@ class App:
         # Re-query stations from the live database so stale snapshots in the
         # cache never cause wrong URLs or indices after a stations.json update.
         if self.state.city:
-            self._current_coords = self._get_coords_by_city(self.state.city)
+            try:
+                self._current_coords = self._get_coords_by_city(self.state.city)
+            except KeyError as e:
+                logging.warning(f"{e} — discarding stale saved city")
+                self.state.city = None
+                self.state.station = None
+                return
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
             self.state.station, self.state.jog_idx = self._match_saved_station(
@@ -162,25 +168,38 @@ class App:
     # ---------------------------------------------------------------------------
 
     def _get_coords_by_city(self, city: str) -> Coordinate:
-        """Return a Coordinate for the given city string."""
+        """Return a Coordinate for the given city string.
+
+        Raises KeyError if the city isn't present in the stations data —
+        callers that can encounter a stale/removed city (e.g. from a cached
+        state file) must catch this explicitly rather than relying on a
+        silent fallback.
+        """
         entry = self.stations_info.get(city)
         if entry is None:
-            logging.warning(f"City not found in stations data: {city!r}")
-            return Coordinate(0, 0)
+            raise KeyError(f"City not found in stations data: {city!r}")
         return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
 
     def _has_essential_state(self) -> bool:
         """Whether a city and station are both selected."""
         return bool(self.state.city and self.state.station)
 
+    def _display_current_station(self, coords: Coordinate):
+        """Show the current city and station on the display."""
+        self.display.update(coords, self.state.city, volume=0, station=self.state.station[0], arrows=False)
+
+    def _display_status(self, status: str, coords: Optional[Coordinate] = None):
+        """Show a status message (e.g. calibrating, shutdown) on the display."""
+        self.display.update(coords or Coordinate(0, 0), status, volume=0, station="", arrows=False)
+
     async def _show_volume_briefly(self, volume: int):
         """Display volume level temporarily, then revert to station info."""
         if not self._has_essential_state():
             return
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
-        self.display.update(coords, self.state.city, volume, self.state.station[0], False)
-        await asyncio.sleep(0.5)
-        self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+        self.display.update(coords, self.state.city, volume, self.state.station[0], arrows=False)
+        await asyncio.sleep(BRIEF_DISPLAY_DURATION)
+        self._display_current_station(coords)
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
@@ -218,7 +237,7 @@ class App:
         removed, or the user selects a different station.
         """
         while self.state.stations:
-            await asyncio.sleep(3)
+            await asyncio.sleep(STREAM_CHECK_INTERVAL)
 
             # User moved to a different station — stop watching
             if self.audio_player.current_url != expected_url:
@@ -231,12 +250,12 @@ class App:
                 return
 
             logging.debug(f"⚠️ Stream error: {expected_url}")
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, 0.5))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, LED_FLASH_LONG))
             self._remove_failed_station()
             if not self.state.station:
                 break
             coords = self._current_coords or self._get_coords_by_city(self.state.city)
-            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+            self._display_current_station(coords)
             self.audio_player.play(self.state.city, self.state.station)
             expected_url = self.state.station[1]
 
@@ -264,7 +283,7 @@ class App:
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
                 if not self.led_running.is_set():
-                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.5))
+                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
                 self.state.jog_idx = 0
@@ -285,7 +304,7 @@ class App:
                     f"📻 Tuning to: jog:{self.state.jog_idx} "
                     f"{self.state.city} {self.state.station}\n{self.state.stations}"
                 )
-                self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
+                self._display_current_station(self._current_coords)
                 self.audio_player.play(self.state.city, self.state.station)
                 self._start_monitor_stream(self.state.station[1])
 
@@ -295,7 +314,7 @@ class App:
             direction = await self.dial.queue.get()
             if not self._has_essential_state():
                 continue
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.1))
+            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_DIAL))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )
@@ -309,7 +328,7 @@ class App:
                 self.state.station = self.state.stations[0]
 
             coords = self._current_coords or self._get_coords_by_city(self.state.city)
-            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
+            self._display_current_station(coords)
             self.audio_player.play(self.state.city, self.state.station)
             self._start_monitor_stream(self.state.station[1])
 
@@ -318,7 +337,7 @@ class App:
     # ---------------------------------------------------------------------------
 
     async def _on_jog_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_jog(self):
         self.switch_mode()
@@ -327,10 +346,10 @@ class App:
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(LED_FLASH_SHORT)
 
     async def _on_sound_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_SHORT))
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
@@ -338,7 +357,7 @@ class App:
 
     async def _handle_long_top(self):
         logging.debug("🖲️ Top button long press! Set volume on")
-        await self._update_volume_level(80)
+        await self._update_volume_level(VOLUME_ON_LEVEL)
 
     async def _handle_short_bottom(self):
         logging.debug("🖲️ Bottom button short press! Lowering volume.")
@@ -346,10 +365,10 @@ class App:
 
     async def _handle_long_bottom(self):
         logging.debug("🖲️ Bottom button long press! Set volume off")
-        await self._update_volume_level(0)
+        await self._update_volume_level(VOLUME_OFF_LEVEL)
 
     async def _on_mid_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, 0.2))
+        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
@@ -359,20 +378,20 @@ class App:
             f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
-        self.display.update(Coordinate(0, 0), STATUS_CALIBRATING, 0, "", False)
-        await asyncio.sleep(2)
-        self.display.update(Coordinate(0, 0), STATUS_CALIBRATED, 0, "", False)
+        self._display_status(STATUS_CALIBRATING)
+        await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
+        self._display_status(STATUS_CALIBRATED)
 
     async def _handle_long_mid(self):
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
         coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-        self.display.update(coords, STATUS_SHUTDOWN, 0, "", False)
-        await asyncio.sleep(2)
+        self._display_status(STATUS_SHUTDOWN, coords)
+        await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         if self.state.city and self.state.station:
-            self.display.update(coords, self.state.city, 0, self.state.station[0], False)
-        await asyncio.sleep(0.5)
+            self._display_current_station(coords)
+        await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         subprocess.run(["sudo", "poweroff"])
 
     # ---------------------------------------------------------------------------
@@ -407,7 +426,7 @@ class App:
                 line_3="Jude Pullen, Donald",
                 line_4="Robson, Pete Milne",
             )
-            await asyncio.sleep(2)
+            await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
 
             try:
                 self.load_state()
@@ -425,10 +444,10 @@ class App:
                 if not self._has_essential_state():
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
-                    self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
+                    self._display_status(STATUS_CALIBRATE)
                 else:
                     self._current_coords = self._get_coords_by_city(self.state.city)
-                    self.display.update(self._current_coords, self.state.city, 0, self.state.station[0], False)
+                    self._display_current_station(self._current_coords)
                     self.audio_player.play(self.state.city, self.state.station)
                     self._start_monitor_stream(self.state.station[1])
                     logging.debug(
@@ -436,7 +455,7 @@ class App:
                         f"{self.state.cities} {self.state.stations}"
                     )
             else:
-                self.display.update(Coordinate(0, 0), STATUS_CALIBRATE, 0, "", False)
+                self._display_status(STATUS_CALIBRATE)
 
             encoder_task = asyncio.create_task(self._encoder_loop())
             dial_task = asyncio.create_task(self._dial_loop())
