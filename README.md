@@ -28,7 +28,7 @@ If you want to use a BT speaker, you can configure it with `bluetoothctl`.
 
 ### Step 1 - Raspberry Pi OS Lite
 Get your Raspberry Pi up and running.
-Flash `Raspberry Pi OS Lite Bookworm` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
+Flash `Raspberry Pi OS Lite` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. Tested on both `Bookworm` and `Trixie`. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
 
 Note: Use `OS Customisations` to set the hostname to `radioglobe`, default user to `radioglobe`, optional WiFi, timezone and SSH access. If you don't do this here, you will have a hard time getting SSH access! 
 
@@ -73,7 +73,7 @@ git clone https://github.com/milnepe/RadioGlobe
 ```
 
 ### Step 6 - Run installer
-The installation script `install.sh` will pull in all the software packages (quite a few) and setup a virtual environment for Python (required in Bookworm) and setup systemd services to start RadioGlobe on startup.
+The installation script `install.sh` will pull in all the software packages (quite a few) and setup a virtual environment for Python (required since Bookworm) and setup systemd services to start RadioGlobe on startup.
 
 The startup template service `services/radioglobe.service` assumes RadioGlobe is installed in the `radioglobe` users home directory. If not you will need to edit the template accordingly.  
 
@@ -101,12 +101,14 @@ It is important to shut the Pi down correctly so that the SD card is not corrupt
 
 
 ## Upgrading
-If you have an existing system based on `Bullseye` or `Bookworm` you can try upgrading. This may not work depending on how much custom config you have on your system.
+If you have an existing system based on `Bullseye`, `Bookworm` or `Trixie` you can try upgrading. This may not work depending on how much custom config you have on your system.
 Make a copy of your `stations.json` file if you have made any custom changes to this. It can be copied back to the new installation.
 Follow the above from `Step 5`.
 
 ## Bluetooth Speakers
 Once RadioGlobe is working with powered speakers you can try adding `Bluetooth` speakers or headphones. These can be setup with `bluetoothctl`.
+
+Note: on `Trixie` we've seen intermittent A2DP pairing failures with some speakers (pairing appears to succeed momentarily then drops before an audio connection is established). If pairing doesn't stick first time, power-cycle the speaker, remove the device (`bluetoothctl remove <MAC>`) and try again.
 Check that pulseaudio is active and running - you may see some failures listed but they can be mostly be ignored: 
 ```
 systemctl --user status pulseaudio
@@ -161,14 +163,14 @@ Audio code is now in `radioglobe/streaming/python_vlc_streaming.py` which uses p
 
 To take advantage of pulseaudio it is important to have a logged in user and RadioGlobe must be started as the default user. This will start pulseaudio in a secure way and allow automatic detection of your output devices.
 
-Audio has changed across the last Debian versions so we recommend `Bookworm` where most of the testing has taken place.
+Audio has changed across the last Debian versions; both `Bookworm` and `Trixie` have been tested. `Trixie` needs a couple of extra apt packages (`swig`, `liblgpio-dev`) to build the GPIO Python bindings — `install.sh` installs these automatically.
 
 Note that radio stations change their URLs all the time so a URL may be out-of-date. You can update this by editing the `stations.json` file. Save a copy first! Some stations go `off-line` in their night time, depending on your timezone. Try back later or you can remove them from `stations.json`.
 
 ## Troubleshooting
 If things are not working the first step is to make sure that your Pi is setup and up-to-date and you have followed the steps above carefully. We recommend to start with a powered speaker connected to the audio jack first, before moving on to Bluetooth speakers, which are more problematic.
 
-1. Check OS release is Bookworm - this is what we have tested on
+1. Check OS release is Bookworm or Trixie - these are what we have tested on
 ```
 cat /etc/os-release 
 ...
