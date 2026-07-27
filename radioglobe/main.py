@@ -104,16 +104,21 @@ class App:
             self._current_coords = self._get_coords_by_city(self.state.city)
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
-            match = next(
-                (s for s in self.state.stations if s[0] == saved_name),
-                None,
+            self.state.station, self.state.jog_idx = self._match_saved_station(
+                saved_name, self.state.stations
             )
-            if match:
-                self.state.station = match
-                self.state.jog_idx = self.state.stations.index(match)
-            else:
-                self.state.station = self.state.stations[0] if self.state.stations else None
-                self.state.jog_idx = 0
+
+    @staticmethod
+    def _match_saved_station(saved_name, stations):
+        """Find the saved station by name in the refreshed stations list.
+
+        Falls back to the first station (or None) if the saved name is no
+        longer present, e.g. after a stations.json update.
+        """
+        match = next((s for s in stations if s[0] == saved_name), None)
+        if match:
+            return match, stations.index(match)
+        return (stations[0] if stations else None), 0
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
