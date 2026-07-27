@@ -8,10 +8,14 @@ SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "🚀 Installing RadioGlobe..."
 
 # -----------------------------
-# Version (injected from dev machine)
+# Version: prefer VERSION injected by `make deploy` from the dev
+# machine; fall back to `git describe` when running from a real
+# clone on the target host (e.g. installed directly via git clone).
 # -----------------------------
 if [[ -f "$SRC_DIR/VERSION" ]]; then
     VERSION=$(cat "$SRC_DIR/VERSION")
+elif [[ -d "$SRC_DIR/.git" ]]; then
+    VERSION=$(git -C "$SRC_DIR" describe --tags --always --dirty 2>/dev/null || echo "unknown")
 else
     VERSION="unknown"
 fi
@@ -30,7 +34,9 @@ sudo apt install -y \
     python3-dev \
     pulseaudio-module-bluetooth \
     rfkill \
-    jq
+    jq \
+    swig \
+    liblgpio-dev
 
 # -----------------------------
 # Rotary encoder dtoverlay (idempotent)
@@ -49,7 +55,7 @@ fi
 # systemd-rfkill saves this state on change and restores it on
 # boot, so unblocking once here keeps it enabled across reboots.
 # -----------------------------
-if rfkill list bluetooth | grep -q "Soft blocked: yes"; then
+if sudo rfkill list bluetooth | grep -q "Soft blocked: yes"; then
     echo "📶 Unblocking Bluetooth radio..."
     sudo rfkill unblock bluetooth
 fi
@@ -85,7 +91,7 @@ sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 # Stations + version
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
+echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
