@@ -138,19 +138,15 @@ class App:
 
     def switch_mode(self):
         """Toggle between application modes."""
-        self.state.mode = MODE_CITY if self.state.mode == MODE_STATION else MODE_STATION
-        if self.state.mode == MODE_CITY:
-            self.state.jog_idx = (
-                self.state.cities.index(self.state.city)
-                if self.state.city in self.state.cities
-                else 0
-            )
+        if self.state.mode == MODE_STATION:
+            self.state.mode = MODE_CITY
+            items, current = self.state.cities, self.state.city
         else:
-            self.state.jog_idx = (
-                self.state.stations.index(self.state.station)
-                if self.state.station in self.state.stations
-                else 0
-            )
+            self.state.mode = MODE_STATION
+            items, current = self.state.stations, self.state.station
+
+        self.state.jog_idx = items.index(current) if current in items else 0
+
         logging.debug(
             f"🌀 Mode switched to: {self.state.mode} jog:{self.state.jog_idx} "
             f"{self.state.city} {self.state.station}"
