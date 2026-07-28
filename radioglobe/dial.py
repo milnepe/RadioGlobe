@@ -4,6 +4,8 @@ import logging
 import evdev
 from evdev import ecodes
 
+from .radio_config import DIAL_DEBOUNCE_S
+
 _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 
 
@@ -12,6 +14,8 @@ class AsyncDial:
         self.queue: asyncio.Queue[int] = asyncio.Queue()
         self._device = self._find_rotary_device()
         self._loop = None
+        self._pending_sum = 0
+        self._debounce_handle: asyncio.TimerHandle | None = None
 
     @staticmethod
     def _find_rotary_device() -> evdev.InputDevice:
@@ -32,13 +36,27 @@ class AsyncDial:
     def _on_readable(self):
         for event in self._device.read():
             if event.type == ecodes.EV_REL and event.code == ecodes.REL_X:
-                self.queue.put_nowait(_POLARITY * (1 if event.value > 0 else -1))
+                self._pending_sum += event.value
+                if self._debounce_handle is not None:
+                    self._debounce_handle.cancel()
+                self._debounce_handle = self._loop.call_later(DIAL_DEBOUNCE_S, self._flush)
+
+    def _flush(self):
+        self._debounce_handle = None
+        if self._pending_sum > 0:
+            self.queue.put_nowait(_POLARITY * 1)
+        elif self._pending_sum < 0:
+            self.queue.put_nowait(_POLARITY * -1)
+        self._pending_sum = 0
 
     def start(self):
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
 
     async def stop(self):
+        if self._debounce_handle is not None:
+            self._debounce_handle.cancel()
+            self._debounce_handle = None
         if self._loop is not None:
             self._loop.remove_reader(self._device.fd)
         self._device.close()
