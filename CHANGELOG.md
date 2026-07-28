@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.11] - 2026-07-28
+### Fixed
+- Dial contact bounce caused inconsistent/skipped city and station selection:
+  the kernel `rotary_encoder` driver (introduced when the dial migrated off
+  `RPi.GPIO` polling) doesn't fully suppress mechanical contact bounce even
+  at its most conservative setting. `AsyncDial` (`radioglobe/dial.py`) now
+  coalesces bursts of raw `REL_X` events into a single net direction over a
+  short quiescence window (`DIAL_DEBOUNCE_S`) before enqueuing, instead of
+  acting on every raw kernel event individually.
+- City-mode dial navigation never registered counter-clockwise turns —
+  traced to a wiring fault, not software: encoder pin A was connected to
+  GND and pin C (Common) to GPIO17, swapped from the correct wiring.
+  Corrected on-device; see `docs/JOG_WHEEL_INVESTIGATION.md` for the full
+  diagnostic trail and the correct pinout.
+
+Both fixes were verified end-to-end on real hardware: dial turns in
+city/station mode now produce exactly one clean step per physical click in
+both directions, confirmed via live `journalctl` logs during controlled
+clockwise/counter-clockwise testing.
+
 ## [0.5.10] - 2026-07-27
 ### Fixed
 - `make deploy`'s rsync only excluded `.git`, `__pycache__`, and `*.pyc`,
