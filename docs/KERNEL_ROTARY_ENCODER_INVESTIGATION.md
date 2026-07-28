@@ -491,6 +491,61 @@ it unless profiling in §7.1 proves otherwise.
 
 ---
 
+## 9. Follow-up: contact bounce found on real hardware, kernel driver doesn't fully suppress it
+
+§6/§8 assumed the kernel driver's gray-code state machine was a complete, correct
+per-edge debounce ("only reports a clean, fully-completed transition"). After the
+migration shipped, users reported the dial sometimes skipping city selection, with
+behaviour that differed inconsistently between turning forward and back.
+
+**Diagnosis, live on-device (2026-07-28), no service interruption:** the `radioglobe`
+user is already in the `input` group, so `/dev/input/eventN` is readable without root.
+The dial's device was identified directly:
+
+```
+$ /opt/radioglobe/venv/bin/python3 -c "import evdev; [print(p, evdev.InputDevice(p).name, evdev.InputDevice(p).capabilities()) for p in evdev.list_devices()]"
+/dev/input/event0 'rotary@11'   caps: {EV_SYN: [...], EV_REL: [REL_X]}
+```
+
+A short throwaway script (`evdev.InputDevice("/dev/input/event0").read_loop()`, no
+`grab()`, so it doesn't interfere with the running service's own reader) captured raw
+`REL_X` events with timestamps while physically turning the dial:
+
+- A burst of **16 alternating `+1`/`-1` events within under 1ms** — pure contact bounce;
+  such a burst nets to an essentially arbitrary small value depending on exactly how the
+  bounce falls.
+- Repeated clusters of **3–7 same-sign events within under 1ms** for what should be a
+  single physical detent.
+- Genuine, deliberate single clicks were spaced hundreds of milliseconds to over a
+  second apart, clearly separable in time from the bounce clusters above.
+
+Checked `/boot/firmware/overlays/README` to rule out a simple parameter fix:
+`steps-per-period` (1/2/4 = full/half/quarter period) defaults to **1 (full-period)** —
+already the *least* sensitive, most-debounced of the driver's three modes. The bounce
+above is happening even at the most conservative setting the driver offers, so there is
+no overlay parameter that fixes this; the state machine correctly rejects invalid
+transition sequences, but contact bounce that legitimately re-traverses valid states
+during a single mechanical settle passes straight through it, since the driver has no
+time-based debounce at all.
+
+**Result (applied 2026-07-28):** `radioglobe/dial.py`'s `AsyncDial` no longer pushes one
+queue item per raw kernel event. `_on_readable()` accumulates a running signed sum of
+`REL_X` values and arms a single `loop.call_later(DIAL_DEBOUNCE_S, self._flush)` timer,
+cancelling/rescheduling it on every new event; `_flush()` fires once the encoder goes
+quiet and pushes one `sign(sum)` direction (or nothing, if the sum is exactly zero) onto
+`self.queue`. `DIAL_DEBOUNCE_S = 0.03` (`radio_config.py`) sits well clear of the <20ms
+bounce-cluster spacing observed above and far below the >=100ms spacing of genuine
+clicks. This is a non-blocking reintroduction of debounce — unlike the pre-migration
+300ms `asyncio.sleep()`, it doesn't block the event loop and doesn't add latency beyond
+the coalescing window itself.
+
+**Not yet done:** on-device confirmation that the fix eliminates the reported
+skipping/inconsistency in normal use, and that `DIAL_DEBOUNCE_S` doesn't clip genuine
+fast intentional spins (untested — the capture above only exercised slow deliberate
+clicks). See the verification section of the fix's plan for the test procedure.
+
+---
+
 ## Appendix: What was verified vs. inferred
 
 | Claim | Status |

@@ -29,6 +29,12 @@ LED_FLASH_SHORT = 0.2   # button press feedback
 LED_FLASH_LONG = 0.5    # city latch / stream error indication
 LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
 
+# Dial contact-bounce coalescing window (seconds) — see
+# docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md §9. Raw REL_X events from a single
+# physical click can arrive in bursts spaced <20ms apart; genuine clicks are
+# spaced >=100ms apart.
+DIAL_DEBOUNCE_S = 0.03
+
 # GPIO pin assignments (BCM numbering)
 PIN_DIAL_CLOCK = 17
 PIN_DIAL_DIR   = 18
