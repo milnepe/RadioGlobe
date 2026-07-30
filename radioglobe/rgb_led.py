@@ -17,6 +17,7 @@ class RGBLed:
 
     def __init__(self, red_pin=PIN_LED_R, green_pin=PIN_LED_G, blue_pin=PIN_LED_B):
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
+        self._running = asyncio.Event()
         for pin in self.pins.values():
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
@@ -37,17 +38,20 @@ class RGBLed:
         """Turn the LED off."""
         self.off()
 
+    async def flash(self, color: str, duration: float):
+        """Turn the LED on for duration seconds, then off.
 
-async def led_task(led: RGBLed, led_running: asyncio.Event, color: str, duration: float):
-    if led_running.is_set():
-        logging.debug("LED task already running, skipping.")
-        return
-    led_running.set()
-    try:
-        logging.debug(f"LED ON ({color}) for {duration}s")
-        led.set_color(color)
-        await asyncio.sleep(duration)
-        led.off()
-        logging.debug("LED OFF")
-    finally:
-        led_running.clear()
+        A no-op if a flash is already in progress, so overlapping calls
+        don't cut a running flash short."""
+        if self._running.is_set():
+            logging.debug("LED flash already running, skipping.")
+            return
+        self._running.set()
+        try:
+            logging.debug(f"LED ON ({color}) for {duration}s")
+            self.set_color(color)
+            await asyncio.sleep(duration)
+            self.off()
+            logging.debug("LED OFF")
+        finally:
+            self._running.clear()

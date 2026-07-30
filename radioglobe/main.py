@@ -35,7 +35,7 @@ from radioglobe.radio_config import (
     PIN_BTN_MID, PIN_BTN_TOP, STATE_CACHE_PATH, STATIONS_JSON, STICKINESS,
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
-from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.rgb_led import RGBLed
 
 
 class App:
@@ -47,7 +47,6 @@ class App:
         self.encoders = PositionalEncoders()
         self.display = Display()
         self.led = RGBLed()
-        self.led_running = asyncio.Event()
         self.state = AppState()
         self.stations_info = load_stations(STATIONS_JSON)
         self.cities_info = build_cities_index(self.stations_info)
@@ -207,7 +206,7 @@ class App:
                 return
 
             logging.debug(f"⚠️ Stream error: {expected_url}")
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_RED, LED_FLASH_LONG))
+            asyncio.create_task(self.led.flash(COLOUR_RED, LED_FLASH_LONG))
             self._remove_failed_station()
             if not self.state.station:
                 break
@@ -239,8 +238,7 @@ class App:
 
             if not self.encoders.is_latched() and self.state.cities:
                 logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.state.cities}")
-                if not self.led_running.is_set():
-                    asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_LONG))
+                asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
                 self.state.jog_idx = 0
@@ -271,7 +269,7 @@ class App:
             direction = await self.dial.queue.get()
             if not self.state.is_complete():
                 continue
-            asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_DIAL))
+            asyncio.create_task(self.led.flash(COLOUR_BLUE, LED_FLASH_DIAL))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )
@@ -294,7 +292,7 @@ class App:
     # ---------------------------------------------------------------------------
 
     async def _on_jog_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_jog(self):
         self.switch_mode()
@@ -306,7 +304,7 @@ class App:
         await asyncio.sleep(LED_FLASH_SHORT)
 
     async def _on_sound_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_BLUE, LED_FLASH_SHORT))
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
@@ -325,7 +323,7 @@ class App:
         await self._update_volume_level(VOLUME_OFF_LEVEL)
 
     async def _on_mid_press(self):
-        asyncio.create_task(led_task(self.led, self.led_running, COLOUR_GREEN, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_SHORT))
 
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
