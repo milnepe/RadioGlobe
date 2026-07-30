@@ -152,10 +152,12 @@ graph TD
     led --> gpio
 ```
 
-`App` still imports a few things from `database.py`/`coordinates.py` directly
-(`get_stations_by_city`, `match_saved_station`, `Coordinate`) for
-`load_state()` and the shutdown display, so those edges aren't purely
-routed through `Navigator` — see §4.1 and §4.3.
+`App` still imports `get_stations_by_city` (`database.py`) directly — used
+in `_encoder_loop()`/`_dial_loop()` to fetch a city's station list before
+handing it to `self.nav.state.select_station()` — and `Coordinate`
+(`coordinates.py`) for the shutdown-display fallback, so those two edges
+aren't purely routed through `Navigator`. `match_saved_station()` moved
+fully into `Navigator.load_state()` in a follow-up — see §4.3.
 
 The `streaming/` directory is intentionally omitted — none of its modules are imported by the main application.
 
@@ -178,11 +180,13 @@ starts and gathers the `_encoder_loop()` and `_dial_loop()` tasks — these
 two event-driven loops are the app's actual "main loop."
 
 **State** lives on `self.nav.state` (an `AppState` — §4.2); `App` no longer
-holds it directly. `save_state()` uses `dataclasses.asdict(self.nav.state)`
-for serialisation; `load_state()` reconstructs an `AppState(...)` from the
-JSON and assigns it straight to `self.nav.state`. On boot, if a saved state
-is found, the latch is restored and the last station resumes playing
-immediately (warm-restart path).
+holds it directly. `save_state()`/`load_state()` are thin wrappers around
+`self.nav.save_state()`/`self.nav.load_state()` (§4.3) — `App`'s only job
+is gathering `self.encoders`' current offsets into a plain dict to pass in,
+and applying the dict `load_state()` returns back onto `self.encoders`;
+`Navigator` owns the actual JSON (de)serialisation and `AppState`
+reconstruction. On boot, if a saved state is found, the latch is restored
+and the last station resumes playing immediately (warm-restart path).
 
 **Key methods:**
 
@@ -191,8 +195,8 @@ immediately (warm-restart path).
 | `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
 | `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.find_cities_near()` for nearby cities, latch and start playback when one is found |
 | `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()`/`self.nav.next_city()`, update playback |
-| `save_state()` | Serialise `self.nav.state` + encoder offsets to `~/cache/radioglobe.json` |
-| `load_state()` | Restore `self.nav.state` from cache on startup |
+| `save_state()` | Gather `self.encoders`' offsets into a dict, delegate to `self.nav.save_state()` (§4.3) |
+| `load_state()` | Delegate to `self.nav.load_state()` (§4.3), apply the returned encoder offsets onto `self.encoders` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
@@ -211,7 +215,7 @@ now lives on `Navigator` (§4.3).
 - `self.nav.state.city` is passed to `display.show_station()`/`display.update()` as a raw string (e.g. `"London,GB"`). The display truncates it to 20 characters before centering.
 - `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
 - If the warm-restart state is incomplete (city or station is `None` after `load_state()`), the app logs a warning, clears the latch, and falls back to calibrate mode rather than crashing.
-- `load_state()` reassigns `self.nav.state` wholesale rather than calling one of `Navigator`'s own mutation methods — this is the one place `App` reaches directly into `Navigator`'s internals, since `save_state`/`load_state` still need `self.encoders` and file I/O and weren't moved into `Navigator` (§4.3 explains why).
+- `load_state()` no longer reaches into `Navigator`'s internals at all — an earlier version of this refactor had `App.load_state()` do `self.nav.state = AppState(...)` directly, but that was moved into `Navigator.load_state()` itself in a follow-up (§4.3), once it became clear the only real obstacle (needing `self.encoders`) could be solved by passing/returning plain dicts instead of a hardware object.
 
 ---
 
@@ -264,13 +268,25 @@ station dict, no mocking).
 | `next_city(direction)` | Cycle `jog_idx` within `self.state.cities` |
 | `switch_mode()` | Toggle `self.state.mode`; recomputes `jog_idx` for the new mode's list (falls back to 0 if the current selection isn't in it) |
 | `remove_failed_station()` | Drop the current station from the session list and advance to the next by `jog_idx`; called from `App._monitor_stream()` on playback failure |
+| `save_state(encoder_offsets, cache)` | Serialise `self.state` + `encoder_offsets` (a plain dict — keys `lat`/`lon`/`lat_offset`/`lon_offset` — supplied by the caller, since `Navigator` has no hardware access of its own) to `cache` as JSON |
+| `load_state(cache)` | Restore `self.state` from `cache`, re-querying/validating the saved city and station against the live `stations_info`; returns the saved encoder offsets as a plain dict (or `{}` if no cache file exists) for the caller to apply |
 
 **What deliberately stayed on `App` instead:** hardware construction
 (`App.__init__` still builds all 6 hardware wrappers directly as a flat
 list — not wrapped in a factory, since that would add indirection serving
 testability/hardware-swappability, which wasn't the goal of this refactor),
-the two event loops, button dispatch, `run()`, and `save_state()`/
-`load_state()` (still need `self.encoders` and file I/O, so weren't moved).
+the two event loops, and button dispatch/`run()`.
+
+`save_state()`/`load_state()` originally stayed on `App` too, for the same
+reason: they touched `self.encoders`, a hardware object `Navigator` can't
+depend on. They were moved into `Navigator` in a follow-up once it became
+clear that dependency wasn't actually necessary — `Navigator.save_state()`/
+`load_state()` take and return plain encoder-offset dicts instead of a
+`PositionalEncoders` object (see Methods table above), so `App`'s versions
+are now a few lines gathering/applying `self.encoders`' values around a
+call into `self.nav`. The on-disk cache format (`~/cache/radioglobe.json`)
+didn't change, so this was a behavior-preserving move — existing cache
+files on deployed devices remain readable.
 
 **Non-obvious detail — `jog_idx` and `AppState.select_station()`:**
 `jog_idx` is dual-purpose (station index in `MODE_STATION`, city index in
@@ -300,8 +316,8 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 | `look_around(origin, offsets)` | `list` of `(lat, lon)` tuples | Applies the pre-computed offsets to an origin point — cheap enough to call on every encoder event |
 | `find_cities_near(origin, offsets, cities_index)` | `list` of city strings, closest-first | The production city search; wrapped by `Navigator.find_cities_near()` (§4.3), called from `_encoder_loop()` in `main.py` |
 | `get_stations_by_city(stations, city)` | `list` of `(name, url)` tuples | The canonical station list format |
-| `get_coords_by_city(stations, city)` | `Coordinate` | Raises `KeyError` if the city isn't in the data — backs `Navigator.current_coords` (§4.3) and the stale-city check in `App.load_state()` |
-| `match_saved_station(saved_name, stations)` | `(station, jog_idx)` tuple | Finds a saved station by name in a refreshed station list, falling back to index 0 if not found; used by `App.load_state()`'s warm-restart path |
+| `get_coords_by_city(stations, city)` | `Coordinate` | Raises `KeyError` if the city isn't in the data — backs `Navigator.current_coords` and the stale-city check in `Navigator.load_state()` (§4.3) |
+| `match_saved_station(saved_name, stations)` | `(station, jog_idx)` tuple | Finds a saved station by name in a refreshed station list, falling back to index 0 if not found; used by `Navigator.load_state()`'s warm-restart path (§4.3) |
 | `get_found_cities(search_area, city_map)` | `list` of city strings | Used only by integration test scripts; superseded in production by `find_cities_near` |
 
 **Coordinate formula:** `index = round((degrees + 180) * 1024 / 360)`. This maps −180°→0 and +180°→1024.
@@ -528,15 +544,18 @@ Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on
 `self.encoders` — separate from `AppState` and unaffected by the decoupling
 refactor.
 
-On shutdown (long press of mid button), `save_state()` calls
-`dataclasses.asdict(self.nav.state)` and appends the encoder offsets and
-latch flag, writing the result to `~/cache/radioglobe.json`. On the next
-boot, `load_state()` reconstructs an `AppState(...)` from the JSON and
-assigns it to `self.nav.state`, then immediately re-queries
-`get_stations_by_city()` from the live database and calls
-`match_saved_station()` (`database.py`, §4.4) to match the saved station by
-name; if not found it falls back to index 0. This means a `stations.json`
-update between boots never causes a wrong URL or stale index.
+On shutdown (long press of mid button), `App.save_state()` gathers
+`self.encoders`' offsets into a dict and hands it to
+`self.nav.save_state()` (§4.3), which calls `dataclasses.asdict(self.state)`
+and appends the encoder offsets and latch flag, writing the result to
+`~/cache/radioglobe.json`. On the next boot, `App.load_state()` calls
+`self.nav.load_state()`, which reconstructs an `AppState(...)` from the
+JSON, then immediately re-queries `get_stations_by_city()` from the live
+database and calls `match_saved_station()` (`database.py`, §4.4) to match
+the saved station by name (falling back to index 0 if not found) — this
+means a `stations.json` update between boots never causes a wrong URL or
+stale index. `Navigator.load_state()` returns the saved encoder offsets as
+a plain dict, which `App.load_state()` applies onto `self.encoders`.
 
 ---
 
@@ -581,7 +600,7 @@ through `radio_config.py`.
 | `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
 | `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
 | `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
-| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
+| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
 | `DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
 | GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` are also duplicated as literal pin numbers in `install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line — nothing enforces these two stay in sync if the constants ever change |
 | I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
@@ -652,18 +671,17 @@ action needed.
 
 ### Improvement B: `save_state()` serialises `stations` and `cities` snapshots that are ignored on restore
 
-**Problem:** `save_state()` uses `dataclasses.asdict(self.nav.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. `load_state()` re-queries `stations` from the live database on startup, and `cities` is repopulated by `_encoder_loop()` the next time `encoders.updated` fires — so the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
+**Problem:** `Navigator.save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. `load_state()` re-queries `stations` from the live database on startup, and `cities` is repopulated by `App._encoder_loop()` the next time `encoders.updated` fires — so the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
 
-**Fix:** Build the dict manually in `save_state()`, omitting the two lists:
+**Fix:** Build the dict manually in `Navigator.save_state()`, omitting the two lists:
 ```python
 state = {
-    "station": list(self.nav.state.station) if self.nav.state.station else None,
-    "city": self.nav.state.city,
-    "jog_idx": self.nav.state.jog_idx,
-    "mode": self.nav.state.mode,
-    "lat": self.encoders.latitude,
-    ...
+    "station": list(self.state.station) if self.state.station else None,
+    "city": self.state.city,
+    "jog_idx": self.state.jog_idx,
+    "mode": self.state.mode,
 }
+state.update(encoder_offsets)
 ```
 
 **Effort:** 15 minutes.
