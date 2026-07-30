@@ -17,7 +17,6 @@ class RGBLed:
 
     def __init__(self, red_pin=PIN_LED_R, green_pin=PIN_LED_G, blue_pin=PIN_LED_B):
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
-        GPIO.setmode(GPIO.BCM)
         for pin in self.pins.values():
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)

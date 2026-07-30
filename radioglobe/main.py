@@ -47,6 +47,7 @@ class AppState:
 
 class App:
     def __init__(self):
+        GPIO.setmode(GPIO.BCM)
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
         self.audio_player.change_volume_level(DEFAULT_VOLUME)
