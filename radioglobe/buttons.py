@@ -26,7 +26,6 @@ class AsyncButton:
         self._event_ready = None  # "short" or "long"
         self.press_cb = press_cb  # callback for press-down
 
-        GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self._handle_press, bouncetime=50)
 
