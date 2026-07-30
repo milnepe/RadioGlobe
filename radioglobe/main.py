@@ -125,8 +125,7 @@ class App:
         self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
         self.state.city = self.state.cities[self.state.jog_idx]
         self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
-        self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-        logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city} {self.state.stations}")
+        logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city}")
 
     def switch_mode(self):
         """Toggle between application modes."""
@@ -248,12 +247,10 @@ class App:
                 )
                 self.state.city = self.state.cities[0]
                 self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
-                self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-                if not self.state.stations:
+                if not self.state.select_station(get_stations_by_city(self.stations_info, self.state.city)):
                     logging.warning(f"No stations for {self.state.city!r} — skipping latch")
                     self.encoders.reset_latch()
                     continue
-                self.state.station = self.state.stations[0]
                 logging.info(f"Cities: {self.state.cities}")
                 logging.debug(
                     f"📻 Tuning to: jog:{self.state.jog_idx} "
@@ -277,10 +274,9 @@ class App:
                 self.next_station(direction)
             elif self.state.mode == MODE_CITY:
                 self.next_city(direction)
-                if not self.state.stations:
+                if not self.state.select_station(get_stations_by_city(self.stations_info, self.state.city)):
                     logging.warning(f"No stations for {self.state.city!r} — keeping previous station")
                     continue
-                self.state.station = self.state.stations[0]
 
             coords = self._current_coords or get_coords_by_city(self.stations_info, self.state.city)
             self.display.show_station(coords, self.state.city, self.state.station[0])
