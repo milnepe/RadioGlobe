@@ -3,11 +3,12 @@ import json
 import logging
 import os
 import subprocess
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from typing import Optional
 
 import RPi.GPIO as GPIO  # type: ignore
 
+from radioglobe.app_state import AppState
 from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
 from radioglobe.constants import (
@@ -20,8 +21,10 @@ from radioglobe.database import (
     build_cities_index,
     build_look_around_offsets,
     find_cities_near,
+    get_coords_by_city,
     get_stations_by_city,
     load_stations,
+    match_saved_station,
 )
 from radioglobe.dial import AsyncDial
 from radioglobe.display import Display
@@ -33,16 +36,6 @@ from radioglobe.radio_config import (
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
 from radioglobe.rgb_led import RGBLed, led_task
-
-
-@dataclass
-class AppState:
-    stations: list = field(default_factory=list)
-    station: Optional[tuple] = None
-    cities: list = field(default_factory=list)
-    city: Optional[str] = None
-    jog_idx: int = 0
-    mode: str = MODE_STATION
 
 
 class App:
@@ -102,7 +95,7 @@ class App:
         # cache never cause wrong URLs or indices after a stations.json update.
         if self.state.city:
             try:
-                self._current_coords = self._get_coords_by_city(self.state.city)
+                self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
             except KeyError as e:
                 logging.warning(f"{e} — discarding stale saved city")
                 self.state.city = None
@@ -110,21 +103,9 @@ class App:
                 return
             self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
             saved_name = state["station"][0] if state.get("station") else None
-            self.state.station, self.state.jog_idx = self._match_saved_station(
+            self.state.station, self.state.jog_idx = match_saved_station(
                 saved_name, self.state.stations
             )
-
-    @staticmethod
-    def _match_saved_station(saved_name, stations):
-        """Find the saved station by name in the refreshed stations list.
-
-        Falls back to the first station (or None) if the saved name is no
-        longer present, e.g. after a stations.json update.
-        """
-        match = next((s for s in stations if s[0] == saved_name), None)
-        if match:
-            return match, stations.index(match)
-        return (stations[0] if stations else None), 0
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""
@@ -143,7 +124,7 @@ class App:
             return
         self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
         self.state.city = self.state.cities[self.state.jog_idx]
-        self._current_coords = self._get_coords_by_city(self.state.city)
+        self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
         self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
         logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city} {self.state.stations}")
 
@@ -167,23 +148,6 @@ class App:
     # Helpers
     # ---------------------------------------------------------------------------
 
-    def _get_coords_by_city(self, city: str) -> Coordinate:
-        """Return a Coordinate for the given city string.
-
-        Raises KeyError if the city isn't present in the stations data —
-        callers that can encounter a stale/removed city (e.g. from a cached
-        state file) must catch this explicitly rather than relying on a
-        silent fallback.
-        """
-        entry = self.stations_info.get(city)
-        if entry is None:
-            raise KeyError(f"City not found in stations data: {city!r}")
-        return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
-
-    def _has_essential_state(self) -> bool:
-        """Whether a city and station are both selected."""
-        return bool(self.state.city and self.state.station)
-
     def _display_current_station(self, coords: Coordinate):
         """Show the current city and station on the display."""
         self.display.update(coords, self.state.city, volume=0, station=self.state.station[0], arrows=False)
@@ -194,23 +158,23 @@ class App:
 
     async def _show_volume_briefly(self, volume: int):
         """Display volume level temporarily, then revert to station info."""
-        if not self._has_essential_state():
+        if not self.state.is_complete():
             return
-        coords = self._current_coords or self._get_coords_by_city(self.state.city)
+        coords = self._current_coords or get_coords_by_city(self.stations_info, self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], arrows=False)
         await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         self._display_current_station(coords)
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
-        if not self._has_essential_state():
+        if not self.state.is_complete():
             return
         volume = self.audio_player.change_volume(delta)
         await self._show_volume_briefly(volume)
 
     async def _update_volume_level(self, level):
         """Set volume to an absolute level and briefly show it on the display."""
-        if not self._has_essential_state():
+        if not self.state.is_complete():
             return
         volume = self.audio_player.change_volume_level(level)
         await self._show_volume_briefly(volume)
@@ -254,7 +218,7 @@ class App:
             self._remove_failed_station()
             if not self.state.station:
                 break
-            coords = self._current_coords or self._get_coords_by_city(self.state.city)
+            coords = self._current_coords or get_coords_by_city(self.stations_info, self.state.city)
             self._display_current_station(coords)
             self.audio_player.play(self.state.city, self.state.station)
             expected_url = self.state.station[1]
@@ -292,7 +256,7 @@ class App:
                     f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.state.cities} {self.encoders.is_latched()}"
                 )
                 self.state.city = self.state.cities[0]
-                self._current_coords = self._get_coords_by_city(self.state.city)
+                self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
                 if not self.state.stations:
                     logging.warning(f"No stations for {self.state.city!r} — skipping latch")
@@ -312,7 +276,7 @@ class App:
         """Wake on each dial movement and handle station/city navigation."""
         while True:
             direction = await self.dial.queue.get()
-            if not self._has_essential_state():
+            if not self.state.is_complete():
                 continue
             asyncio.create_task(led_task(self.led, self.led_running, COLOUR_BLUE, LED_FLASH_DIAL))
             logging.debug(
@@ -327,7 +291,7 @@ class App:
                     continue
                 self.state.station = self.state.stations[0]
 
-            coords = self._current_coords or self._get_coords_by_city(self.state.city)
+            coords = self._current_coords or get_coords_by_city(self.stations_info, self.state.city)
             self._display_current_station(coords)
             self.audio_player.play(self.state.city, self.state.station)
             self._start_monitor_stream(self.state.station[1])
@@ -386,7 +350,7 @@ class App:
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
-        coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
+        coords = get_coords_by_city(self.stations_info, self.state.city) if self.state.city else Coordinate(0, 0)
         self._display_status(STATUS_SHUTDOWN, coords)
         await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         if self.state.city and self.state.station:
@@ -441,12 +405,12 @@ class App:
 
             # The latch is set if there was saved state — this triggers playing the saved station
             if self.encoders.is_latched():
-                if not self._has_essential_state():
+                if not self.state.is_complete():
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
                     self._display_status(STATUS_CALIBRATE)
                 else:
-                    self._current_coords = self._get_coords_by_city(self.state.city)
+                    self._current_coords = get_coords_by_city(self.stations_info, self.state.city)
                     self._display_current_station(self._current_coords)
                     self.audio_player.play(self.state.city, self.state.station)
                     self._start_monitor_stream(self.state.station[1])

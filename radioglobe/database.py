@@ -1,6 +1,7 @@
 import json
 import logging
 
+from .coordinates import Coordinate
 from .radio_config import ENCODER_RESOLUTION
 
 
@@ -102,6 +103,32 @@ def get_stations_by_city(stations: dict, city_country: str) -> list:
         return []
 
     return [(entry["name"], entry["url"]) for entry in station_info["urls"]]
+
+
+def get_coords_by_city(stations: dict, city: str) -> Coordinate:
+    """Return a Coordinate for the given city string.
+
+    Raises KeyError if the city isn't present in the stations data —
+    callers that can encounter a stale/removed city (e.g. from a cached
+    state file) must catch this explicitly rather than relying on a
+    silent fallback.
+    """
+    entry = stations.get(city)
+    if entry is None:
+        raise KeyError(f"City not found in stations data: {city!r}")
+    return Coordinate(entry["coords"]["n"], entry["coords"]["e"])
+
+
+def match_saved_station(saved_name, stations: list) -> tuple:
+    """Find the saved station by name in the refreshed stations list.
+
+    Falls back to the first station (or None) if the saved name is no
+    longer present, e.g. after a stations.json update.
+    """
+    match = next((s for s in stations if s[0] == saved_name), None)
+    if match:
+        return match, stations.index(match)
+    return (stations[0] if stations else None), 0
 
 
 def get_found_cities(search_area: list, city_map: dict) -> list:
