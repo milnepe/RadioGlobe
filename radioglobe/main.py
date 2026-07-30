@@ -184,14 +184,6 @@ class App:
         """Whether a city and station are both selected."""
         return bool(self.state.city and self.state.station)
 
-    def _display_current_station(self, coords: Coordinate):
-        """Show the current city and station on the display."""
-        self.display.update(coords, self.state.city, volume=0, station=self.state.station[0], arrows=False)
-
-    def _display_status(self, status: str, coords: Optional[Coordinate] = None):
-        """Show a status message (e.g. calibrating, shutdown) on the display."""
-        self.display.update(coords or Coordinate(0, 0), status, volume=0, station="", arrows=False)
-
     async def _show_volume_briefly(self, volume: int):
         """Display volume level temporarily, then revert to station info."""
         if not self._has_essential_state():
@@ -199,7 +191,7 @@ class App:
         coords = self._current_coords or self._get_coords_by_city(self.state.city)
         self.display.update(coords, self.state.city, volume, self.state.station[0], arrows=False)
         await asyncio.sleep(BRIEF_DISPLAY_DURATION)
-        self._display_current_station(coords)
+        self.display.show_station(coords, self.state.city, self.state.station[0])
 
     async def _update_volume(self, delta):
         """Adjust volume by delta and briefly show the level on the display."""
@@ -255,7 +247,7 @@ class App:
             if not self.state.station:
                 break
             coords = self._current_coords or self._get_coords_by_city(self.state.city)
-            self._display_current_station(coords)
+            self.display.show_station(coords, self.state.city, self.state.station[0])
             self.audio_player.play(self.state.city, self.state.station)
             expected_url = self.state.station[1]
 
@@ -304,7 +296,7 @@ class App:
                     f"📻 Tuning to: jog:{self.state.jog_idx} "
                     f"{self.state.city} {self.state.station}\n{self.state.stations}"
                 )
-                self._display_current_station(self._current_coords)
+                self.display.show_station(self._current_coords, self.state.city, self.state.station[0])
                 self.audio_player.play(self.state.city, self.state.station)
                 self._start_monitor_stream(self.state.station[1])
 
@@ -328,7 +320,7 @@ class App:
                 self.state.station = self.state.stations[0]
 
             coords = self._current_coords or self._get_coords_by_city(self.state.city)
-            self._display_current_station(coords)
+            self.display.show_station(coords, self.state.city, self.state.station[0])
             self.audio_player.play(self.state.city, self.state.station)
             self._start_monitor_stream(self.state.station[1])
 
@@ -378,19 +370,19 @@ class App:
             f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
             f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
         )
-        self._display_status(STATUS_CALIBRATING)
+        self.display.show_status(STATUS_CALIBRATING)
         await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
-        self._display_status(STATUS_CALIBRATED)
+        self.display.show_status(STATUS_CALIBRATED)
 
     async def _handle_long_mid(self):
         logging.debug("🔴 Shutdown initiated! Powering off...")
         self.save_state()
         logging.debug("Saved state...")
         coords = self._get_coords_by_city(self.state.city) if self.state.city else Coordinate(0, 0)
-        self._display_status(STATUS_SHUTDOWN, coords)
+        self.display.show_status(STATUS_SHUTDOWN, coords)
         await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         if self.state.city and self.state.station:
-            self._display_current_station(coords)
+            self.display.show_station(coords, self.state.city, self.state.station[0])
         await asyncio.sleep(BRIEF_DISPLAY_DURATION)
         subprocess.run(["sudo", "poweroff"])
 
@@ -444,10 +436,10 @@ class App:
                 if not self._has_essential_state():
                     logging.warning("Saved state incomplete — starting in calibrate mode")
                     self.encoders.reset_latch()
-                    self._display_status(STATUS_CALIBRATE)
+                    self.display.show_status(STATUS_CALIBRATE)
                 else:
                     self._current_coords = self._get_coords_by_city(self.state.city)
-                    self._display_current_station(self._current_coords)
+                    self.display.show_station(self._current_coords, self.state.city, self.state.station[0])
                     self.audio_player.play(self.state.city, self.state.station)
                     self._start_monitor_stream(self.state.station[1])
                     logging.debug(
@@ -455,7 +447,7 @@ class App:
                         f"{self.state.cities} {self.state.stations}"
                     )
             else:
-                self._display_status(STATUS_CALIBRATE)
+                self.display.show_status(STATUS_CALIBRATE)
 
             encoder_task = asyncio.create_task(self._encoder_loop())
             dial_task = asyncio.create_task(self._dial_loop())
