@@ -1,3 +1,6 @@
+import json
+import os
+import tempfile
 import unittest
 
 from radioglobe.constants import MODE_CITY, MODE_STATION
@@ -127,6 +130,66 @@ class TestNavigatorFindCitiesNear(unittest.TestCase):
     def test_no_match_returns_empty(self):
         nav = make_navigator()
         self.assertEqual(nav.find_cities_near((0, 0)), [])
+
+
+class TestNavigatorSaveLoadState(unittest.TestCase):
+    def setUp(self):
+        self.stations = {
+            "London,GB": {
+                "coords": {"n": 51.5074, "e": -0.1278},
+                "urls": [{"name": "Test FM", "url": "http://example/stream"}],
+            },
+        }
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.cache = os.path.join(self.tmpdir.name, "nested", "state.json")
+
+    def test_load_state_no_file_returns_empty_dict(self):
+        nav = make_navigator(self.stations)
+        result = nav.load_state(self.cache)
+        self.assertEqual(result, {})
+        self.assertIsNone(nav.state.city)
+
+    def test_save_creates_parent_directory_and_writes_json(self):
+        nav = make_navigator(self.stations)
+        nav.save_state({"lat": 512, "lon": 512, "lat_offset": 0, "lon_offset": 0}, self.cache)
+        self.assertTrue(os.path.exists(self.cache))
+        with open(self.cache) as f:
+            written = json.load(f)
+        self.assertEqual(written["lat"], 512)
+        self.assertTrue(written["latch"])
+
+    def test_save_then_load_roundtrip(self):
+        saver = make_navigator(self.stations)
+        saver.state.city = "London,GB"
+        saver.state.stations = [("Test FM", "http://example/stream")]
+        saver.state.station = ("Test FM", "http://example/stream")
+        saver.state.jog_idx = 0
+        encoder_offsets = {"lat": 600, "lon": 400, "lat_offset": 10, "lon_offset": -10}
+        saver.save_state(encoder_offsets, self.cache)
+
+        loader = make_navigator(self.stations)
+        result = loader.load_state(self.cache)
+
+        self.assertEqual(result, encoder_offsets)
+        self.assertEqual(loader.state.city, "London,GB")
+        self.assertEqual(loader.state.station, ("Test FM", "http://example/stream"))
+        self.assertEqual(loader.state.jog_idx, 0)
+
+    def test_load_state_discards_stale_city_but_still_returns_encoder_offsets(self):
+        saver = make_navigator(self.stations)
+        saver.state.city = "London,GB"
+        saver.state.station = ("Test FM", "http://example/stream")
+        encoder_offsets = {"lat": 1, "lon": 2, "lat_offset": 3, "lon_offset": 4}
+        saver.save_state(encoder_offsets, self.cache)
+
+        # City no longer exists in the loader's stations data.
+        loader = make_navigator({})
+        result = loader.load_state(self.cache)
+
+        self.assertEqual(result, encoder_offsets)
+        self.assertIsNone(loader.state.city)
+        self.assertIsNone(loader.state.station)
 
 
 if __name__ == "__main__":
