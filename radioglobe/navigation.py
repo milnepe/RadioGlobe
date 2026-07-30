@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+from dataclasses import asdict
 from typing import Optional
 
 from .app_state import AppState
@@ -9,9 +12,11 @@ from .database import (
     build_look_around_offsets,
     find_cities_near,
     get_coords_by_city,
+    get_stations_by_city,
     load_stations,
+    match_saved_station,
 )
-from .radio_config import FUZZINESS, STATIONS_JSON
+from .radio_config import FUZZINESS, STATE_CACHE_PATH, STATIONS_JSON
 
 
 class Navigator:
@@ -37,6 +42,68 @@ class Navigator:
     def find_cities_near(self, origin: tuple) -> list:
         """Cities within the search zone around origin, closest-first."""
         return find_cities_near(origin, self.look_around_offsets, self.cities_info)
+
+    def save_state(self, encoder_offsets: dict, cache: str = STATE_CACHE_PATH):
+        """Serialise state + encoder_offsets (lat/lon/lat_offset/lon_offset) to cache as JSON.
+
+        encoder_offsets is plain data supplied by the caller rather than a
+        PositionalEncoders object, since Navigator has no hardware
+        dependency and can't read one directly.
+        """
+        logging.debug(f"STATIONS: {self.state.stations}")
+        state = asdict(self.state)
+        state.update(encoder_offsets)
+        state["latch"] = True
+
+        path = os.path.expanduser(cache)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(state, f)
+
+    def load_state(self, cache: str = STATE_CACHE_PATH) -> dict:
+        """Restore self.state from cache; returns the saved encoder offsets.
+
+        Returns {} (leaving self.state untouched) if no cache file exists.
+        Encoder offsets are always returned when a cache file is found,
+        even if the saved city turns out to be stale and gets discarded.
+        """
+        path = os.path.expanduser(cache)
+        if not os.path.exists(path):
+            return {}
+        with open(path, "r") as f:
+            state = json.load(f)
+
+        self.state = AppState(
+            stations=state.get("stations") or [],
+            station=tuple(state["station"]) if state.get("station") else None,
+            cities=state.get("cities") or [],
+            city=state.get("city"),
+            jog_idx=state.get("jog_idx") or 0,
+            mode=state.get("mode") or MODE_STATION,
+        )
+
+        # Re-query stations from the live database so stale snapshots in the
+        # cache never cause wrong URLs or indices after a stations.json update.
+        if self.state.city:
+            try:
+                self.current_coords  # validate city still exists
+            except KeyError as e:
+                logging.warning(f"{e} — discarding stale saved city")
+                self.state.city = None
+                self.state.station = None
+            else:
+                self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
+                saved_name = state["station"][0] if state.get("station") else None
+                self.state.station, self.state.jog_idx = match_saved_station(
+                    saved_name, self.state.stations
+                )
+
+        return {
+            "lat": state.get("lat"),
+            "lon": state.get("lon"),
+            "lat_offset": state.get("lat_offset"),
+            "lon_offset": state.get("lon_offset"),
+        }
 
     def next_station(self, direction):
         """Navigate to the next or previous station."""

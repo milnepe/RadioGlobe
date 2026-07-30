@@ -1,14 +1,10 @@
 import asyncio
-import json
 import logging
-import os
 import subprocess
-from dataclasses import asdict
 from typing import Optional
 
 import RPi.GPIO as GPIO  # type: ignore
 
-from radioglobe.app_state import AppState
 from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
 from radioglobe.constants import (
@@ -17,7 +13,7 @@ from radioglobe.constants import (
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
-from radioglobe.database import get_stations_by_city, match_saved_station
+from radioglobe.database import get_stations_by_city
 from radioglobe.dial import AsyncDial
 from radioglobe.display import Display
 from radioglobe.navigation import Navigator
@@ -44,57 +40,23 @@ class App:
         self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
-        logging.debug(f"STATIONS: {self.nav.state.stations}")
-        state = asdict(self.nav.state)
-        state.update({
+        encoder_offsets = {
             "lat": self.encoders.latitude,
             "lon": self.encoders.longitude,
             "lat_offset": self.encoders.latitude_offset,
             "lon_offset": self.encoders.longitude_offset,
-            "latch": True,
-        })
-
-        path = os.path.expanduser(cache)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(state, f)
+        }
+        self.nav.save_state(encoder_offsets, cache)
 
     def load_state(self):
-        path = os.path.expanduser(STATE_CACHE_PATH)
-        if not os.path.exists(path):
+        encoder_state = self.nav.load_state(STATE_CACHE_PATH)
+        if not encoder_state:
             return
-        with open(path, "r") as f:
-            state = json.load(f)
-
-        self.nav.state = AppState(
-            stations=state.get("stations") or [],
-            station=tuple(state["station"]) if state.get("station") else None,
-            cities=state.get("cities") or [],
-            city=state.get("city"),
-            jog_idx=state.get("jog_idx") or 0,
-            mode=state.get("mode") or MODE_STATION,
-        )
-        self.encoders.latitude = state.get("lat")
-        self.encoders.longitude = state.get("lon")
-        self.encoders.latitude_offset = state.get("lat_offset")
-        self.encoders.longitude_offset = state.get("lon_offset")
+        self.encoders.latitude = encoder_state.get("lat")
+        self.encoders.longitude = encoder_state.get("lon")
+        self.encoders.latitude_offset = encoder_state.get("lat_offset")
+        self.encoders.longitude_offset = encoder_state.get("lon_offset")
         self.encoders.latch_stickiness = True
-
-        # Re-query stations from the live database so stale snapshots in the
-        # cache never cause wrong URLs or indices after a stations.json update.
-        if self.nav.state.city:
-            try:
-                self.nav.current_coords  # validate city still exists
-            except KeyError as e:
-                logging.warning(f"{e} — discarding stale saved city")
-                self.nav.state.city = None
-                self.nav.state.station = None
-                return
-            self.nav.state.stations = get_stations_by_city(self.nav.stations_info, self.nav.state.city)
-            saved_name = state["station"][0] if state.get("station") else None
-            self.nav.state.station, self.nav.state.jog_idx = match_saved_station(
-                saved_name, self.nav.state.stations
-            )
 
     # ---------------------------------------------------------------------------
     # Helpers
