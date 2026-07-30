@@ -488,8 +488,8 @@ wheels = [
 
 [[package]]
 name = "radioglobe"
-version = "0.5.1"
-source = { virtual = "." }
+version = "0.5.11"
+source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "evdev" },
