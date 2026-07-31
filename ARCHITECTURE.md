@@ -204,6 +204,7 @@ immediately (warm-restart path).
 | `load_state()` | Pass `self.nav.load_state()`'s (§4.3) returned dict to `self.encoders.restore_calibration()` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
+| `_play_station()` | Show and play `self.nav.state.station` (`display.show_station()` + `audio_player.play()`), returning the URL played. The one place that unpacks the `(name, url)` station tuple — every call site (`_encoder_loop`, `_dial_loop`, `run()`'s warm-restart path, `_monitor_stream`'s retry path) used to repeat `station[0]`/`station[1]` indexing inline |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
 | `_monitor_stream(expected_url)` | Check VLC state every 3 s; on failure, flash LED red, drop the failed station (`self.nav.remove_failed_station()`), and play the next; exits once a station plays cleanly, all stations are exhausted, or the user switches away |
 | `_handle_short_jog` / `_handle_long_jog` | Jog button handlers — short press calls `self.nav.switch_mode()` |
