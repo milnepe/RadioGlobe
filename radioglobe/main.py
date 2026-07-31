@@ -7,8 +7,8 @@ import RPi.GPIO as GPIO  # type: ignore
 
 from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import (
-    AsyncButtonManager, ButtonDefinition,
-    _PIN_BTN_JOG, _PIN_BTN_TOP, _PIN_BTN_MID, _PIN_BTN_BOTTOM,
+    AsyncButtonManager,
+    JOG_BUTTON, TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
 )
 from radioglobe.constants import (
     COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
@@ -31,7 +31,6 @@ from radioglobe.rgb_led import RGBLed
 
 class App:
     def __init__(self):
-        GPIO.setmode(GPIO.BCM)
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
         self.audio_player.change_volume_level(DEFAULT_VOLUME)
@@ -261,10 +260,10 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ButtonDefinition("Jog",    _PIN_BTN_JOG,    self._handle_short_jog,    None,                     self._on_jog_press),
-            ButtonDefinition("Top",    _PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
-            ButtonDefinition("Mid",    _PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
-            ButtonDefinition("Bottom", _PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
+            JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+            TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+            MID_BUTTON._replace(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
+            BOTTOM_BUTTON._replace(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)

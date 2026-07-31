@@ -21,6 +21,16 @@ class ButtonDefinition(NamedTuple):
     press_cb: Optional[Callable] = None
 
 
+# Name+pin pairs for the 4 buttons wired to this project's custom board -
+# fixed by the hardware, not a choice callers make. Callers attach their own
+# callbacks with e.g. TOP_BUTTON._replace(short_cb=..., long_cb=..., press_cb=...);
+# the numeric _PIN_BTN_* constants above are not meant to be imported directly.
+JOG_BUTTON    = ButtonDefinition("Jog",    _PIN_BTN_JOG)
+TOP_BUTTON    = ButtonDefinition("Top",    _PIN_BTN_TOP)
+MID_BUTTON    = ButtonDefinition("Mid",    _PIN_BTN_MID)
+BOTTOM_BUTTON = ButtonDefinition("Bottom", _PIN_BTN_BOTTOM)
+
+
 class AsyncButton:
     def __init__(self, name, gpio_pin, loop, long_press_threshold=1.0, press_cb=None):
         self.name = name
@@ -83,12 +93,10 @@ class AsyncButtonManager:
         self.buttons = []
         self.event_queue = asyncio.Queue()
 
-        # Required before any AsyncButton's GPIO.setup() call below. Not
-        # every caller constructs an App first (e.g. the standalone
-        # integration scripts under tests/integration/), so this class
-        # guarantees its own precondition rather than assuming some other
-        # part of the app already set it - setmode is idempotent, so this
-        # is harmless even when a caller (like App) also calls it.
+        # Required before any AsyncButton's GPIO.setup() call below. No other
+        # module sets this globally (each hardware module owns its own
+        # setmode call) - setmode is idempotent, so calling it here is safe
+        # even if another hardware object in the same process already has.
         GPIO.setmode(GPIO.BCM)
 
         for definition in button_definitions:

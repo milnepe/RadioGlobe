@@ -20,6 +20,11 @@ class RGBLed:
     }
 
     def __init__(self, red_pin=_PIN_LED_R, green_pin=_PIN_LED_G, blue_pin=_PIN_LED_B):
+        # Required before the GPIO.setup() calls below. No other module sets
+        # this globally (each hardware module owns its own setmode call) -
+        # setmode is idempotent, so calling it here is safe even if another
+        # hardware object in the same process already has.
+        GPIO.setmode(GPIO.BCM)
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
         self._running = asyncio.Event()
         for pin in self.pins.values():

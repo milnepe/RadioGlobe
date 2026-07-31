@@ -404,11 +404,29 @@ Manages four GPIO buttons with short and long press detection.
 
 **Button definition tuple:**
 ```python
-("Name", gpio_pin, short_handler, long_handler, press_callback)
+ButtonDefinition(name, pin, short_cb, long_cb, press_cb)
 ```
-- `press_callback` fires immediately on press-down (used for instant LED feedback)
-- `short_handler` fires on release if held < 1.0 second
-- `long_handler` fires on release if held ≥ 1.0 second
+- `press_cb` fires immediately on press-down (used for instant LED feedback)
+- `short_cb` fires on release if held < 1.0 second
+- `long_cb` fires on release if held ≥ 1.0 second
+
+The name+pin pairing is fixed by this project's custom board (Jog/Top/Mid/Bottom
+are wired to specific header pins, not an app-level choice), so `buttons.py`
+owns it completely: `JOG_BUTTON`, `TOP_BUTTON`, `MID_BUTTON`, `BOTTOM_BUTTON`
+are module-level `ButtonDefinition` constants with `name`/`pin` set and every
+callback field left at its `None` default. `main.py` never imports a pin
+number — it attaches its own callbacks via `NamedTuple._replace()`:
+```python
+button_definitions = [
+    JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+    TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+    ...
+]
+```
+The underlying `_PIN_BTN_*` constants (§8) are truly private — nothing
+outside `buttons.py` imports them; callers that need a specific pin (e.g.
+the single-button integration test scripts under `tests/integration/`) read
+`TOP_BUTTON.pin` etc. instead.
 
 `AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
 
@@ -420,12 +438,12 @@ integration scripts under `tests/integration/` construct
 `AsyncButtonManager` directly without ever building an `App`, so that
 assumption broke them (`GPIO.setup()` raising "Please set pin numbering
 mode..."). `AsyncButtonManager` now guarantees its own precondition instead
-of trusting the caller; `GPIO.setmode()` is idempotent, so `App.__init__`
-still calling it too is harmless. `rgb_led.py` has the identical gap
-(`RGBLed.__init__` lost its own call the same way) — the integration
-scripts that construct `RGBLed()` directly now call `GPIO.setmode()`
-themselves as a local workaround, but `RGBLed` itself doesn't yet own this
-precondition the way `AsyncButtonManager` does.
+of trusting the caller. `rgb_led.py`'s `RGBLed` owns the identical call for
+the identical reason (§4.10) — `App.__init__` no longer calls
+`GPIO.setmode()` at all as of the 2026-07-31 hardware-config release; each
+GPIO-owning class is fully self-sufficient. `GPIO.setmode()` is idempotent,
+so constructing both an `AsyncButtonManager` and an `RGBLed` in the same
+process (as `App` does) calls it twice harmlessly.
 
 `handle_events()` wraps each handler call in try/except, logging failures
 via `logging.exception()`. Without this, an unhandled exception from any
@@ -493,7 +511,7 @@ Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 3. Sleeps for `duration` seconds
 4. Turns the LED off and clears the event
 
-This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `GPIO.setmode(GPIO.BCM)` was also removed from `RGBLed.__init__` at the same time as `buttons.py` — see §4.7.
+This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7.
 
 **Colour conventions used in `main.py`:**
 - Green: city found/latched, button press feedback
@@ -625,10 +643,15 @@ app-behavior tuning constants — values about UX/timing/search behaviour, not
 tied to a specific piece of physical hardware. Constants describing a single
 component's wiring or protocol (a GPIO pin, an I2C address, an SPI timing
 value, an encoder's bit resolution) live as private (leading-underscore)
-constants in the module that owns that hardware, and are not re-exported —
-any other module that needs one imports it directly from the owning module
-by name (e.g. `from radioglobe.buttons import _PIN_BTN_JOG`). This mirrors
-`display.py`'s pre-existing `DISPLAY_COLUMNS`/`DISPLAY_ROWS` pattern.
+constants in the module that owns that hardware, and are not re-exported.
+Where another module genuinely needs the value, it imports it directly from
+the owning module by name (e.g. `positional_encoders.py` imports
+`_ENCODER_RESOLUTION` from `database.py`, §4.5). This mirrors `display.py`'s
+pre-existing `DISPLAY_COLUMNS`/`DISPLAY_ROWS` pattern. `buttons.py` goes a
+step further: its `_PIN_BTN_*` pin constants have zero consumers outside the
+module — `main.py` and the integration test scripts consume the higher-level
+`JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` constants instead
+(§4.7), never a raw pin number.
 
 ### `radio_config.py` — app-behavior tuning (shared)
 
@@ -650,7 +673,7 @@ by name (e.g. `from radioglobe.buttons import _PIN_BTN_JOG`). This mirrors
 |---|---|---|
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
 | `_DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
-| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — imported into `main.py` to build the `ButtonDefinition` list, since only `App` knows which callback belongs to which physical button |
+| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |

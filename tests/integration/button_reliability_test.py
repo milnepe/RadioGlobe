@@ -42,13 +42,13 @@ GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
 from radioglobe.buttons import (
     AsyncButtonManager, ButtonDefinition,
-    _PIN_BTN_TOP, _PIN_BTN_MID, _PIN_BTN_BOTTOM,
+    TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
 )
 
 BUTTONS = {
-    "top":    _PIN_BTN_TOP,
-    "mid":    _PIN_BTN_MID,
-    "bottom": _PIN_BTN_BOTTOM,
+    "top":    TOP_BUTTON.pin,
+    "mid":    MID_BUTTON.pin,
+    "bottom": BOTTOM_BUTTON.pin,
 }
 
 
@@ -94,11 +94,6 @@ async def main():
 
     async def on_long():
         count_state["async"] += 1
-
-    # AsyncButton.setup() requires this to have been called first. The real
-    # app does it once in App.__init__ (main.py) - this script never
-    # constructs an App, so it has to do it itself.
-    GPIO.setmode(GPIO.BCM)
 
     loop = asyncio.get_running_loop()
     button_definitions = [ButtonDefinition(args.button, pin, on_short, on_long, None)]

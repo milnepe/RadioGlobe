@@ -45,11 +45,6 @@ async def second_thing():
 
 
 async def main():
-    # RGBLed.__init__'s GPIO.setup() calls require this to have been called
-    # first. The real app does it once in App.__init__ (main.py) - this
-    # script never constructs an App, so it has to do it itself.
-    GPIO.setmode(GPIO.BCM)
-
     led = RGBLed()
 
     await led_cycle(led)
