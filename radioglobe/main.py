@@ -100,7 +100,7 @@ class App:
                 break
             coords = self.nav.current_coords
             self.display.show_station(coords, self.nav.state.city, self.nav.state.station[0])
-            self.audio_player.play(self.nav.state.city, self.nav.state.station)
+            self.audio_player.play(self.nav.state.station[1])
             expected_url = self.nav.state.station[1]
 
         logging.debug("⚠️ All stations failed for this city")
@@ -146,7 +146,7 @@ class App:
                     f"{self.nav.state.city} {self.nav.state.station}\n{self.nav.state.stations}"
                 )
                 self.display.show_station(self.nav.current_coords, self.nav.state.city, self.nav.state.station[0])
-                self.audio_player.play(self.nav.state.city, self.nav.state.station)
+                self.audio_player.play(self.nav.state.station[1])
                 self._start_monitor_stream(self.nav.state.station[1])
 
     async def _dial_loop(self):
@@ -170,7 +170,7 @@ class App:
 
             coords = self.nav.current_coords
             self.display.show_station(coords, self.nav.state.city, self.nav.state.station[0])
-            self.audio_player.play(self.nav.state.city, self.nav.state.station)
+            self.audio_player.play(self.nav.state.station[1])
             self._start_monitor_stream(self.nav.state.station[1])
 
     # ---------------------------------------------------------------------------
@@ -285,7 +285,7 @@ class App:
                     self.display.show_status(STATUS_CALIBRATE)
                 else:
                     self.display.show_station(self.nav.current_coords, self.nav.state.city, self.nav.state.station[0])
-                    self.audio_player.play(self.nav.state.city, self.nav.state.station)
+                    self.audio_player.play(self.nav.state.station[1])
                     self._start_monitor_stream(self.nav.state.station[1])
                     logging.debug(
                         f"Playing saved station: {self.nav.state.station} {self.nav.state.city} "
