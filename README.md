@@ -156,7 +156,7 @@ If the process is successful, the audio should switch to output from your BT spe
 When starting RadioGlobe it is best to have your BT speaker `off` and turn it `on` once RadioGlobe has started up fully.
 
 ## Configuration 
-Configuration settings are in `radio_config.py`. You can change these to suit your setup.
+App-behaviour settings (volume levels, display/LED timing, search sensitivity) are in `radio_config.py`. You can change these to suit your setup. GPIO pin numbers and other single-component hardware settings live as private constants in their respective modules instead — e.g. button pins in `radioglobe/buttons.py`, LED pins in `radioglobe/rgb_led.py`, the I2C address in `radioglobe/display.py` — see `ARCHITECTURE.md` §8 for the full list if you're wiring up different hardware.
 
 ## Audio
 Audio code is now in `radioglobe/streaming/python_vlc_streaming.py` which uses python-vlc. This module can handle station URLs that are plain media formats and also media play lists. This was not the case with the older cvlc player.

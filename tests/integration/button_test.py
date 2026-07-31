@@ -19,13 +19,15 @@ import pytest
 
 GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
-from radioglobe.radio_config import PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
+from radioglobe.buttons import (
+    AsyncButtonManager, ButtonDefinition,
+    TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
+)
 
 BUTTONS = {
-    "top":    PIN_BTN_TOP,
-    "mid":    PIN_BTN_MID,
-    "bottom": PIN_BTN_BOTTOM,
+    "top":    TOP_BUTTON.pin,
+    "mid":    MID_BUTTON.pin,
+    "bottom": BOTTOM_BUTTON.pin,
 }
 
 
@@ -49,11 +51,6 @@ def parse_args():
 async def main():
     args = parse_args()
     pin = BUTTONS[args.button]
-
-    # AsyncButton.setup() requires this to have been called first. The real
-    # app does it once in App.__init__ (main.py) - this script never
-    # constructs an App, so it has to do it itself.
-    GPIO.setmode(GPIO.BCM)
 
     press_count = {"short": 0, "long": 0}
 
@@ -91,7 +88,7 @@ async def main():
     except KeyboardInterrupt:
         pass
     finally:
-        GPIO.cleanup()
+        await manager.stop()
         total = press_count["short"] + press_count["long"]
         print(f"\nDone. {total} press(es): {press_count['short']} short, {press_count['long']} long.")
 

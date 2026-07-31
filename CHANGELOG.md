@@ -2,6 +2,49 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.13] - 2026-07-31
+### Changed
+- Follow-up to 0.5.12's decoupling work, focused entirely on removing
+  remaining hardware-knowledge leaks between `main.py`'s `App` and the
+  hardware wrapper modules it owns. No user-facing behavior changes —
+  verified after each step with unit tests, a hardware-mocked smoke test
+  constructing a real `App()`, and (for the button pin change) inspection
+  of the resulting `ButtonDefinition`s against the real pin/callback wiring.
+  - Moved every constant in `radio_config.py` describing a single
+    component's physical wiring or protocol — GPIO pins, the I2C address,
+    dial debounce timing, encoder resolution — into the module that owns
+    that hardware, as private (leading-underscore) constants. `radio_config.py`
+    now holds only app-behavior tuning (volume, display/LED durations,
+    search fuzziness/stickiness, paths, log level). `ENCODER_RESOLUTION`
+    was placed in `database.py` rather than `positional_encoders.py`, so
+    the pure grid-math module stays hardware-free — `positional_encoders.py`
+    imports it from there. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` had zero Python
+    consumers (the kernel rotary-encoder driver reads the pins straight
+    from `install.sh`'s `dtoverlay` line) and were deleted rather than
+    relocated; that line is now commented as the single source of truth.
+  - `buttons.py` and `rgb_led.py` now each own their own
+    `GPIO.setmode(GPIO.BCM)` call instead of relying on `App.__init__` to
+    have set it first — the same self-sufficiency fix 0.5.12 already made
+    for `buttons.py` alone, now applied consistently. `App.__init__` no
+    longer calls `GPIO.setmode()` at all.
+  - Button GPIO pins are now fully encapsulated in `buttons.py`: since the
+    name-to-pin mapping is fixed by this project's custom board (not an
+    app-level choice), `main.py` no longer imports a single raw pin number.
+    It builds `button_definitions` from `buttons.py`'s new `JOG_BUTTON`/
+    `TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` constants via
+    `NamedTuple._replace()`, attaching only its own callbacks.
+  - `GPIO.cleanup()` ownership moved the same way as `setmode()`:
+    `AsyncButtonManager.stop()` and `RGBLed.stop()` each release only the
+    GPIO channels they set up, instead of `App.run()` calling a bare
+    process-wide `GPIO.cleanup()` in its teardown. `main.py` no longer
+    imports `RPi.GPIO` at all — `App` has zero direct GPIO dependency left.
+  - `PositionalEncoders` gained `get_calibration()`/`restore_calibration()`.
+    `App.save_state()`/`load_state()` used to read and write
+    `self.encoders.latitude`/`longitude`/`latitude_offset`/`longitude_offset`
+    directly (and set `latch_stickiness = True` by hand on restore) — the
+    last place `App` knew a hardware object's internal field names instead
+    of going through its public API. Cache file format is unchanged.
+
 ## [0.5.12] - 2026-07-31
 ### Changed
 - Decoupled `radioglobe/main.py`'s `App` god object, which had mixed

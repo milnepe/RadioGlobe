@@ -66,7 +66,7 @@ RadioGlobe/
 │   ├── main.py                       # App class: entry point, hardware orchestration, main loop
 │   ├── app_state.py             # AppState dataclass: station/city selection state
 │   ├── navigation.py            # Navigator: owns AppState + station/city data, no hardware deps
-│   ├── radio_config.py               # Configuration constants (see caveat in §8)
+│   ├── radio_config.py               # App-behavior tuning constants (see §8)
 │   ├── database.py                   # Pure functions: station/city spatial index
 │   ├── coordinates.py                # Coordinate value object (lat/lon → display string)
 │   ├── audio_async.py                # AudioPlayer: wraps python-vlc directly
@@ -183,11 +183,15 @@ two event-driven loops are the app's actual "main loop."
 **State** lives on `self.nav.state` (an `AppState` — §4.2); `App` no longer
 holds it directly. `save_state()`/`load_state()` are thin wrappers around
 `self.nav.save_state()`/`self.nav.load_state()` (§4.3) — `App`'s only job
-is gathering `self.encoders`' current offsets into a plain dict to pass in,
-and applying the dict `load_state()` returns back onto `self.encoders`;
-`Navigator` owns the actual JSON (de)serialisation and `AppState`
-reconstruction. On boot, if a saved state is found, the latch is restored
-and the last station resumes playing immediately (warm-restart path).
+is passing `self.encoders.get_calibration()`'s dict through to
+`self.nav.save_state()`, and passing `load_state()`'s returned dict through
+to `self.encoders.restore_calibration()`. `App` doesn't know or care what's
+in that dict — `PositionalEncoders` owns its own calibration fields
+(`latitude`/`longitude`/`latitude_offset`/`longitude_offset`) and their
+dict representation entirely (§4.5); `Navigator` owns the JSON
+(de)serialisation and `AppState` reconstruction (§4.3). On boot, if a saved
+state is found, the latch is restored and the last station resumes playing
+immediately (warm-restart path).
 
 **Key methods:**
 
@@ -196,8 +200,8 @@ and the last station resumes playing immediately (warm-restart path).
 | `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
 | `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.find_cities_near()` for nearby cities, latch and start playback when one is found |
 | `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()`/`self.nav.next_city()`, update playback |
-| `save_state()` | Gather `self.encoders`' offsets into a dict, delegate to `self.nav.save_state()` (§4.3) |
-| `load_state()` | Delegate to `self.nav.load_state()` (§4.3), apply the returned encoder offsets onto `self.encoders` |
+| `save_state()` | Pass `self.encoders.get_calibration()` to `self.nav.save_state()` (§4.3) |
+| `load_state()` | Pass `self.nav.load_state()`'s (§4.3) returned dict to `self.encoders.restore_calibration()` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
@@ -217,6 +221,13 @@ now lives on `Navigator` (§4.3).
 - `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
 - If the warm-restart state is incomplete (city or station is `None` after `load_state()`), the app logs a warning, clears the latch, and falls back to calibrate mode rather than crashing.
 - `load_state()` no longer reaches into `Navigator`'s internals at all — an earlier version of this refactor had `App.load_state()` do `self.nav.state = AppState(...)` directly, but that was moved into `Navigator.load_state()` itself in a follow-up (§4.3), once it became clear the only real obstacle (needing `self.encoders`) could be solved by passing/returning plain dicts instead of a hardware object.
+- `save_state()`/`load_state()` similarly no longer reach into
+  `PositionalEncoders`' internal fields — an earlier version read/wrote
+  `self.encoders.latitude`/`.longitude`/`.latitude_offset`/`.longitude_offset`
+  directly (plus setting `.latch_stickiness = True` by hand on restore).
+  `get_calibration()`/`restore_calibration()` (§4.5) were added so `App`
+  only ever passes an opaque dict through, the same pattern already used
+  for `Navigator`.
 
 ---
 
@@ -337,11 +348,17 @@ goes in `database.py`" principle as everything else here.
 
 Reads two SPI absolute rotary encoders and maintains the current lat/lon position.
 
+`_ENCODER_RESOLUTION` (1024) is owned by `database.py` — not this module — and
+imported here, since `database.py`'s grid-coordinate math needs the same
+value and is deliberately hardware-free (§4.4). Owning it in the pure module
+rather than here avoids giving `database.py` a dependency on a
+hardware-touching module.
+
 **Key behaviour:**
 - Each encoder is read via SPI bus 0, device 0 (latitude) and device 1 (longitude), at 1,000,000 Hz, SPI mode 1 — the datasheet maximum for the Bourns EMS22A50-D28-LT6 (raised from an original 5000 Hz; see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md`).
 - Raw readings are 16 bits; the top 10 bits (after shifting right by 6) give the 0–1023 position.
 - `check_parity()` validates each reading. If parity fails, the entire read returns `None` and is discarded.
-- Latitude is inverted: `readings[0] = ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
+- Latitude is inverted: `readings[0] = _ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
 - `run_encoder()` is an event-driven task, not a target the app polls: while unlatched, it sets `self.updated` (an `asyncio.Event`) on every successful read; `main.py`'s `_encoder_loop()` awaits this event instead of polling on its own. Once latched, the event only fires again when the position drifts past `latch_stickiness`.
 
 **The latch mechanism:**
@@ -349,7 +366,15 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 - While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. A deviation must be seen on `UNLATCH_CONFIRM_THRESHOLD` (2) consecutive readings before it actually unlatches — added to stop the faster 50ms poll rate from reacting to single-sample sensor noise (the EMS22A50 datasheet specifies ~0.12° RMS output transition noise) as if it were real movement. Once confirmed, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
-**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
+**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo `_ENCODER_RESOLUTION`. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
+
+**Persistence:** `get_calibration()` returns `{"lat", "lon", "lat_offset",
+"lon_offset"}` as a plain dict; `restore_calibration(state)` applies one
+back and also sets `latch_stickiness = True`, since a restored position
+always represents a previously-latched city. These exist so `App.save_state()`/
+`load_state()` (§4.1) never need to know this class's internal field names
+— `PositionalEncoders` is the only thing that reads or writes its own
+`latitude`/`longitude`/`latitude_offset`/`longitude_offset`/`latch_stickiness`.
 
 ---
 
@@ -375,9 +400,9 @@ software coalescing layer in `dial.py` (below) filters this out. Investigated in
 - `start()` registers the device's file descriptor directly on the asyncio event loop with
   `loop.add_reader(fd, callback)` — no background task, no thread pool.
 - `_on_readable()` accumulates the signed `REL_X` value of each event into a running sum
-  and (re)arms a single `loop.call_later(DIAL_DEBOUNCE_S, self._flush)` timer, cancelling
+  and (re)arms a single `loop.call_later(_DIAL_DEBOUNCE_S, self._flush)` timer, cancelling
   and rescheduling it on every new event — so the timer only fires once the encoder goes
-  quiet for `DIAL_DEBOUNCE_S` (`radio_config.py`). `_flush()` then pushes a single
+  quiet for `_DIAL_DEBOUNCE_S` (a private constant in this module). `_flush()` then pushes a single
   `_POLARITY * sign(sum)` onto `self.queue` (an `asyncio.Queue[int]`, via `put_nowait`) —
   or nothing at all if the accumulated sum is exactly zero, i.e. a bounce burst that fully
   cancelled itself. A single `_POLARITY` constant corrects for physical wiring, same role
@@ -398,11 +423,29 @@ Manages four GPIO buttons with short and long press detection.
 
 **Button definition tuple:**
 ```python
-("Name", gpio_pin, short_handler, long_handler, press_callback)
+ButtonDefinition(name, pin, short_cb, long_cb, press_cb)
 ```
-- `press_callback` fires immediately on press-down (used for instant LED feedback)
-- `short_handler` fires on release if held < 1.0 second
-- `long_handler` fires on release if held ≥ 1.0 second
+- `press_cb` fires immediately on press-down (used for instant LED feedback)
+- `short_cb` fires on release if held < 1.0 second
+- `long_cb` fires on release if held ≥ 1.0 second
+
+The name+pin pairing is fixed by this project's custom board (Jog/Top/Mid/Bottom
+are wired to specific header pins, not an app-level choice), so `buttons.py`
+owns it completely: `JOG_BUTTON`, `TOP_BUTTON`, `MID_BUTTON`, `BOTTOM_BUTTON`
+are module-level `ButtonDefinition` constants with `name`/`pin` set and every
+callback field left at its `None` default. `main.py` never imports a pin
+number — it attaches its own callbacks via `NamedTuple._replace()`:
+```python
+button_definitions = [
+    JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+    TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+    ...
+]
+```
+The underlying `_PIN_BTN_*` constants (§8) are truly private — nothing
+outside `buttons.py` imports them; callers that need a specific pin (e.g.
+the single-button integration test scripts under `tests/integration/`) read
+`TOP_BUTTON.pin` etc. instead.
 
 `AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
 
@@ -414,12 +457,19 @@ integration scripts under `tests/integration/` construct
 `AsyncButtonManager` directly without ever building an `App`, so that
 assumption broke them (`GPIO.setup()` raising "Please set pin numbering
 mode..."). `AsyncButtonManager` now guarantees its own precondition instead
-of trusting the caller; `GPIO.setmode()` is idempotent, so `App.__init__`
-still calling it too is harmless. `rgb_led.py` has the identical gap
-(`RGBLed.__init__` lost its own call the same way) — the integration
-scripts that construct `RGBLed()` directly now call `GPIO.setmode()`
-themselves as a local workaround, but `RGBLed` itself doesn't yet own this
-precondition the way `AsyncButtonManager` does.
+of trusting the caller. `rgb_led.py`'s `RGBLed` owns the identical call for
+the identical reason (§4.10) — `App.__init__` no longer calls
+`GPIO.setmode()` at all as of the 2026-07-31 hardware-config release; each
+GPIO-owning class is fully self-sufficient. `GPIO.setmode()` is idempotent,
+so constructing both an `AsyncButtonManager` and an `RGBLed` in the same
+process (as `App` does) calls it twice harmlessly.
+
+Teardown mirrors setup: `AsyncButtonManager.stop()` calls
+`GPIO.cleanup([btn.pin for btn in self.buttons])`, releasing only the pins
+this manager itself set up. `App.run()`'s `finally` block no longer calls a
+bare `GPIO.cleanup()` — it just awaits `.stop()` on every hardware object it
+holds (including `button_manager`, §4.1), and each object releases exactly
+the channels it owns. `rgb_led.py` does the same in `RGBLed.stop()` (§4.10).
 
 `handle_events()` wraps each handler call in try/except, logging failures
 via `logging.exception()`. Without this, an unhandled exception from any
@@ -487,7 +537,7 @@ Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 3. Sleeps for `duration` seconds
 4. Turns the LED off and clears the event
 
-This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `GPIO.setmode(GPIO.BCM)` was also removed from `RGBLed.__init__` at the same time as `buttons.py` — see §4.7.
+This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7. `RGBLed.stop()` mirrors this on teardown: it turns the LED off, then calls `GPIO.cleanup(list(self.pins.values()))` to release only its own 3 pins, rather than relying on a process-wide `GPIO.cleanup()` call in `main.py`.
 
 **Colour conventions used in `main.py`:**
 - Green: city found/latched, button press feedback
@@ -510,7 +560,7 @@ Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistent
 
 ### 4.12 `radio_config.py` — Configuration
 
-Defines constants for the application. **Warning: many of these are not actually used.** See [§8 Configuration Reference](#8-configuration-reference) for the full discrepancy table.
+Defines app-behavior tuning constants shared across modules (volume levels, display/LED durations, search fuzziness/stickiness, file paths, log level). Constants tied to a single piece of physical hardware (GPIO pins, I2C address, encoder resolution, dial debounce timing) live as private (leading-underscore) constants in the module that owns that hardware instead — see [§8 Configuration Reference](#8-configuration-reference) for the full list and rationale.
 
 No side-effects on import — it is a constants-only module. Logging is configured in `main.py`'s `__main__` block.
 
@@ -569,8 +619,8 @@ Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on
 `self.encoders` — separate from `AppState` and unaffected by the decoupling
 refactor.
 
-On shutdown (long press of mid button), `App.save_state()` gathers
-`self.encoders`' offsets into a dict and hands it to
+On shutdown (long press of mid button), `App.save_state()` gets a plain
+dict from `self.encoders.get_calibration()` (§4.5) and hands it to
 `self.nav.save_state()` (§4.3), which calls `dataclasses.asdict(self.state)`
 and appends the encoder offsets and latch flag, writing the result to
 `~/cache/radioglobe.json`. On the next boot, `App.load_state()` calls
@@ -580,7 +630,9 @@ database and calls `match_saved_station()` (`database.py`, §4.4) to match
 the saved station by name (falling back to index 0 if not found) — this
 means a `stations.json` update between boots never causes a wrong URL or
 stale index. `Navigator.load_state()` returns the saved encoder offsets as
-a plain dict, which `App.load_state()` applies onto `self.encoders`.
+a plain dict, which `App.load_state()` passes straight to
+`self.encoders.restore_calibration()` (§4.5) without inspecting it —
+`App` never touches an encoder's internal fields directly.
 
 ---
 
@@ -614,24 +666,55 @@ asyncio.create_task(self._dial_loop())               # wakes on dial.queue — n
 
 ## 8. Configuration Reference
 
-Most constants are defined in `radio_config.py` and imported where used, with no dead
-constants and no import side-effects. A few reticule/globe encoder timing values are
-hardcoded directly in `positional_encoders.py` instead (noted below) rather than routed
-through `radio_config.py`.
+As of the 2026-07-31 config-relocation release, `radio_config.py` holds only
+app-behavior tuning constants — values about UX/timing/search behaviour, not
+tied to a specific piece of physical hardware. Constants describing a single
+component's wiring or protocol (a GPIO pin, an I2C address, an SPI timing
+value, an encoder's bit resolution) live as private (leading-underscore)
+constants in the module that owns that hardware, and are not re-exported.
+Where another module genuinely needs the value, it imports it directly from
+the owning module by name (e.g. `positional_encoders.py` imports
+`_ENCODER_RESOLUTION` from `database.py`, §4.5). This mirrors `display.py`'s
+pre-existing `DISPLAY_COLUMNS`/`DISPLAY_ROWS` pattern. `buttons.py` goes a
+step further: its `_PIN_BTN_*` pin constants have zero consumers outside the
+module — `main.py` and the integration test scripts consume the higher-level
+`JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` constants instead
+(§4.7), never a raw pin number.
+
+### `radio_config.py` — app-behavior tuning (shared)
 
 | Parameter | Value | Where used |
 |---|---|---|
+| `STATIONS_JSON` | `"stations/stations.json"` | `navigation.py` — station data path |
 | `FUZZINESS` | 3 | `navigation.py` — `Navigator.__init__` default, builds the 25-point (5×5) search zone; also logged (but not otherwise used) in `main.py`'s `_encoder_loop()` debug output |
 | `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
-| `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
-| `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
+| `VOLUME_STEP` / `DEFAULT_VOLUME` / `VOLUME_ON_LEVEL` / `VOLUME_OFF_LEVEL` | 10 / 50 / 80 / 0 | `main.py` — volume handling |
+| `BRIEF_DISPLAY_DURATION` / `MESSAGE_DISPLAY_DURATION` | 0.5 / 2 | `main.py` — display hold durations |
+| `STREAM_CHECK_INTERVAL` | 3 | `main.py` — stream health check grace period |
+| `LED_FLASH_SHORT` / `LED_FLASH_LONG` / `LED_FLASH_DIAL` | 0.2 / 0.5 / 0.1 | `main.py` — LED feedback durations passed to `RGBLed.flash()` |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
-| `DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
-| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` are also duplicated as literal pin numbers in `install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line — nothing enforces these two stay in sync if the constants ever change |
-| I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
-| SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded, not in `radio_config.py`. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
-| SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded, not in `radio_config.py`. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
+| `LOG_LEVEL` | `"DEBUG"` | `main.py` — `__main__` logging setup |
+
+### Hardware modules — private, module-owned
+
+| Parameter | Value | Owning module |
+|---|---|---|
+| `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
+| `_DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
+| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
+| `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
+| `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
+| SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
+| SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
 | `UNLATCH_CONFIRM_THRESHOLD` | 2 | `positional_encoders.py` class constant — consecutive out-of-band readings required before unlatching, added to filter sensor noise at the faster poll rate |
+
+**Dial clock/direction pins (removed):** `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR`
+(BCM 17/18) used to exist in `radio_config.py` despite having zero Python
+consumers — the kernel `rotary_encoder` driver reads the pins directly from
+`install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line (§4.6),
+which is the only place they're configured. They were deleted rather than
+relocated; `install.sh` now has a comment marking that line as the single
+source of truth for those two pins.
 
 ---
 

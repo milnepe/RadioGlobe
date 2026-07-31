@@ -3,10 +3,11 @@ import logging
 import subprocess
 from typing import Optional
 
-import RPi.GPIO as GPIO  # type: ignore
-
 from radioglobe.audio_async import AudioPlayer
-from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
+from radioglobe.buttons import (
+    AsyncButtonManager,
+    JOG_BUTTON, TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
+)
 from radioglobe.constants import (
     COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
     MODE_CITY, MODE_STATION,
@@ -20,8 +21,7 @@ from radioglobe.navigation import Navigator
 from radioglobe.positional_encoders import PositionalEncoders
 from radioglobe.radio_config import (
     BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
-    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, PIN_BTN_BOTTOM, PIN_BTN_JOG,
-    PIN_BTN_MID, PIN_BTN_TOP, STATE_CACHE_PATH, STICKINESS,
+    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
 from radioglobe.rgb_led import RGBLed
@@ -29,7 +29,6 @@ from radioglobe.rgb_led import RGBLed
 
 class App:
     def __init__(self):
-        GPIO.setmode(GPIO.BCM)
         self.dial = AsyncDial()
         self.audio_player = AudioPlayer()
         self.audio_player.change_volume_level(DEFAULT_VOLUME)
@@ -40,23 +39,13 @@ class App:
         self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
-        encoder_offsets = {
-            "lat": self.encoders.latitude,
-            "lon": self.encoders.longitude,
-            "lat_offset": self.encoders.latitude_offset,
-            "lon_offset": self.encoders.longitude_offset,
-        }
-        self.nav.save_state(encoder_offsets, cache)
+        self.nav.save_state(self.encoders.get_calibration(), cache)
 
     def load_state(self):
         encoder_state = self.nav.load_state(STATE_CACHE_PATH)
         if not encoder_state:
             return
-        self.encoders.latitude = encoder_state.get("lat")
-        self.encoders.longitude = encoder_state.get("lon")
-        self.encoders.latitude_offset = encoder_state.get("lat_offset")
-        self.encoders.longitude_offset = encoder_state.get("lon_offset")
-        self.encoders.latch_stickiness = True
+        self.encoders.restore_calibration(encoder_state)
 
     # ---------------------------------------------------------------------------
     # Helpers
@@ -226,10 +215,7 @@ class App:
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
         self.encoders.zero()
         self.encoders.reset_latch()
-        logging.debug(
-            f"Encoder offsets set to: {self.encoders.latitude}, {self.encoders.longitude} "
-            f"{self.encoders.latitude_offset}, {self.encoders.longitude_offset}"
-        )
+        logging.debug(f"Encoder offsets set to: {self.encoders.get_calibration()}")
         self.display.show_status(STATUS_CALIBRATING)
         await asyncio.sleep(MESSAGE_DISPLAY_DURATION)
         self.display.show_status(STATUS_CALIBRATED)
@@ -259,10 +245,10 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ButtonDefinition("Jog",    PIN_BTN_JOG,    self._handle_short_jog,    None,                     self._on_jog_press),
-            ButtonDefinition("Top",    PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
-            ButtonDefinition("Mid",    PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
-            ButtonDefinition("Bottom", PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
+            JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+            TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+            MID_BUTTON._replace(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
+            BOTTOM_BUTTON._replace(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
@@ -287,7 +273,7 @@ class App:
             except Exception as e:
                 logging.warning(f"load_state failed: {e}")
             logging.debug(
-                f"State: {self.encoders.latitude_offset} {self.encoders.longitude_offset} "
+                f"State: {self.encoders.get_calibration()} "
                 f"{self.nav.state.mode} {self.nav.state.city} {self.nav.state.station} {self.encoders.is_latched()}"
             )
 
@@ -321,9 +307,8 @@ class App:
         finally:
             if self._stream_task and not self._stream_task.done():
                 self._stream_task.cancel()
-            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led]:
+            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led, button_manager]:
                 await hw.stop()
-            GPIO.cleanup()
 
 
 if __name__ == "__main__":

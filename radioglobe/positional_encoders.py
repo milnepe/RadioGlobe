@@ -2,7 +2,7 @@ import asyncio
 
 import spidev  # type: ignore
 
-from .radio_config import ENCODER_RESOLUTION
+from .database import _ENCODER_RESOLUTION
 
 
 class PositionalEncoders:
@@ -21,8 +21,8 @@ class PositionalEncoders:
         self._task = None
 
     def zero(self):
-        self.latitude_offset = (ENCODER_RESOLUTION // 2) - self.latitude
-        self.longitude_offset = (ENCODER_RESOLUTION // 2) - self.longitude
+        self.latitude_offset = (_ENCODER_RESOLUTION // 2) - self.latitude
+        self.longitude_offset = (_ENCODER_RESOLUTION // 2) - self.longitude
         return [self.latitude_offset, self.longitude_offset]
 
     def reset_latch(self):
@@ -30,17 +30,38 @@ class PositionalEncoders:
         self.latch_stickiness = None
 
     def get_readings(self) -> tuple:
-        return (self.latitude + self.latitude_offset) % ENCODER_RESOLUTION, (
+        return (self.latitude + self.latitude_offset) % _ENCODER_RESOLUTION, (
             self.longitude + self.longitude_offset
-        ) % ENCODER_RESOLUTION
+        ) % _ENCODER_RESOLUTION
 
     def latch(self, latitude: int, longitude: int, stickiness: int):
         self.latch_stickiness = stickiness
-        self.latitude = (latitude - self.latitude_offset) % ENCODER_RESOLUTION
-        self.longitude = (longitude - self.longitude_offset) % ENCODER_RESOLUTION
+        self.latitude = (latitude - self.latitude_offset) % _ENCODER_RESOLUTION
+        self.longitude = (longitude - self.longitude_offset) % _ENCODER_RESOLUTION
 
     def is_latched(self):
         return self.latch_stickiness is not None
+
+    def get_calibration(self) -> dict:
+        """Return the current position/calibration as plain data for persistence."""
+        return {
+            "lat": self.latitude,
+            "lon": self.longitude,
+            "lat_offset": self.latitude_offset,
+            "lon_offset": self.longitude_offset,
+        }
+
+    def restore_calibration(self, state: dict):
+        """Restore position/calibration from a dict produced by get_calibration().
+
+        Also marks the encoders as latched, since a restored position always
+        represents a previously-latched city.
+        """
+        self.latitude = state.get("lat")
+        self.longitude = state.get("lon")
+        self.latitude_offset = state.get("lat_offset")
+        self.longitude_offset = state.get("lon_offset")
+        self.latch_stickiness = True
 
     def check_parity(self, reading: int):
         reading_without_parity_bit = reading >> 1
@@ -86,15 +107,15 @@ class PositionalEncoders:
             readings = self.read_spi()
 
             if readings:
-                readings[0] = ENCODER_RESOLUTION - readings[0]
+                readings[0] = _ENCODER_RESOLUTION - readings[0]
 
                 if self.latch_stickiness is None:
                     self.latitude = readings[0]
                     self.longitude = readings[1]
                     self.updated.set()
                 else:
-                    lat_difference = abs(self.latitude - readings[0]) % ENCODER_RESOLUTION
-                    lon_difference = abs(self.longitude - readings[1]) % ENCODER_RESOLUTION
+                    lat_difference = abs(self.latitude - readings[0]) % _ENCODER_RESOLUTION
+                    lon_difference = abs(self.longitude - readings[1]) % _ENCODER_RESOLUTION
 
                     if (
                         lat_difference > self.latch_stickiness

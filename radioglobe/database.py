@@ -2,7 +2,8 @@ import json
 import logging
 
 from .coordinates import Coordinate
-from .radio_config import ENCODER_RESOLUTION
+
+_ENCODER_RESOLUTION = 1024
 
 
 def load_stations(stations_json: str) -> dict:
@@ -29,8 +30,8 @@ def build_cities_index(stations_data: dict) -> dict:
     cities_index = {}
     for location in stations_data:
         # Turn the coordinates into indexes for the map.  We need to shift all the numbers to make everything positive
-        latitude = round((stations_data[location]["coords"]["n"] + 180) * ENCODER_RESOLUTION / 360)
-        longitude = round((stations_data[location]["coords"]["e"] + 180) * ENCODER_RESOLUTION / 360)
+        latitude = round((stations_data[location]["coords"]["n"] + 180) * _ENCODER_RESOLUTION / 360)
+        longitude = round((stations_data[location]["coords"]["e"] + 180) * _ENCODER_RESOLUTION / 360)
         # logging.debug(f"{location}, {latitude}, {longitude}")
 
         city_coords = (latitude, longitude)
@@ -72,7 +73,7 @@ def look_around(origin: tuple, offsets: list[tuple[int, int]]) -> list[tuple[int
 
     latitude, longitude = origin
     return [
-        ((latitude + dx) % ENCODER_RESOLUTION, (longitude + dy) % ENCODER_RESOLUTION)
+        ((latitude + dx) % _ENCODER_RESOLUTION, (longitude + dy) % _ENCODER_RESOLUTION)
         for dx, dy in offsets
     ]
 
@@ -87,7 +88,7 @@ def find_cities_near(origin: tuple, offsets: list[tuple[int, int]], cities_index
     seen: set = set()
     cities = []
     for dx, dy in offsets:
-        coord = ((lat + dx) % ENCODER_RESOLUTION, (lon + dy) % ENCODER_RESOLUTION)
+        coord = ((lat + dx) % _ENCODER_RESOLUTION, (lon + dy) % _ENCODER_RESOLUTION)
         if coord in cities_index:
             for city in cities_index[coord]:
                 if city not in seen:

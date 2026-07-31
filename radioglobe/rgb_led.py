@@ -2,8 +2,12 @@ import asyncio
 import logging
 import RPi.GPIO as GPIO  # type: ignore
 
-from .radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
 from .constants import COLOUR_OFF
+
+# GPIO pin assignments (BCM numbering)
+_PIN_LED_R = 22
+_PIN_LED_G = 23
+_PIN_LED_B = 24
 
 
 class RGBLed:
@@ -15,7 +19,12 @@ class RGBLed:
         "off": (0, 0, 0),
     }
 
-    def __init__(self, red_pin=PIN_LED_R, green_pin=PIN_LED_G, blue_pin=PIN_LED_B):
+    def __init__(self, red_pin=_PIN_LED_R, green_pin=_PIN_LED_G, blue_pin=_PIN_LED_B):
+        # Required before the GPIO.setup() calls below. No other module sets
+        # this globally (each hardware module owns its own setmode call) -
+        # setmode is idempotent, so calling it here is safe even if another
+        # hardware object in the same process already has.
+        GPIO.setmode(GPIO.BCM)
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
         self._running = asyncio.Event()
         for pin in self.pins.values():
@@ -35,8 +44,9 @@ class RGBLed:
         pass  # GPIO pins are configured at construction time
 
     async def stop(self):
-        """Turn the LED off."""
+        """Turn the LED off and release its GPIO pins."""
         self.off()
+        GPIO.cleanup(list(self.pins.values()))
 
     async def flash(self, color: str, duration: float):
         """Turn the LED on for duration seconds, then off.
