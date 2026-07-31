@@ -113,6 +113,14 @@ async def main():
     try:
         while count_state["raw"] < args.presses:
             await asyncio.sleep(0.1)
+        # AsyncButton's own pipeline lags the raw poll by up to ~100ms (its
+        # own 50ms release-poll, then _poll_buttons()'s separate 50ms
+        # cycle) - give it a moment to catch up on the last press before
+        # comparing counts, so a real lag doesn't get reported as a false
+        # "missed press" that's really just this script's own timing.
+        settle_deadline = time.monotonic() + 1.0
+        while count_state["async"] < count_state["raw"] and time.monotonic() < settle_deadline:
+            await asyncio.sleep(0.05)
     except KeyboardInterrupt:
         pass
     finally:
