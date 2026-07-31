@@ -2,8 +2,6 @@
 
 STATIONS_JSON = "stations/stations.json"
 
-ENCODER_RESOLUTION = 1024
-
 # Higher values of fuzziness increases the search area.
 # May include more than one city may be included if they are located close together.
 FUZZINESS = 3
@@ -28,26 +26,6 @@ STREAM_CHECK_INTERVAL = 3
 LED_FLASH_SHORT = 0.2   # button press feedback
 LED_FLASH_LONG = 0.5    # city latch / stream error indication
 LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
-
-# Dial contact-bounce coalescing window (seconds) — see
-# docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md §9. Raw REL_X events from a single
-# physical click can arrive in bursts spaced <20ms apart; genuine clicks are
-# spaced >=100ms apart.
-DIAL_DEBOUNCE_S = 0.03
-
-# GPIO pin assignments (BCM numbering)
-PIN_DIAL_CLOCK = 17
-PIN_DIAL_DIR   = 18
-PIN_BTN_JOG    = 27
-PIN_BTN_TOP    = 5
-PIN_BTN_MID    = 6
-PIN_BTN_BOTTOM = 12
-PIN_LED_R      = 22
-PIN_LED_G      = 23
-PIN_LED_B      = 24
-
-# I2C
-I2C_LCD_ADDR   = 0x27
 
 # State persistence
 STATE_CACHE_PATH = "~/cache/radioglobe.json"

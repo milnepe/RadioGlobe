@@ -19,13 +19,15 @@ import pytest
 
 GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
-from radioglobe.radio_config import PIN_BTN_TOP, PIN_BTN_MID, PIN_BTN_BOTTOM
+from radioglobe.buttons import (
+    AsyncButtonManager, ButtonDefinition,
+    _PIN_BTN_TOP, _PIN_BTN_MID, _PIN_BTN_BOTTOM,
+)
 
 BUTTONS = {
-    "top":    PIN_BTN_TOP,
-    "mid":    PIN_BTN_MID,
-    "bottom": PIN_BTN_BOTTOM,
+    "top":    _PIN_BTN_TOP,
+    "mid":    _PIN_BTN_MID,
+    "bottom": _PIN_BTN_BOTTOM,
 }
 
 

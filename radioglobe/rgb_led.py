@@ -2,8 +2,12 @@ import asyncio
 import logging
 import RPi.GPIO as GPIO  # type: ignore
 
-from .radio_config import PIN_LED_R, PIN_LED_G, PIN_LED_B
 from .constants import COLOUR_OFF
+
+# GPIO pin assignments (BCM numbering)
+_PIN_LED_R = 22
+_PIN_LED_G = 23
+_PIN_LED_B = 24
 
 
 class RGBLed:
@@ -15,7 +19,7 @@ class RGBLed:
         "off": (0, 0, 0),
     }
 
-    def __init__(self, red_pin=PIN_LED_R, green_pin=PIN_LED_G, blue_pin=PIN_LED_B):
+    def __init__(self, red_pin=_PIN_LED_R, green_pin=_PIN_LED_G, blue_pin=_PIN_LED_B):
         self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
         self._running = asyncio.Event()
         for pin in self.pins.values():
