@@ -2,6 +2,64 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.12] - 2026-07-31
+### Changed
+- Decoupled `radioglobe/main.py`'s `App` god object, which had mixed
+  hardware orchestration, station/city selection state, navigation logic,
+  display formatting, and LED signalling in one ~440-line class. `App` is
+  now just hardware construction, the two event loops, and button dispatch.
+  - `AppState` (selection state) and `Navigator` (station/city data and the
+    logic that mutates it) moved into new hardware-free modules
+    (`radioglobe/app_state.py`, `radioglobe/navigation.py`), unit-testable
+    off a Pi the same way `database.py` always was — previously this
+    navigation logic (latching, dial cycling, mode switching) had zero
+    automated test coverage.
+  - `database.py` gained `get_coords_by_city()`/`match_saved_station()`.
+  - `Display` gained `show_station()`/`show_status()`, replacing ad hoc
+    argument-building in `App`.
+  - `RGBLed` gained a `flash()` method, absorbing the old free-function
+    `led_task()` + a manually shared `asyncio.Event`.
+  - `save_state()`/`load_state()` moved into `Navigator`, taking/returning
+    plain encoder-offset dicts rather than a `PositionalEncoders` object,
+    so `Navigator` stays hardware-free. The on-disk cache format
+    (`~/cache/radioglobe.json`) is unchanged — existing cache files remain
+    readable.
+
+  No user-facing behavior changes — internal readability/testability
+  refactor, verified after each step with a hardware-mocked smoke test
+  against the real `stations.json` and, for the riskier steps, full
+  on-device regression passes (globe latch, dial in both modes, all 4
+  buttons, save/restore across a restart).
+
+### Fixed
+- `AsyncButtonManager.handle_events()` is the single consumer for every
+  button's short/long-press events. An unhandled exception from any one
+  button's handler killed that shared loop outright — silently stopping
+  press dispatch for *all four buttons*, not just the one that failed.
+  Press-down LED feedback kept working (it runs on a separate per-button
+  task), making the failure look like "the LED still flashes but nothing
+  else happens," with no visible error. Now wrapped in try/except with the
+  failure logged.
+- `buttons.py`'s `AsyncButton`/`AsyncButtonManager` no longer depended on
+  `App` having already called `GPIO.setmode(GPIO.BCM)` — a regression from
+  centralizing that call into `App.__init__` (0.5.x internal refactor)
+  that broke every standalone script constructing `AsyncButtonManager`
+  directly (`tests/integration/button_test.py` and a new
+  `button_reliability_test.py`), which would otherwise fail with
+  "Please set pin numbering mode..." on real hardware.
+  `AsyncButtonManager` now guarantees this precondition itself.
+- Investigated a real-hardware report of the Mid button (calibrate/
+  shutdown) going completely unresponsive. Confirmed via direct GPIO edge
+  monitoring (`gpiomon`) with the app fully stopped that the press wasn't
+  reaching the pin at all — a wiring/connector fault, not a software bug.
+  Traced to the shared `J1` "Disp Buttons" connector (all four push-buttons
+  share one connector, per the board schematic): reseating/reconnecting it
+  resolved the issue, confirmed with a purpose-built reliability check
+  (`tests/integration/button_reliability_test.py`, comparing a raw GPIO
+  poll against `AsyncButtonManager`'s registered presses) run against
+  Top/Mid/Bottom individually and then with each other subsystem
+  reconnected in turn.
+
 ## [0.5.11] - 2026-07-28
 ### Fixed
 - Dial contact bounce caused inconsistent/skipped city and station selection:

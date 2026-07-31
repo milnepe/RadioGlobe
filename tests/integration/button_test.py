@@ -50,6 +50,11 @@ async def main():
     args = parse_args()
     pin = BUTTONS[args.button]
 
+    # AsyncButton.setup() requires this to have been called first. The real
+    # app does it once in App.__init__ (main.py) - this script never
+    # constructs an App, so it has to do it itself.
+    GPIO.setmode(GPIO.BCM)
+
     press_count = {"short": 0, "long": 0}
 
     async def on_short():

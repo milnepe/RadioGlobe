@@ -63,7 +63,9 @@ The Raspberry Pi 4B runs Raspberry Pi OS Bookworm Lite. Audio plays through VLC 
 ```
 RadioGlobe/
 ├── radioglobe/                       # Python application package
-│   ├── main.py                       # App class: entry point and main loop
+│   ├── main.py                       # App class: entry point, hardware orchestration, main loop
+│   ├── app_state.py             # AppState dataclass: station/city selection state
+│   ├── navigation.py            # Navigator: owns AppState + station/city data, no hardware deps
 │   ├── radio_config.py               # Configuration constants (see caveat in §8)
 │   ├── database.py                   # Pure functions: station/city spatial index
 │   ├── coordinates.py                # Coordinate value object (lat/lon → display string)
@@ -81,11 +83,12 @@ RadioGlobe/
 │       ├── async_streamer.py         # Experimental: async playlist resolver via aiohttp
 │       └── files.py                  # JSON loader helper for test scripts
 │
-├── tests/                            # Mix of unit tests and hardware integration scripts
-│   ├── get_stations_by_city_test.py  # Unit tests (run without hardware)
-│   ├── simulation_test.py            # Integration: requires Pi hardware
-│   ├── async_streamer_test.py        # Integration: requires network
-│   └── ...                           # Other hardware / manual test scripts
+├── tests/                            # Unit tests (run without hardware) + integration/ subfolder
+│   ├── get_stations_by_city_test.py
+│   ├── navigation_test.py
+│   ├── buttons_test.py
+│   ├── ...                           # See §9 Testing for the full list
+│   └── integration/                  # Hardware / manual scripts — see tests/integration/README.md
 │
 ├── stations/
 │   └── stations.json                 # Radio station database (~705 KB, 500+ cities)
@@ -133,8 +136,13 @@ graph TD
     main --> display["display.py\nI2C LCD display"]
     main --> led["rgb_led.py\nGPIO LED"]
     main --> audio["audio_async.py\nVLC audio player"]
+    main --> nav["navigation.py\n(Navigator)"]
     main --> database["database.py\nPure functions"]
     main --> coordinates["coordinates.py\nCoordinate type"]
+
+    nav --> appstate["app_state.py\n(AppState)"]
+    nav --> database
+    nav --> coordinates
 
     database --> stations[("stations/stations.json")]
     audio --> vlc[("python-vlc")]
@@ -145,6 +153,13 @@ graph TD
     led --> gpio
 ```
 
+`App` still imports `get_stations_by_city` (`database.py`) directly — used
+in `_encoder_loop()`/`_dial_loop()` to fetch a city's station list before
+handing it to `self.nav.state.select_station()` — and `Coordinate`
+(`coordinates.py`) for the shutdown-display fallback, so those two edges
+aren't purely routed through `Navigator`. `match_saved_station()` moved
+fully into `Navigator.load_state()` in a follow-up — see §4.3.
+
 The `streaming/` directory is intentionally omitted — none of its modules are imported by the main application.
 
 ---
@@ -153,41 +168,142 @@ The `streaming/` directory is intentionally omitted — none of its modules are 
 
 ### 4.1 `main.py` — App Controller
 
-The `App` class is the central controller. `__init__` instantiates all hardware objects and loads the station database. `run()` wires up button definitions, restores any saved state, and then starts and gathers the `_encoder_loop()` and `_dial_loop()` tasks — these two event-driven loops are the app's actual "main loop."
+The `App` class is the central controller, but a much thinner one since the
+2026-07-30 decoupling refactor (see git history from
+`feature/decouple-database-helpers` through `feature/extract-navigator`).
+`__init__` instantiates the 6 hardware wrapper objects plus a single
+`Navigator` (`self.nav` — §4.3), which owns all station/city data and
+navigation state. `App` itself now handles only: hardware construction, the
+two event-driven loops, button dispatch, and `run()`.
 
-**State** is held in an `AppState` dataclass (`self.state`) with six fields. `save_state()` uses `dataclasses.asdict(self.state)` for serialisation; `load_state()` reconstructs `AppState(...)` directly from the JSON. On boot, if a saved state is found, the latch is restored and the last station resumes playing immediately (warm-restart path).
+`run()` wires up button definitions, restores any saved state, and then
+starts and gathers the `_encoder_loop()` and `_dial_loop()` tasks — these
+two event-driven loops are the app's actual "main loop."
+
+**State** lives on `self.nav.state` (an `AppState` — §4.2); `App` no longer
+holds it directly. `save_state()`/`load_state()` are thin wrappers around
+`self.nav.save_state()`/`self.nav.load_state()` (§4.3) — `App`'s only job
+is gathering `self.encoders`' current offsets into a plain dict to pass in,
+and applying the dict `load_state()` returns back onto `self.encoders`;
+`Navigator` owns the actual JSON (de)serialisation and `AppState`
+reconstruction. On boot, if a saved state is found, the latch is restored
+and the last station resumes playing immediately (warm-restart path).
 
 **Key methods:**
 
 | Method | Purpose |
 |---|---|
 | `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
-| `_encoder_loop()` | Wake on `encoders.updated`, search for nearby cities, latch and start playback when one is found |
-| `_dial_loop()` | Wake on `dial.queue`, navigate stations/cities and update playback |
-| `next_station(direction)` | Cycle `jog_idx` within `self.state.stations` |
-| `next_city(direction)` | Cycle `jog_idx` within `self.state.cities`, reload station list |
-| `switch_mode()` | Toggle `self.state.mode` between `"station"` and `"city"` |
-| `save_state()` | Serialise `AppState` + encoder offsets to `~/cache/radioglobe.json` |
-| `load_state()` | Restore state from cache on startup |
-| `_get_coords_by_city(city)` | Look up a `Coordinate` for a city string |
+| `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.find_cities_near()` for nearby cities, latch and start playback when one is found |
+| `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()`/`self.nav.next_city()`, update playback |
+| `save_state()` | Gather `self.encoders`' offsets into a dict, delegate to `self.nav.save_state()` (§4.3) |
+| `load_state()` | Delegate to `self.nav.load_state()` (§4.3), apply the returned encoder offsets onto `self.encoders` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
-| `_monitor_stream(expected_url)` | Check VLC state every 3 s; on failure, flash LED red, drop the failed station (`_remove_failed_station()`), and play the next; exits once a station plays cleanly, all stations are exhausted, or the user switches away |
-| `_handle_short_jog` / `_handle_long_jog` | Jog button handlers |
+| `_monitor_stream(expected_url)` | Check VLC state every 3 s; on failure, flash LED red, drop the failed station (`self.nav.remove_failed_station()`), and play the next; exits once a station plays cleanly, all stations are exhausted, or the user switches away |
+| `_handle_short_jog` / `_handle_long_jog` | Jog button handlers — short press calls `self.nav.switch_mode()` |
 | `_handle_short_top` / `_handle_long_top` | Top button handlers |
 | `_handle_short_mid` / `_handle_long_mid` | Mid button handlers |
 | `_handle_short_bottom` / `_handle_long_bottom` | Bottom button handlers |
 | `_on_jog_press` / `_on_sound_press` / `_on_mid_press` | Immediate press-down LED feedback |
 
+Navigation logic that used to live here directly — `next_station`,
+`next_city`, `switch_mode`, station-list bookkeeping, coordinate lookup —
+now lives on `Navigator` (§4.3).
+
 **Non-obvious details:**
-- `self.state.city` is passed to `display.update()` as a raw string (e.g. `"London,GB"`). The display truncates it to 20 characters before centering.
+- `self.nav.state.city` is passed to `display.show_station()`/`display.update()` as a raw string (e.g. `"London,GB"`). The display truncates it to 20 characters before centering.
 - `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
 - If the warm-restart state is incomplete (city or station is `None` after `load_state()`), the app logs a warning, clears the latch, and falls back to calibrate mode rather than crashing.
+- `load_state()` no longer reaches into `Navigator`'s internals at all — an earlier version of this refactor had `App.load_state()` do `self.nav.state = AppState(...)` directly, but that was moved into `Navigator.load_state()` itself in a follow-up (§4.3), once it became clear the only real obstacle (needing `self.encoders`) could be solved by passing/returning plain dicts instead of a hardware object.
 
 ---
 
-### 4.2 `database.py` — Station Data
+### 4.2 `app_state.py` — Selection State
+
+A small dataclass holding the app's mutable station/city selection state,
+owned by `Navigator` (§4.3) rather than `App` directly. Split out of
+`main.py` into its own module specifically so it has no hardware
+dependency: `main.py` imports `RPi.GPIO` at module level and can't be
+imported off a Raspberry Pi at all, so anything meant to be unit-testable
+has to live somewhere that doesn't transitively pull that in.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `stations` | `list[(name, url)]` | Stations for the current city |
+| `station` | `tuple \| None` | Currently playing station |
+| `cities` | `list[str]` | Cities found in the current search zone |
+| `city` | `str \| None` | Currently selected city (e.g. `"London,GB"`) |
+| `jog_idx` | `int` | Shared index — station index in `MODE_STATION`, city index in `MODE_CITY`; recomputed by `Navigator.switch_mode()` on every mode change, since the two lists have unrelated indices |
+| `mode` | `str` | `"station"` or `"city"` |
+
+**Methods:**
+- `is_complete() -> bool` — whether both `city` and `station` are set. Used throughout `main.py` and `navigation.py` as the guard for "is there anything to display/play/navigate."
+- `select_station(stations) -> bool` — sets `self.stations` and, if the list is non-empty, `self.station = stations[0]`; returns whether a station was selected. Deliberately does **not** touch `jog_idx` — see the correctness note in §4.3.
+
+Unit-tested directly (`tests/app_state_test.py`) — pure data, no mocking needed.
+
+---
+
+### 4.3 `navigation.py` — Navigator
+
+`Navigator` owns everything about *what city/station is currently selected
+and how to change it* — the pure decision-making half of what used to be
+`App`. Like `app_state.py`, it has no hardware dependency, so it's
+constructible and unit-testable off a Pi the same way `database.py` always
+was (`tests/navigation_test.py` builds one against an in-memory fixture
+station dict, no mocking).
+
+**Owns:**
+- `self.state: AppState` (§4.2)
+- `self.stations_info`, `self.cities_info`, `self.look_around_offsets` — built in `__init__` from `load_stations()`/`build_cities_index()`/`build_look_around_offsets()` (§4.4), defaulting to `STATIONS_JSON`/`FUZZINESS` but overridable via constructor args — this is how the test suite avoids loading the real 12.7k-entry `stations.json`
+
+**Methods:**
+
+| Method | Purpose |
+|---|---|
+| `current_coords` (property) | `Coordinate` for `self.state.city`, or `None` if no city is selected — replaces a manually-maintained cache `App` used to keep (the old `_current_coords` attribute) |
+| `find_cities_near(origin)` | Thin wrapper around `database.find_cities_near()` using `self.look_around_offsets`/`self.cities_info` — exists so `App._encoder_loop()` doesn't need to reach into two of `Navigator`'s internals directly |
+| `next_station(direction)` | Cycle `jog_idx` within `self.state.stations` |
+| `next_city(direction)` | Cycle `jog_idx` within `self.state.cities` |
+| `switch_mode()` | Toggle `self.state.mode`; recomputes `jog_idx` for the new mode's list (falls back to 0 if the current selection isn't in it) |
+| `remove_failed_station()` | Drop the current station from the session list and advance to the next by `jog_idx`; called from `App._monitor_stream()` on playback failure |
+| `save_state(encoder_offsets, cache)` | Serialise `self.state` + `encoder_offsets` (a plain dict — keys `lat`/`lon`/`lat_offset`/`lon_offset` — supplied by the caller, since `Navigator` has no hardware access of its own) to `cache` as JSON |
+| `load_state(cache)` | Restore `self.state` from `cache`, re-querying/validating the saved city and station against the live `stations_info`; returns the saved encoder offsets as a plain dict (or `{}` if no cache file exists) for the caller to apply |
+
+**What deliberately stayed on `App` instead:** hardware construction
+(`App.__init__` still builds all 6 hardware wrappers directly as a flat
+list — not wrapped in a factory, since that would add indirection serving
+testability/hardware-swappability, which wasn't the goal of this refactor),
+the two event loops, and button dispatch/`run()`.
+
+`save_state()`/`load_state()` originally stayed on `App` too, for the same
+reason: they touched `self.encoders`, a hardware object `Navigator` can't
+depend on. They were moved into `Navigator` in a follow-up once it became
+clear that dependency wasn't actually necessary — `Navigator.save_state()`/
+`load_state()` take and return plain encoder-offset dicts instead of a
+`PositionalEncoders` object (see Methods table above), so `App`'s versions
+are now a few lines gathering/applying `self.encoders`' values around a
+call into `self.nav`. The on-disk cache format (`~/cache/radioglobe.json`)
+didn't change, so this was a behavior-preserving move — existing cache
+files on deployed devices remain readable.
+
+**Non-obvious detail — `jog_idx` and `AppState.select_station()`:**
+`jog_idx` is dual-purpose (station index in `MODE_STATION`, city index in
+`MODE_CITY`). `select_station()` (§4.2) deliberately never touches it. An
+earlier draft of this refactor had a single `select_city()` method that
+reset `jog_idx = 0` on every call — correct for the encoder-latch path in
+`_encoder_loop()` (where index 0 into the freshly-fetched `cities`/
+`stations` lists is always right), but that would have silently broken
+dial city-cycling in `_dial_loop()`, where `jog_idx` has to keep tracking
+the *city* index across calls for `next_city()`'s own increment logic to
+work. `select_station()` only ever sets `stations`/`station`, leaving
+`jog_idx` to whichever caller already owns it correctly.
+
+---
+
+### 4.4 `database.py` — Station Data
 
 Pure functions with no side effects and no hardware dependencies. The most testable module in the project.
 
@@ -197,10 +313,12 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 |---|---|---|
 | `load_stations(path)` | `dict` keyed by `"City,CC"` | Returns empty dict on FileNotFoundError |
 | `build_cities_index(stations_data)` | `dict[(lat_idx, lon_idx) → list[city_name]]` | Converts lat/lon degrees to 0–1023 grid indices; multiple cities per cell are supported |
-| `build_look_around_offsets(fuzziness)` | `list` of `(dx, dy)` tuples | Pre-computes the search-zone offset pattern once, at startup (`App.__init__`) |
+| `build_look_around_offsets(fuzziness)` | `list` of `(dx, dy)` tuples | Pre-computes the search-zone offset pattern once, at startup (now `Navigator.__init__` — §4.3) |
 | `look_around(origin, offsets)` | `list` of `(lat, lon)` tuples | Applies the pre-computed offsets to an origin point — cheap enough to call on every encoder event |
-| `find_cities_near(origin, offsets, cities_index)` | `list` of city strings, closest-first | The production city search, called from `_encoder_loop()` in `main.py` |
+| `find_cities_near(origin, offsets, cities_index)` | `list` of city strings, closest-first | The production city search; wrapped by `Navigator.find_cities_near()` (§4.3), called from `_encoder_loop()` in `main.py` |
 | `get_stations_by_city(stations, city)` | `list` of `(name, url)` tuples | The canonical station list format |
+| `get_coords_by_city(stations, city)` | `Coordinate` | Raises `KeyError` if the city isn't in the data — backs `Navigator.current_coords` and the stale-city check in `Navigator.load_state()` (§4.3) |
+| `match_saved_station(saved_name, stations)` | `(station, jog_idx)` tuple | Finds a saved station by name in a refreshed station list, falling back to index 0 if not found; used by `Navigator.load_state()`'s warm-restart path (§4.3) |
 | `get_found_cities(search_area, city_map)` | `list` of city strings | Used only by integration test scripts; superseded in production by `find_cities_near` |
 
 **Coordinate formula:** `index = round((degrees + 180) * 1024 / 360)`. This maps −180°→0 and +180°→1024.
@@ -209,9 +327,13 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 
 **Legacy functions** at the bottom of the file (`get_stations_info`) are not used by the main application — only by integration test scripts.
 
+`get_coords_by_city` and `match_saved_station` were pulled out of `App` and
+into this module in the 2026-07-30 decoupling refactor — same "pure logic
+goes in `database.py`" principle as everything else here.
+
 ---
 
-### 4.3 `positional_encoders.py` — Globe Position
+### 4.5 `positional_encoders.py` — Globe Position
 
 Reads two SPI absolute rotary encoders and maintains the current lat/lon position.
 
@@ -231,7 +353,7 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 ---
 
-### 4.4 `dial.py` — Station / City Selector
+### 4.6 `dial.py` — Station / City Selector
 
 Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction) — but unlike
 every other GPIO device in this project, decoding happens in the **kernel**, not in Python.
@@ -270,7 +392,7 @@ software coalescing layer in `dial.py` (below) filters this out. Investigated in
 
 ---
 
-### 4.5 `buttons.py` — Button Manager
+### 4.7 `buttons.py` — Button Manager
 
 Manages four GPIO buttons with short and long press detection.
 
@@ -284,15 +406,42 @@ Manages four GPIO buttons with short and long press detection.
 
 `AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
 
+`AsyncButtonManager.__init__` calls `GPIO.setmode(GPIO.BCM)` itself, before
+constructing any `AsyncButton` (whose `GPIO.setup()` call requires it). This
+used to be centralized in `App.__init__` (`main.py`, §4.1) instead, on the
+assumption every `AsyncButton` is constructed via `App` — but the standalone
+integration scripts under `tests/integration/` construct
+`AsyncButtonManager` directly without ever building an `App`, so that
+assumption broke them (`GPIO.setup()` raising "Please set pin numbering
+mode..."). `AsyncButtonManager` now guarantees its own precondition instead
+of trusting the caller; `GPIO.setmode()` is idempotent, so `App.__init__`
+still calling it too is harmless. `rgb_led.py` has the identical gap
+(`RGBLed.__init__` lost its own call the same way) — the integration
+scripts that construct `RGBLed()` directly now call `GPIO.setmode()`
+themselves as a local workaround, but `RGBLed` itself doesn't yet own this
+precondition the way `AsyncButtonManager` does.
+
+`handle_events()` wraps each handler call in try/except, logging failures
+via `logging.exception()`. Without this, an unhandled exception from any
+one button's `short_cb`/`long_cb` would kill this loop outright — since
+it's the single consumer for every button's queued events, that silently
+stops short/long dispatch for *all four buttons*, not just the one whose
+handler failed. Press-down feedback (`press_cb`) keeps working regardless,
+since it runs on each button's own independent task — the failure mode
+without this fix looks like "the LED still flashes on press but nothing
+else ever happens again," with no visible error beyond an easy-to-miss
+"Task exception was never retrieved" warning.
+
 ---
 
-### 4.6 `display.py` — LCD Display
+### 4.8 `display.py` — LCD Display
 
 Drives a 20×4 I2C character LCD at address 0x27 on bus 1, using the `liquidcrystal_i2c` library.
 
 - Internally maintains a 4-line text buffer and an `asyncio.Event` (`changed`). When `update()` or `message()` is called, the buffer is updated and the event is set.
 - `_display_loop()` is an asyncio Task that waits for the event, writes all 4 lines to the LCD, and sleeps 100ms. This coalesces rapid updates — important because I2C is slow.
 - All strings are truncated to `DISPLAY_COLUMNS` characters before `center()` is applied, so overlong city or station names never overflow the hardware line buffer.
+- `show_station(coords, city, station_name)` and `show_status(status, coords=None)` wrap `update()`'s 5-argument shape for the two call patterns `App` actually uses (added in the decoupling refactor so `App` no longer needs to know `update()`'s full signature or repeat its `volume=0, arrows=False` boilerplate). The one place `App` still calls `update()` directly is the volume overlay in `_show_volume_briefly()`, which needs the `volume` argument `show_station()` hardcodes to 0.
 
 **Display layout when playing:**
 ```
@@ -304,7 +453,7 @@ Line 3: BBC Radio 2           ← Station name
 
 ---
 
-### 4.7 `audio_async.py` — Audio Player
+### 4.9 `audio_async.py` — Audio Player
 
 Wraps `python-vlc` directly. Does not import from `streaming/`.
 
@@ -324,19 +473,21 @@ class AudioPlayer:
 - `--network-caching=2000` adds a 2 s jitter buffer to absorb network hiccups without triggering error state.
 - Volume is managed via VLC's `audio_get_volume` / `audio_set_volume`, range 0–100.
 - `is_error()` returns `True` if VLC is in `State.Error` **or** `State.Ended`. Both indicate failure for a live stream: `Error` for codec/protocol failures, `Ended` for HTTP 404 responses.
-- Dead-stream detection is handled by `App._monitor_stream(expected_url)` in `main.py`. It checks `is_error()` every 3 s. On failure it flashes the LED red, removes the failed station from the session list (`_remove_failed_station()`), and immediately plays and displays the next station — looping until one plays cleanly, all stations for the city are exhausted, or the user selects something else, at which point the loop exits silently.
+- Dead-stream detection is handled by `App._monitor_stream(expected_url)` in `main.py`. It checks `is_error()` every 3 s. On failure it flashes the LED red, removes the failed station from the session list (`self.nav.remove_failed_station()` — `Navigator`, §4.3), and immediately plays and displays the next station — looping until one plays cleanly, all stations for the city are exhausted, or the user selects something else, at which point the loop exits silently.
 
 ---
 
-### 4.8 `rgb_led.py` — Status LED
+### 4.10 `rgb_led.py` — Status LED
 
 Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 
-`led_task(led, led_running, colour, duration)` is a standalone coroutine, always spawned with `asyncio.create_task()` rather than awaited. It:
-1. Checks the `led_running` Event to prevent overlapping flashes
+`RGBLed.flash(colour, duration)` is an async method, always spawned with `asyncio.create_task()` rather than awaited. It:
+1. Checks its own `self._running` Event to prevent overlapping flashes (a no-op if a flash is already in progress)
 2. Sets the event, turns the LED on
 3. Sleeps for `duration` seconds
 4. Turns the LED off and clears the event
+
+This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `GPIO.setmode(GPIO.BCM)` was also removed from `RGBLed.__init__` at the same time as `buttons.py` — see §4.7.
 
 **Colour conventions used in `main.py`:**
 - Green: city found/latched, button press feedback
@@ -344,7 +495,7 @@ Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 
 ---
 
-### 4.9 `coordinates.py` — Coordinate Type
+### 4.11 `coordinates.py` — Coordinate Type
 
 A simple value object. `__str__` produces the display format used on the LCD:
 
@@ -357,7 +508,7 @@ Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistent
 
 ---
 
-### 4.10 `radio_config.py` — Configuration
+### 4.12 `radio_config.py` — Configuration
 
 Defines constants for the application. **Warning: many of these are not actually used.** See [§8 Configuration Reference](#8-configuration-reference) for the full discrepancy table.
 
@@ -365,7 +516,7 @@ No side-effects on import — it is a constants-only module. Logging is configur
 
 ---
 
-### 4.11 `streaming/` — Historical Streaming Implementations
+### 4.13 `streaming/` — Historical Streaming Implementations
 
 This directory contains four streaming approaches developed over time. None are imported by the production code (`audio_async.py`).
 
@@ -387,14 +538,14 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 1. `PositionalEncoders.run_encoder()` polls SPI every 50ms. While unlatched, each successful read sets `encoders.updated` (an `asyncio.Event`).
 2. `_encoder_loop()` wakes on that event, clears it, and calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
-3. `find_cities_near(coords, self.look_around_offsets, self.cities_info)` applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — and returns matching cities, closest-first.
+3. `self.nav.find_cities_near(coords)` (`Navigator`, §4.3) applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — and returns matching cities, closest-first.
 4. If cities are found and the encoders are not already latched:
    - `encoders.latch(*coords, stickiness=STICKINESS)` freezes the position.
-   - `jog_idx` resets to 0.
-   - The LED flashes green.
-5. `get_stations_by_city(self.stations_info, city)` fetches the station list as `[(name, url), ...]`.
+   - `self.nav.state.jog_idx` resets to 0.
+   - The LED flashes green (`self.led.flash(...)`, §4.10).
+5. `get_stations_by_city(self.nav.stations_info, city)` fetches the station list as `[(name, url), ...]`; `self.nav.state.select_station(stations)` (`AppState`, §4.2) sets it as current, or skips the latch and warns if the city has no stations.
 6. `audio_player.play(city, station)` passes the URL to VLC.
-7. `display.update(coords, city, 0, station_name, False)` refreshes the LCD.
+7. `display.show_station(coords, city, station_name)` refreshes the LCD (§4.8).
 8. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one, which checks playback every 3 s and switches to the next station on failure.
 
 ### Flow B: User Turns the Dial
@@ -402,28 +553,34 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 1. The kernel's `rotary_encoder` driver decodes GPIO 17/18 transitions and emits an `EV_REL`/`REL_X` evdev event; `AsyncDial`'s `loop.add_reader` callback reads it and pushes the direction onto `dial.queue`.
 2. `_dial_loop()` wakes with `await self.dial.queue.get()` — no polling.
 3. The LED flashes blue.
-4. If `mode == "station"`: `next_station(direction)` increments/decrements `jog_idx` within `self.stations` (wraps around).
-5. If `mode == "city"`: `next_city(direction)` increments/decrements `jog_idx` within `self.cities`, fetches the first station for the new city.
-6. `display.update()` and `audio_player.play()` update immediately.
+4. If `mode == "station"`: `self.nav.next_station(direction)` increments/decrements `jog_idx` within `self.nav.state.stations` (wraps around).
+5. If `mode == "city"`: `self.nav.next_city(direction)` increments/decrements `jog_idx` within `self.nav.state.cities`; `_dial_loop()` then fetches the new city's stations and calls `self.nav.state.select_station(...)` to load the first one — `next_city()` itself no longer touches the station list, only the city selection.
+6. `display.show_station()` and `audio_player.play()` update immediately.
 
 ---
 
 ## 6. State Management
 
-Application state is held in an `AppState` dataclass on `self.state`:
+Application state lives on `self.nav.state` — an `AppState` (§4.2) owned by
+`Navigator` (§4.3), not held directly by `App`. See §4.2 for the field
+table.
 
-| Field | Type | Meaning |
-|---|---|---|
-| `stations` | `list[(name, url)]` | Stations for the current city |
-| `station` | `tuple \| None` | Currently playing station |
-| `cities` | `list[str]` | Cities found in the current search zone |
-| `city` | `str \| None` | Currently selected city (e.g. `"London,GB"`) |
-| `jog_idx` | `int` | Shared index used by both station and city navigation |
-| `mode` | `str` | `"station"` or `"city"` |
+Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on
+`self.encoders` — separate from `AppState` and unaffected by the decoupling
+refactor.
 
-Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on `self.encoders`.
-
-On shutdown (long press of mid button), `save_state()` calls `dataclasses.asdict(self.state)` and appends the encoder offsets and latch flag, writing the result to `~/cache/radioglobe.json`. On the next boot, `load_state()` reconstructs `AppState(...)` from the JSON, then immediately re-queries `get_stations_by_city()` from the live database. It matches the saved station by name; if not found it falls back to index 0. This means a `stations.json` update between boots never causes a wrong URL or stale index.
+On shutdown (long press of mid button), `App.save_state()` gathers
+`self.encoders`' offsets into a dict and hands it to
+`self.nav.save_state()` (§4.3), which calls `dataclasses.asdict(self.state)`
+and appends the encoder offsets and latch flag, writing the result to
+`~/cache/radioglobe.json`. On the next boot, `App.load_state()` calls
+`self.nav.load_state()`, which reconstructs an `AppState(...)` from the
+JSON, then immediately re-queries `get_stations_by_city()` from the live
+database and calls `match_saved_station()` (`database.py`, §4.4) to match
+the saved station by name (falling back to index 0 if not found) — this
+means a `stations.json` update between boots never causes a wrong URL or
+stale index. `Navigator.load_state()` returns the saved encoder offsets as
+a plain dict, which `App.load_state()` applies onto `self.encoders`.
 
 ---
 
@@ -449,7 +606,7 @@ asyncio.create_task(self._dial_loop())               # wakes on dial.queue — n
 
 **Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `buttons.py`'s underlying GPIO callback dispatch. Any new hardware code that polls with blocking calls must do the same. For anything that exposes a pollable file descriptor instead (evdev devices, sockets, pipes), prefer `loop.add_reader(fd, callback)` — this is what `dial.py` now does, avoiding a thread entirely rather than wrapping a blocking call in one.
 
-**LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. The `led_running` Event prevents concurrent flashes.
+**LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. `RGBLed`'s own internal `self._running` Event prevents concurrent flashes (§4.10).
 
 **What to be careful about:** Do not put any blocking call (file I/O, `time.sleep()`, synchronous network calls) directly in any of these loop bodies. Every blocking call holds up all other hardware tasks.
 
@@ -464,11 +621,11 @@ through `radio_config.py`.
 
 | Parameter | Value | Where used |
 |---|---|---|
-| `FUZZINESS` | 3 | `main.py` — 25-point (5×5) search zone |
+| `FUZZINESS` | 3 | `navigation.py` — `Navigator.__init__` default, builds the 25-point (5×5) search zone; also logged (but not otherwise used) in `main.py`'s `_encoder_loop()` debug output |
 | `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
 | `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
 | `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
-| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — `save_state()` and `load_state()` |
+| `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
 | `DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
 | GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` are also duplicated as literal pin numbers in `install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line — nothing enforces these two stay in sync if the constants ever change |
 | I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
@@ -486,18 +643,27 @@ Unit tests run on any machine. Hardware integration scripts require a connected 
 ```bash
 uv run pytest
 ```
-`pyproject.toml` configures `testpaths = ["tests"]` and `norecursedirs = ["integration"]`, so `pytest` finds only the unit tests and skips the hardware scripts automatically.
+`pyproject.toml` configures `testpaths = ["tests"]` and `norecursedirs = ["integration"]`, so `pytest` finds only the unit tests and skips the hardware scripts automatically. A `[build-system]` table in `pyproject.toml` makes `uv sync`/`uv run` install `radioglobe` into the venv so this works standalone — without it, `radioglobe` isn't importable and every test file fails with `ModuleNotFoundError` (this was broken for a while; fixed 2026-07-30).
 
-**Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi from the `radioglobe/` directory:
+| Test file | Covers |
+|---|---|
+| `get_stations_by_city_test.py` | `database.get_stations_by_city` |
+| `get_coords_by_city_test.py` | `database.get_coords_by_city` |
+| `match_saved_station_test.py` | `database.match_saved_station` |
+| `app_state_test.py` | `AppState.is_complete`, `AppState.select_station` (§4.2) |
+| `navigation_test.py` | `Navigator` — `next_station`, `next_city`, `switch_mode`, `remove_failed_station`, `current_coords`, `find_cities_near`, `save_state`/`load_state` (§4.3), against an in-memory fixture station dict |
+| `buttons_test.py` | `AsyncButtonManager.handle_events()` stays alive after a handler raises, and logs the failure (§4.7) |
+
+All follow the same style: plain `unittest.TestCase`, in-memory fixture data, no mocking — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` stubs `RPi.GPIO` in `sys.modules` before importing `radioglobe.buttons`, since that module still touches real GPIO functions at construction time.
+
+**Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi. See [tests/integration/README.md](tests/integration/README.md) for the full, maintained list, usage examples, and hardware setup notes — duplicating it here previously went stale (a `simulation_test.py` that never existed lingered in this table for a while; three scripts also silently broke when `led_task` was folded into `RGBLed.flash()`, since nothing exercises them automatically). Highlights:
 
 | Script | What it tests |
 |---|---|
 | `button_test.py` | GPIO button short/long press detection — `python ../tests/integration/button_test.py mid` |
-| `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
+| `button_reliability_test.py` | Compares a raw GPIO poll against `AsyncButtonManager`'s registered presses to catch dropped/stuck presses (§4.7) — see CHANGELOG.md for the Mid button connector fault this diagnosed |
 | `positional_encoders_test.py` | SPI encoder reading and latch mechanism |
-| `simulation_test.py` | End-to-end main loop simulation |
-| `async_streamer_test.py` | Async playlist resolver (requires network) |
-| `streaming_cvlc_test.py` | cvlc subprocess streaming |
+| `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
 
 ---
 
@@ -513,49 +679,33 @@ These are ordered from lowest to highest effort. None require a rewrite — all 
 
 ---
 
-### Improvement A: `IndexError` if a city has no stations at latch time
+### Improvement A: ~~`IndexError` if a city has no stations at latch time~~ — Resolved
 
-**Problem:** In the latch block in `_encoder_loop()`:
-```python
-self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
-self.state.station = self.state.stations[0]   # IndexError if list is empty
-```
-If a city key exists in `stations.json` but its station list is empty (malformed entry, partial database update), this raises an unhandled `IndexError` that crashes the `_encoder_loop()` task (and, via the second call site below, `_dial_loop()`).
-
-The same unguarded pattern exists in `_dial_loop()`, after `next_city()`:
-```python
-self.next_city(direction)
-self.state.station = self.state.stations[0]   # IndexError if list is empty
-```
-
-**Fix:** Guard before indexing at both call sites:
-```python
-if not self.state.stations:
-    logging.warning(f"No stations for {self.state.city!r} — skipping latch")
-    self.encoders.reset_latch()
-else:
-    self.state.station = self.state.stations[0]
-    # ... display, play, monitor
-```
-
-**Effort:** 15 minutes.
+This was fixed as an incidental side effect of the 2026-07-30 decoupling
+refactor (`AppState.select_station()`, §4.2), not pursued as a deliberate
+bug-fix in its own right. `select_station(stations)` guards the
+empty-list case and returns `False` instead of indexing blindly, and both
+call sites that used to have the unguarded `self.state.stations[0]`
+pattern — the latch block in `App._encoder_loop()` and the `MODE_CITY`
+branch of `App._dial_loop()` — now check its return value before
+proceeding (`if not self.nav.state.select_station(stations): ...`). No
+action needed.
 
 ---
 
 ### Improvement B: `save_state()` serialises `stations` and `cities` snapshots that are ignored on restore
 
-**Problem:** `save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. `load_state()` re-queries `stations` from the live database on startup, and `cities` is repopulated by `_encoder_loop()` the next time `encoders.updated` fires — so the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
+**Problem:** `Navigator.save_state()` uses `dataclasses.asdict(self.state)`, which includes `stations` (a list of `(name, url)` tuples for the current city) and `cities` (all cities found in the search zone at latch time). Both can be large. `load_state()` re-queries `stations` from the live database on startup, and `cities` is repopulated by `App._encoder_loop()` the next time `encoders.updated` fires — so the saved values are read from JSON and immediately discarded. They bloat the cache file for no benefit.
 
-**Fix:** Build the dict manually in `save_state()`, omitting the two lists:
+**Fix:** Build the dict manually in `Navigator.save_state()`, omitting the two lists:
 ```python
 state = {
     "station": list(self.state.station) if self.state.station else None,
     "city": self.state.city,
     "jog_idx": self.state.jog_idx,
     "mode": self.state.mode,
-    "lat": self.encoders.latitude,
-    ...
 }
+state.update(encoder_offsets)
 ```
 
 **Effort:** 15 minutes.
@@ -564,7 +714,7 @@ state = {
 
 ### Improvement C: Volume display updates can be overwritten by a concurrent display update
 
-**Problem:** `_update_volume()` calls `display.update()`, then `await asyncio.sleep(0.5)`, then calls `display.update()` again to clear the volume bar. During the 0.5 s yield, `_encoder_loop()` or `_dial_loop()` may also call `display.update()` — for example if a city is freshly latched while the volume overlay is showing. The second volume call then overwrites that update with a stale "volume cleared" view.
+**Problem:** `_update_volume()`/`_update_volume_level()` call `_show_volume_briefly()`, which calls `display.update()` directly, then `await asyncio.sleep(0.5)`, then calls `display.show_station()` to clear the volume bar. During the 0.5 s yield, `_encoder_loop()` or `_dial_loop()` may also update the display — for example if a city is freshly latched while the volume overlay is showing. The second call then overwrites that update with a stale "volume cleared" view.
 
 This is cosmetic and non-crashing, but the display momentarily shows the wrong city or station after the sleep. A fix requires either a timestamp/generation counter to skip the second update if the display has moved on, or removing the two-call pattern entirely in favour of a timed overlay in `_display_loop`.
 
@@ -574,7 +724,9 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 ## 12. What's Already Good
 
-**`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`) is the right trade-off — it makes every city lookup in `_encoder_loop()` O(1).
+**`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`, now called from `Navigator.__init__` — §4.3) is the right trade-off — it makes every city lookup in `_encoder_loop()` O(1).
+
+**`app_state.py`/`navigation.py` following `database.py`'s lead.** The 2026-07-30 decoupling refactor pulled `AppState` and the navigation logic that mutates it out of `main.py` and into their own hardware-free modules, deliberately mirroring `database.py`'s pure-function/no-side-effects style rather than introducing a new pattern. `Navigator` is now unit-testable the same way `database.py` always was (`tests/navigation_test.py`), closing what had been the biggest test-coverage gap in the project — before this, the core station/city navigation logic (latching, dial cycling, mode switching) had zero automated tests.
 
 **The spatial search approach.** Building a 1024×1024 grid dict at startup and doing dict lookups in `find_cities_near()` is efficient and simple. `build_look_around_offsets()` with fuzziness is the right way to handle the physical imprecision of pointing at a globe.
 

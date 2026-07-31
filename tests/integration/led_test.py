@@ -10,9 +10,9 @@ import asyncio
 import time
 import pytest
 
-pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.rgb_led import RGBLed
 from radioglobe.constants import COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
 
 
@@ -45,8 +45,12 @@ async def second_thing():
 
 
 async def main():
+    # RGBLed.__init__'s GPIO.setup() calls require this to have been called
+    # first. The real app does it once in App.__init__ (main.py) - this
+    # script never constructs an App, so it has to do it itself.
+    GPIO.setmode(GPIO.BCM)
+
     led = RGBLed()
-    led_running = asyncio.Event()
 
     await led_cycle(led)
 
@@ -54,11 +58,11 @@ async def main():
 
     while True:
         first_task = asyncio.create_task(first_thing())
-        await led_task(led, led_running, COLOUR_RED, 0.2)
+        await led.flash(COLOUR_RED, 0.2)
         await first_task
 
         second_task = asyncio.create_task(second_thing())
-        await led_task(led, led_running, COLOUR_BLUE, 0.2)
+        await led.flash(COLOUR_BLUE, 0.2)
         await second_task
 
 

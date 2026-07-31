@@ -5,11 +5,11 @@ Test harness for async cvlc streamer
 import asyncio
 import pytest
 
-pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
-from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.rgb_led import RGBLed
 from radioglobe.constants import COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
@@ -31,8 +31,12 @@ async def main():
     FUZZINESS = 5
     AUDIO_SERVICE = "pulse"
 
+    # RGBLed.__init__'s GPIO.setup() calls require this to have been called
+    # first. The real app does it once in App.__init__ (main.py) - this
+    # script never constructs an App, so it has to do it itself.
+    GPIO.setmode(GPIO.BCM)
+
     led = RGBLed()
-    led_running = asyncio.Event()
 
     print("Starting up encoders...")
     encoders = PositionalEncoders()
@@ -61,7 +65,7 @@ async def main():
         if not encoders.is_latched():
             if city_list:
                 encoders.latch(*readings, STICKINESS)
-                asyncio.create_task(led_task(led, led_running, COLOUR_RED, 0.5))
+                asyncio.create_task(led.flash(COLOUR_RED, 0.5))
                 first_city = city_list[0]
                 station_info = database.get_stations_info(first_city, stations)
                 print(f"Found: {city_list[0]} Station: {station_info}")

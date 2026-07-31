@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Optional
 import liquidcrystal_i2c  # type: ignore
 from .coordinates import Coordinate
 from .radio_config import I2C_LCD_ADDR
@@ -55,6 +56,14 @@ class Display:
         self.buffer[3] = line_4[:DISPLAY_COLUMNS].center(DISPLAY_COLUMNS)
         self.changed.set()
         logging.info(f"Message set: {[line_1, line_2, line_3, line_4]}")
+
+    def show_station(self, coords: Coordinate, city: str, station_name: str):
+        """Show the current city and station."""
+        self.update(coords, city, volume=0, station=station_name, arrows=False)
+
+    def show_status(self, status: str, coords: Optional[Coordinate] = None):
+        """Show a status message (e.g. calibrating, shutdown)."""
+        self.update(coords or Coordinate(0, 0), status, volume=0, station="", arrows=False)
 
     def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
         self.buffer[0] = str(coords).center(DISPLAY_COLUMNS)
