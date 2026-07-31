@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.14] - 2026-07-31
+### Changed
+- `AudioPlayer.play()` took a `city` string (used only for a debug log) and
+  a `(name, url)` station tuple, when all VLC ever needed was the URL.
+  `audio_async.py` now only ever deals in URL strings — it has no concept
+  of a "city" or "station". No user-facing behavior change.
+- Extracted `App._play_station()`: three of the four call sites that showed
+  and played `self.nav.state.station` (`_encoder_loop`, `_dial_loop`,
+  `run()`'s warm-restart path) were byte-identical
+  `display.show_station()` + `audio_player.play()` blocks, each repeating
+  the same opaque `station[0]`/`station[1]` tuple indexing. `_play_station()`
+  unpacks `(name, url)` once and returns the URL; call sites pass it to
+  `_start_monitor_stream()`, or in `_monitor_stream()`'s own retry path,
+  assign it directly to `expected_url`.
+
 ## [0.5.13] - 2026-07-31
 ### Changed
 - Follow-up to 0.5.12's decoupling work, focused entirely on removing
