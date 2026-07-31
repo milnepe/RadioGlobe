@@ -83,11 +83,12 @@ RadioGlobe/
 │       ├── async_streamer.py         # Experimental: async playlist resolver via aiohttp
 │       └── files.py                  # JSON loader helper for test scripts
 │
-├── tests/                            # Mix of unit tests and hardware integration scripts
-│   ├── get_stations_by_city_test.py  # Unit tests (run without hardware)
-│   ├── simulation_test.py            # Integration: requires Pi hardware
-│   ├── async_streamer_test.py        # Integration: requires network
-│   └── ...                           # Other hardware / manual test scripts
+├── tests/                            # Unit tests (run without hardware) + integration/ subfolder
+│   ├── get_stations_by_city_test.py
+│   ├── navigation_test.py
+│   ├── buttons_test.py
+│   ├── ...                           # See §9 Testing for the full list
+│   └── integration/                  # Hardware / manual scripts — see tests/integration/README.md
 │
 ├── stations/
 │   └── stations.json                 # Radio station database (~705 KB, 500+ cities)
@@ -405,7 +406,31 @@ Manages four GPIO buttons with short and long press detection.
 
 `AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
 
-`GPIO.setmode(GPIO.BCM)` is *not* called here — it used to be (once per `AsyncButton`, so 4×), duplicating an identical call in `rgb_led.py`. Both were removed in favour of a single `GPIO.setmode(GPIO.BCM)` call in `App.__init__` (`main.py`, §4.1), before any hardware object is constructed — symmetric with the existing centralized `GPIO.cleanup()` in `App.run()`'s `finally` block.
+`AsyncButtonManager.__init__` calls `GPIO.setmode(GPIO.BCM)` itself, before
+constructing any `AsyncButton` (whose `GPIO.setup()` call requires it). This
+used to be centralized in `App.__init__` (`main.py`, §4.1) instead, on the
+assumption every `AsyncButton` is constructed via `App` — but the standalone
+integration scripts under `tests/integration/` construct
+`AsyncButtonManager` directly without ever building an `App`, so that
+assumption broke them (`GPIO.setup()` raising "Please set pin numbering
+mode..."). `AsyncButtonManager` now guarantees its own precondition instead
+of trusting the caller; `GPIO.setmode()` is idempotent, so `App.__init__`
+still calling it too is harmless. `rgb_led.py` has the identical gap
+(`RGBLed.__init__` lost its own call the same way) — the integration
+scripts that construct `RGBLed()` directly now call `GPIO.setmode()`
+themselves as a local workaround, but `RGBLed` itself doesn't yet own this
+precondition the way `AsyncButtonManager` does.
+
+`handle_events()` wraps each handler call in try/except, logging failures
+via `logging.exception()`. Without this, an unhandled exception from any
+one button's `short_cb`/`long_cb` would kill this loop outright — since
+it's the single consumer for every button's queued events, that silently
+stops short/long dispatch for *all four buttons*, not just the one whose
+handler failed. Press-down feedback (`press_cb`) keeps working regardless,
+since it runs on each button's own independent task — the failure mode
+without this fix looks like "the LED still flashes on press but nothing
+else ever happens again," with no visible error beyond an easy-to-miss
+"Task exception was never retrieved" warning.
 
 ---
 
@@ -626,20 +651,19 @@ uv run pytest
 | `get_coords_by_city_test.py` | `database.get_coords_by_city` |
 | `match_saved_station_test.py` | `database.match_saved_station` |
 | `app_state_test.py` | `AppState.is_complete`, `AppState.select_station` (§4.2) |
-| `navigation_test.py` | `Navigator` — `next_station`, `next_city`, `switch_mode`, `remove_failed_station`, `current_coords`, `find_cities_near` (§4.3), against an in-memory fixture station dict |
+| `navigation_test.py` | `Navigator` — `next_station`, `next_city`, `switch_mode`, `remove_failed_station`, `current_coords`, `find_cities_near`, `save_state`/`load_state` (§4.3), against an in-memory fixture station dict |
+| `buttons_test.py` | `AsyncButtonManager.handle_events()` stays alive after a handler raises, and logs the failure (§4.7) |
 
-All follow the same style: plain `unittest.TestCase`, in-memory fixture data, no mocking — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests.
+All follow the same style: plain `unittest.TestCase`, in-memory fixture data, no mocking — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` stubs `RPi.GPIO` in `sys.modules` before importing `radioglobe.buttons`, since that module still touches real GPIO functions at construction time.
 
-**Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi from the `radioglobe/` directory:
+**Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi. See [tests/integration/README.md](tests/integration/README.md) for the full, maintained list, usage examples, and hardware setup notes — duplicating it here previously went stale (a `simulation_test.py` that never existed lingered in this table for a while; three scripts also silently broke when `led_task` was folded into `RGBLed.flash()`, since nothing exercises them automatically). Highlights:
 
 | Script | What it tests |
 |---|---|
 | `button_test.py` | GPIO button short/long press detection — `python ../tests/integration/button_test.py mid` |
-| `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
+| `button_reliability_test.py` | Compares a raw GPIO poll against `AsyncButtonManager`'s registered presses to catch dropped/stuck presses (§4.7) — see CHANGELOG.md for the Mid button connector fault this diagnosed |
 | `positional_encoders_test.py` | SPI encoder reading and latch mechanism |
-| `simulation_test.py` | End-to-end main loop simulation |
-| `async_streamer_test.py` | Async playlist resolver (requires network) |
-| `streaming_cvlc_test.py` | cvlc subprocess streaming |
+| `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
 
 ---
 

@@ -13,19 +13,23 @@ import asyncio
 import argparse
 import pytest
 
-pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
-from radioglobe.rgb_led import RGBLed, led_task
+from radioglobe.rgb_led import RGBLed
 from radioglobe.constants import COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 
 
 async def main(stickiness: int, fuzziness: int):
+    # RGBLed.__init__'s GPIO.setup() calls require this to have been called
+    # first. The real app does it once in App.__init__ (main.py) - this
+    # script never constructs an App, so it has to do it itself.
+    GPIO.setmode(GPIO.BCM)
+
     led = RGBLed()
-    led_running = asyncio.Event()
 
     print("Starting up encoders...")
     encoders = PositionalEncoders()
@@ -53,7 +57,7 @@ async def main(stickiness: int, fuzziness: int):
         city_list = database.get_found_cities(search_area, city_map)
         if not encoders.is_latched() and city_list:
             encoders.latch(*readings, stickiness)
-            asyncio.create_task(led_task(led, led_running, COLOUR_RED, 0.5))
+            asyncio.create_task(led.flash(COLOUR_RED, 0.5))
             print(f"Index:       {readings}")
             print(f"Search area: {search_area}")
             print(f"Cities:      {city_list}\n")
