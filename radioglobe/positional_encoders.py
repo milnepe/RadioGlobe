@@ -42,6 +42,27 @@ class PositionalEncoders:
     def is_latched(self):
         return self.latch_stickiness is not None
 
+    def get_calibration(self) -> dict:
+        """Return the current position/calibration as plain data for persistence."""
+        return {
+            "lat": self.latitude,
+            "lon": self.longitude,
+            "lat_offset": self.latitude_offset,
+            "lon_offset": self.longitude_offset,
+        }
+
+    def restore_calibration(self, state: dict):
+        """Restore position/calibration from a dict produced by get_calibration().
+
+        Also marks the encoders as latched, since a restored position always
+        represents a previously-latched city.
+        """
+        self.latitude = state.get("lat")
+        self.longitude = state.get("lon")
+        self.latitude_offset = state.get("lat_offset")
+        self.longitude_offset = state.get("lon_offset")
+        self.latch_stickiness = True
+
     def check_parity(self, reading: int):
         reading_without_parity_bit = reading >> 1
         parity_bit = reading & 0b1

@@ -183,11 +183,15 @@ two event-driven loops are the app's actual "main loop."
 **State** lives on `self.nav.state` (an `AppState` — §4.2); `App` no longer
 holds it directly. `save_state()`/`load_state()` are thin wrappers around
 `self.nav.save_state()`/`self.nav.load_state()` (§4.3) — `App`'s only job
-is gathering `self.encoders`' current offsets into a plain dict to pass in,
-and applying the dict `load_state()` returns back onto `self.encoders`;
-`Navigator` owns the actual JSON (de)serialisation and `AppState`
-reconstruction. On boot, if a saved state is found, the latch is restored
-and the last station resumes playing immediately (warm-restart path).
+is passing `self.encoders.get_calibration()`'s dict through to
+`self.nav.save_state()`, and passing `load_state()`'s returned dict through
+to `self.encoders.restore_calibration()`. `App` doesn't know or care what's
+in that dict — `PositionalEncoders` owns its own calibration fields
+(`latitude`/`longitude`/`latitude_offset`/`longitude_offset`) and their
+dict representation entirely (§4.5); `Navigator` owns the JSON
+(de)serialisation and `AppState` reconstruction (§4.3). On boot, if a saved
+state is found, the latch is restored and the last station resumes playing
+immediately (warm-restart path).
 
 **Key methods:**
 
@@ -196,8 +200,8 @@ and the last station resumes playing immediately (warm-restart path).
 | `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
 | `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.find_cities_near()` for nearby cities, latch and start playback when one is found |
 | `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()`/`self.nav.next_city()`, update playback |
-| `save_state()` | Gather `self.encoders`' offsets into a dict, delegate to `self.nav.save_state()` (§4.3) |
-| `load_state()` | Delegate to `self.nav.load_state()` (§4.3), apply the returned encoder offsets onto `self.encoders` |
+| `save_state()` | Pass `self.encoders.get_calibration()` to `self.nav.save_state()` (§4.3) |
+| `load_state()` | Pass `self.nav.load_state()`'s (§4.3) returned dict to `self.encoders.restore_calibration()` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
@@ -217,6 +221,13 @@ now lives on `Navigator` (§4.3).
 - `save_state()` always writes `"latch": True`; on `load_state()` this causes the app to immediately resume playing the last station on next boot.
 - If the warm-restart state is incomplete (city or station is `None` after `load_state()`), the app logs a warning, clears the latch, and falls back to calibrate mode rather than crashing.
 - `load_state()` no longer reaches into `Navigator`'s internals at all — an earlier version of this refactor had `App.load_state()` do `self.nav.state = AppState(...)` directly, but that was moved into `Navigator.load_state()` itself in a follow-up (§4.3), once it became clear the only real obstacle (needing `self.encoders`) could be solved by passing/returning plain dicts instead of a hardware object.
+- `save_state()`/`load_state()` similarly no longer reach into
+  `PositionalEncoders`' internal fields — an earlier version read/wrote
+  `self.encoders.latitude`/`.longitude`/`.latitude_offset`/`.longitude_offset`
+  directly (plus setting `.latch_stickiness = True` by hand on restore).
+  `get_calibration()`/`restore_calibration()` (§4.5) were added so `App`
+  only ever passes an opaque dict through, the same pattern already used
+  for `Navigator`.
 
 ---
 
@@ -356,6 +367,14 @@ hardware-touching module.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
 **Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo `_ENCODER_RESOLUTION`. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
+
+**Persistence:** `get_calibration()` returns `{"lat", "lon", "lat_offset",
+"lon_offset"}` as a plain dict; `restore_calibration(state)` applies one
+back and also sets `latch_stickiness = True`, since a restored position
+always represents a previously-latched city. These exist so `App.save_state()`/
+`load_state()` (§4.1) never need to know this class's internal field names
+— `PositionalEncoders` is the only thing that reads or writes its own
+`latitude`/`longitude`/`latitude_offset`/`longitude_offset`/`latch_stickiness`.
 
 ---
 
@@ -600,8 +619,8 @@ Encoder state (lat/lon, offsets, latch) is owned by `PositionalEncoders` on
 `self.encoders` — separate from `AppState` and unaffected by the decoupling
 refactor.
 
-On shutdown (long press of mid button), `App.save_state()` gathers
-`self.encoders`' offsets into a dict and hands it to
+On shutdown (long press of mid button), `App.save_state()` gets a plain
+dict from `self.encoders.get_calibration()` (§4.5) and hands it to
 `self.nav.save_state()` (§4.3), which calls `dataclasses.asdict(self.state)`
 and appends the encoder offsets and latch flag, writing the result to
 `~/cache/radioglobe.json`. On the next boot, `App.load_state()` calls
@@ -611,7 +630,9 @@ database and calls `match_saved_station()` (`database.py`, §4.4) to match
 the saved station by name (falling back to index 0 if not found) — this
 means a `stations.json` update between boots never causes a wrong URL or
 stale index. `Navigator.load_state()` returns the saved encoder offsets as
-a plain dict, which `App.load_state()` applies onto `self.encoders`.
+a plain dict, which `App.load_state()` passes straight to
+`self.encoders.restore_calibration()` (§4.5) without inspecting it —
+`App` never touches an encoder's internal fields directly.
 
 ---
 
