@@ -3,8 +3,6 @@ import logging
 import subprocess
 from typing import Optional
 
-import RPi.GPIO as GPIO  # type: ignore
-
 from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import (
     AsyncButtonManager,
@@ -322,9 +320,8 @@ class App:
         finally:
             if self._stream_task and not self._stream_task.done():
                 self._stream_task.cancel()
-            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led]:
+            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led, button_manager]:
                 await hw.stop()
-            GPIO.cleanup()
 
 
 if __name__ == "__main__":

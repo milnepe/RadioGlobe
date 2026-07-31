@@ -44,8 +44,9 @@ class RGBLed:
         pass  # GPIO pins are configured at construction time
 
     async def stop(self):
-        """Turn the LED off."""
+        """Turn the LED off and release its GPIO pins."""
         self.off()
+        GPIO.cleanup(list(self.pins.values()))
 
     async def flash(self, color: str, duration: float):
         """Turn the LED on for duration seconds, then off.

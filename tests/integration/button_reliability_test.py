@@ -123,7 +123,7 @@ async def main():
     finally:
         events_task.cancel()
         raw_task.cancel()
-        GPIO.cleanup()
+        await manager.stop()
 
     raw, seen = count_state["raw"], count_state["async"]
     missed = raw - seen

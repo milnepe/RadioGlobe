@@ -88,7 +88,7 @@ async def main():
     except KeyboardInterrupt:
         pass
     finally:
-        GPIO.cleanup()
+        await manager.stop()
         total = press_count["short"] + press_count["long"]
         print(f"\nDone. {total} press(es): {press_count['short']} short, {press_count['long']} long.")
 

@@ -110,6 +110,10 @@ class AsyncButtonManager:
     async def start(self):
         asyncio.create_task(self._poll_buttons())
 
+    async def stop(self):
+        """Release the GPIO pins for every managed button."""
+        GPIO.cleanup([btn.pin for btn in self.buttons])
+
     async def _poll_buttons(self):
         while True:
             for button in self.buttons:

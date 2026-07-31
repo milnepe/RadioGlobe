@@ -445,6 +445,13 @@ GPIO-owning class is fully self-sufficient. `GPIO.setmode()` is idempotent,
 so constructing both an `AsyncButtonManager` and an `RGBLed` in the same
 process (as `App` does) calls it twice harmlessly.
 
+Teardown mirrors setup: `AsyncButtonManager.stop()` calls
+`GPIO.cleanup([btn.pin for btn in self.buttons])`, releasing only the pins
+this manager itself set up. `App.run()`'s `finally` block no longer calls a
+bare `GPIO.cleanup()` — it just awaits `.stop()` on every hardware object it
+holds (including `button_manager`, §4.1), and each object releases exactly
+the channels it owns. `rgb_led.py` does the same in `RGBLed.stop()` (§4.10).
+
 `handle_events()` wraps each handler call in try/except, logging failures
 via `logging.exception()`. Without this, an unhandled exception from any
 one button's `short_cb`/`long_cb` would kill this loop outright — since
@@ -511,7 +518,7 @@ Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 3. Sleeps for `duration` seconds
 4. Turns the LED off and clears the event
 
-This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7.
+This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7. `RGBLed.stop()` mirrors this on teardown: it turns the LED off, then calls `GPIO.cleanup(list(self.pins.values()))` to release only its own 3 pins, rather than relying on a process-wide `GPIO.cleanup()` call in `main.py`.
 
 **Colour conventions used in `main.py`:**
 - Green: city found/latched, button press feedback
