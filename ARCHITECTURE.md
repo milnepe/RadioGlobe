@@ -204,6 +204,7 @@ immediately (warm-restart path).
 | `load_state()` | Pass `self.nav.load_state()`'s (§4.3) returned dict to `self.encoders.restore_calibration()` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
 | `_update_volume_level(level)` | Set volume to an absolute level, briefly show on display |
+| `_play_station()` | Show and play `self.nav.state.station` (`display.show_station()` + `audio_player.play()`), returning the URL played. The one place that unpacks the `(name, url)` station tuple — every call site (`_encoder_loop`, `_dial_loop`, `run()`'s warm-restart path, `_monitor_stream`'s retry path) used to repeat `station[0]`/`station[1]` indexing inline |
 | `_start_monitor_stream(url)` | Cancel any running monitor task, start a fresh `_monitor_stream` task, store the handle |
 | `_monitor_stream(expected_url)` | Check VLC state every 3 s; on failure, flash LED red, drop the failed station (`self.nav.remove_failed_station()`), and play the next; exits once a station plays cleanly, all stations are exhausted, or the user switches away |
 | `_handle_short_jog` / `_handle_long_jog` | Jog button handlers — short press calls `self.nav.switch_mode()` |
@@ -518,7 +519,7 @@ class AudioPlayer:
         self.current_url = None
 ```
 
-- `play(city, station)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It records `current_url` so `_monitor_stream` can detect when the user has moved to a new station.
+- `play(url)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It records `current_url` so `_monitor_stream` can detect when the user has moved to a new station. `AudioPlayer` only ever deals in URL strings — it has no concept of a "city" or "station"; callers extract the URL from `self.nav.state.station[1]` before calling.
 - `--input-repeat=-1` means VLC retries the stream automatically if the connection drops.
 - `--network-caching=2000` adds a 2 s jitter buffer to absorb network hiccups without triggering error state.
 - Volume is managed via VLC's `audio_get_volume` / `audio_set_volume`, range 0–100.
@@ -594,7 +595,7 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
    - `self.nav.state.jog_idx` resets to 0.
    - The LED flashes green (`self.led.flash(...)`, §4.10).
 5. `get_stations_by_city(self.nav.stations_info, city)` fetches the station list as `[(name, url), ...]`; `self.nav.state.select_station(stations)` (`AppState`, §4.2) sets it as current, or skips the latch and warns if the city has no stations.
-6. `audio_player.play(city, station)` passes the URL to VLC.
+6. `audio_player.play(station[1])` passes the URL to VLC.
 7. `display.show_station(coords, city, station_name)` refreshes the LCD (§4.8).
 8. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one, which checks playback every 3 s and switches to the next station on failure.
 

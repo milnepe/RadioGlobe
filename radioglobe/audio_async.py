@@ -16,16 +16,16 @@ class AudioPlayer:
     def start(self):
         pass  # VLC instance is ready at construction time
 
-    def play(self, city, station: tuple):
+    def play(self, url: str):
         """Play a new URL stream, stopping current playback if needed."""
         if self.player.is_playing():
             self.player.stop()
 
-        self.current_url = station[1]
+        self.current_url = url
         media = self.instance.media_new(self.current_url)
         self.player.set_media(media)
         self.player.play()
-        logging.debug(f"🔊 Playing: {city} {station}")
+        logging.debug(f"🔊 Playing: {url}")
 
     def change_volume(self, delta, min_volume=10, max_volume=100) -> int:
         """Adjust volume by delta, clamped between min and max."""

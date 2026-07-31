@@ -74,6 +74,14 @@ class App:
         volume = self.audio_player.change_volume_level(level)
         await self._show_volume_briefly(volume)
 
+    def _play_station(self) -> str:
+        """Show and play self.nav.state.station; returns the URL played."""
+        coords = self.nav.current_coords
+        name, url = self.nav.state.station
+        self.display.show_station(coords, self.nav.state.city, name)
+        self.audio_player.play(url)
+        return url
+
     async def _monitor_stream(self, expected_url: str):
         """After a 3 s grace period, remove failed stations and try the next.
 
@@ -98,10 +106,7 @@ class App:
             self.nav.remove_failed_station()
             if not self.nav.state.station:
                 break
-            coords = self.nav.current_coords
-            self.display.show_station(coords, self.nav.state.city, self.nav.state.station[0])
-            self.audio_player.play(self.nav.state.city, self.nav.state.station)
-            expected_url = self.nav.state.station[1]
+            expected_url = self._play_station()
 
         logging.debug("⚠️ All stations failed for this city")
 
@@ -145,9 +150,7 @@ class App:
                     f"📻 Tuning to: jog:{self.nav.state.jog_idx} "
                     f"{self.nav.state.city} {self.nav.state.station}\n{self.nav.state.stations}"
                 )
-                self.display.show_station(self.nav.current_coords, self.nav.state.city, self.nav.state.station[0])
-                self.audio_player.play(self.nav.state.city, self.nav.state.station)
-                self._start_monitor_stream(self.nav.state.station[1])
+                self._start_monitor_stream(self._play_station())
 
     async def _dial_loop(self):
         """Wake on each dial movement and handle station/city navigation."""
@@ -168,10 +171,7 @@ class App:
                     logging.warning(f"No stations for {self.nav.state.city!r} — keeping previous station")
                     continue
 
-            coords = self.nav.current_coords
-            self.display.show_station(coords, self.nav.state.city, self.nav.state.station[0])
-            self.audio_player.play(self.nav.state.city, self.nav.state.station)
-            self._start_monitor_stream(self.nav.state.station[1])
+            self._start_monitor_stream(self._play_station())
 
     # ---------------------------------------------------------------------------
     # Button handlers
@@ -284,9 +284,7 @@ class App:
                     self.encoders.reset_latch()
                     self.display.show_status(STATUS_CALIBRATE)
                 else:
-                    self.display.show_station(self.nav.current_coords, self.nav.state.city, self.nav.state.station[0])
-                    self.audio_player.play(self.nav.state.city, self.nav.state.station)
-                    self._start_monitor_stream(self.nav.state.station[1])
+                    self._start_monitor_stream(self._play_station())
                     logging.debug(
                         f"Playing saved station: {self.nav.state.station} {self.nav.state.city} "
                         f"{self.nav.state.cities} {self.nav.state.stations}"
