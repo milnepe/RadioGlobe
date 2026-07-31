@@ -4,9 +4,13 @@ import logging
 import evdev
 from evdev import ecodes
 
-from .radio_config import DIAL_DEBOUNCE_S
-
 _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
+
+# Dial contact-bounce coalescing window (seconds) — see
+# docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md §9. Raw REL_X events from a single
+# physical click can arrive in bursts spaced <20ms apart; genuine clicks are
+# spaced >=100ms apart.
+_DIAL_DEBOUNCE_S = 0.03
 
 
 class AsyncDial:
@@ -39,7 +43,7 @@ class AsyncDial:
                 self._pending_sum += event.value
                 if self._debounce_handle is not None:
                     self._debounce_handle.cancel()
-                self._debounce_handle = self._loop.call_later(DIAL_DEBOUNCE_S, self._flush)
+                self._debounce_handle = self._loop.call_later(_DIAL_DEBOUNCE_S, self._flush)
 
     def _flush(self):
         self._debounce_handle = None

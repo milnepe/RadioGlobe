@@ -66,7 +66,7 @@ RadioGlobe/
 │   ├── main.py                       # App class: entry point, hardware orchestration, main loop
 │   ├── app_state.py             # AppState dataclass: station/city selection state
 │   ├── navigation.py            # Navigator: owns AppState + station/city data, no hardware deps
-│   ├── radio_config.py               # Configuration constants (see caveat in §8)
+│   ├── radio_config.py               # App-behavior tuning constants (see §8)
 │   ├── database.py                   # Pure functions: station/city spatial index
 │   ├── coordinates.py                # Coordinate value object (lat/lon → display string)
 │   ├── audio_async.py                # AudioPlayer: wraps python-vlc directly
@@ -337,11 +337,17 @@ goes in `database.py`" principle as everything else here.
 
 Reads two SPI absolute rotary encoders and maintains the current lat/lon position.
 
+`_ENCODER_RESOLUTION` (1024) is owned by `database.py` — not this module — and
+imported here, since `database.py`'s grid-coordinate math needs the same
+value and is deliberately hardware-free (§4.4). Owning it in the pure module
+rather than here avoids giving `database.py` a dependency on a
+hardware-touching module.
+
 **Key behaviour:**
 - Each encoder is read via SPI bus 0, device 0 (latitude) and device 1 (longitude), at 1,000,000 Hz, SPI mode 1 — the datasheet maximum for the Bourns EMS22A50-D28-LT6 (raised from an original 5000 Hz; see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md`).
 - Raw readings are 16 bits; the top 10 bits (after shifting right by 6) give the 0–1023 position.
 - `check_parity()` validates each reading. If parity fails, the entire read returns `None` and is discarded.
-- Latitude is inverted: `readings[0] = ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
+- Latitude is inverted: `readings[0] = _ENCODER_RESOLUTION - readings[0]`. This corrects for encoder mounting orientation.
 - `run_encoder()` is an event-driven task, not a target the app polls: while unlatched, it sets `self.updated` (an `asyncio.Event`) on every successful read; `main.py`'s `_encoder_loop()` awaits this event instead of polling on its own. Once latched, the event only fires again when the position drifts past `latch_stickiness`.
 
 **The latch mechanism:**
@@ -349,7 +355,7 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 - While latched, `run_encoder()` still reads SPI but only updates `self.latitude`/`self.longitude` if the new reading differs by more than `latch_stickiness` steps. A deviation must be seen on `UNLATCH_CONFIRM_THRESHOLD` (2) consecutive readings before it actually unlatches — added to stop the faster 50ms poll rate from reacting to single-sample sensor noise (the EMS22A50 datasheet specifies ~0.12° RMS output transition noise) as if it were real movement. Once confirmed, `latch_stickiness` is set to `None` (unlatched) and reading resumes normally.
 - `is_latched()` returns `True` if `latch_stickiness is not None`.
 
-**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo ENCODER_RESOLUTION. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
+**Calibration:** `zero()` sets offsets so the current physical position maps to (512, 512), which corresponds to 0°N, 0°E (the equator / prime meridian intersection). `get_readings()` always returns the offset-adjusted value modulo `_ENCODER_RESOLUTION`. `reset_latch()` clears `latch_stickiness` so `_encoder_loop()` can re-detect cities after zeroing — `zero()` alone does not clear the latch.
 
 ---
 
@@ -375,9 +381,9 @@ software coalescing layer in `dial.py` (below) filters this out. Investigated in
 - `start()` registers the device's file descriptor directly on the asyncio event loop with
   `loop.add_reader(fd, callback)` — no background task, no thread pool.
 - `_on_readable()` accumulates the signed `REL_X` value of each event into a running sum
-  and (re)arms a single `loop.call_later(DIAL_DEBOUNCE_S, self._flush)` timer, cancelling
+  and (re)arms a single `loop.call_later(_DIAL_DEBOUNCE_S, self._flush)` timer, cancelling
   and rescheduling it on every new event — so the timer only fires once the encoder goes
-  quiet for `DIAL_DEBOUNCE_S` (`radio_config.py`). `_flush()` then pushes a single
+  quiet for `_DIAL_DEBOUNCE_S` (a private constant in this module). `_flush()` then pushes a single
   `_POLARITY * sign(sum)` onto `self.queue` (an `asyncio.Queue[int]`, via `put_nowait`) —
   or nothing at all if the accumulated sum is exactly zero, i.e. a bounce burst that fully
   cancelled itself. A single `_POLARITY` constant corrects for physical wiring, same role
@@ -510,7 +516,7 @@ Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistent
 
 ### 4.12 `radio_config.py` — Configuration
 
-Defines constants for the application. **Warning: many of these are not actually used.** See [§8 Configuration Reference](#8-configuration-reference) for the full discrepancy table.
+Defines app-behavior tuning constants shared across modules (volume levels, display/LED durations, search fuzziness/stickiness, file paths, log level). Constants tied to a single piece of physical hardware (GPIO pins, I2C address, encoder resolution, dial debounce timing) live as private (leading-underscore) constants in the module that owns that hardware instead — see [§8 Configuration Reference](#8-configuration-reference) for the full list and rationale.
 
 No side-effects on import — it is a constants-only module. Logging is configured in `main.py`'s `__main__` block.
 
@@ -614,24 +620,50 @@ asyncio.create_task(self._dial_loop())               # wakes on dial.queue — n
 
 ## 8. Configuration Reference
 
-Most constants are defined in `radio_config.py` and imported where used, with no dead
-constants and no import side-effects. A few reticule/globe encoder timing values are
-hardcoded directly in `positional_encoders.py` instead (noted below) rather than routed
-through `radio_config.py`.
+As of the 2026-07-31 config-relocation release, `radio_config.py` holds only
+app-behavior tuning constants — values about UX/timing/search behaviour, not
+tied to a specific piece of physical hardware. Constants describing a single
+component's wiring or protocol (a GPIO pin, an I2C address, an SPI timing
+value, an encoder's bit resolution) live as private (leading-underscore)
+constants in the module that owns that hardware, and are not re-exported —
+any other module that needs one imports it directly from the owning module
+by name (e.g. `from radioglobe.buttons import _PIN_BTN_JOG`). This mirrors
+`display.py`'s pre-existing `DISPLAY_COLUMNS`/`DISPLAY_ROWS` pattern.
+
+### `radio_config.py` — app-behavior tuning (shared)
 
 | Parameter | Value | Where used |
 |---|---|---|
+| `STATIONS_JSON` | `"stations/stations.json"` | `navigation.py` — station data path |
 | `FUZZINESS` | 3 | `navigation.py` — `Navigator.__init__` default, builds the 25-point (5×5) search zone; also logged (but not otherwise used) in `main.py`'s `_encoder_loop()` debug output |
 | `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
-| `ENCODER_RESOLUTION` | 1024 | `database.py`, `positional_encoders.py` |
-| `VOLUME_STEP` | 10 | `main.py` — `_handle_short_top` / `_handle_short_bottom` |
+| `VOLUME_STEP` / `DEFAULT_VOLUME` / `VOLUME_ON_LEVEL` / `VOLUME_OFF_LEVEL` | 10 / 50 / 80 / 0 | `main.py` — volume handling |
+| `BRIEF_DISPLAY_DURATION` / `MESSAGE_DISPLAY_DURATION` | 0.5 / 2 | `main.py` — display hold durations |
+| `STREAM_CHECK_INTERVAL` | 3 | `main.py` — stream health check grace period |
+| `LED_FLASH_SHORT` / `LED_FLASH_LONG` / `LED_FLASH_DIAL` | 0.2 / 0.5 / 0.1 | `main.py` — LED feedback durations passed to `RGBLed.flash()` |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
-| `DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
-| GPIO pin numbers | `PIN_DIAL_CLOCK`, `PIN_BTN_*`, `PIN_LED_*` | Each hardware module. `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` are also duplicated as literal pin numbers in `install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line — nothing enforces these two stay in sync if the constants ever change |
-| I2C address | `I2C_LCD_ADDR = 0x27` | `display.py` |
-| SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded, not in `radio_config.py`. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
-| SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded, not in `radio_config.py`. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
+| `LOG_LEVEL` | `"DEBUG"` | `main.py` — `__main__` logging setup |
+
+### Hardware modules — private, module-owned
+
+| Parameter | Value | Owning module |
+|---|---|---|
+| `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
+| `_DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
+| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — imported into `main.py` to build the `ButtonDefinition` list, since only `App` knows which callback belongs to which physical button |
+| `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
+| `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
+| SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
+| SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
 | `UNLATCH_CONFIRM_THRESHOLD` | 2 | `positional_encoders.py` class constant — consecutive out-of-band readings required before unlatching, added to filter sensor noise at the faster poll rate |
+
+**Dial clock/direction pins (removed):** `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR`
+(BCM 17/18) used to exist in `radio_config.py` despite having zero Python
+consumers — the kernel `rotary_encoder` driver reads the pins directly from
+`install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line (§4.6),
+which is the only place they're configured. They were deleted rather than
+relocated; `install.sh` now has a comment marking that line as the single
+source of truth for those two pins.
 
 ---
 

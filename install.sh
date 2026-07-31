@@ -42,6 +42,9 @@ sudo apt install -y \
 # Rotary encoder dtoverlay (idempotent)
 # -----------------------------
 CONFIG_TXT=/boot/firmware/config.txt
+# pin_a/pin_b (BCM 17/18, the dial's clock/direction lines) are the single
+# source of truth for these pins — the kernel rotary-encoder driver reads
+# them directly, no Python module owns or references them.
 OVERLAY_LINE="dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1"
 if ! grep -qxF "$OVERLAY_LINE" "$CONFIG_TXT"; then
     echo "⚙️ Adding rotary-encoder dtoverlay to $CONFIG_TXT..."

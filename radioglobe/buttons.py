@@ -6,6 +6,12 @@ from typing import Callable, NamedTuple, Optional
 
 import RPi.GPIO as GPIO  # type: ignore
 
+# GPIO pin assignments (BCM numbering)
+_PIN_BTN_JOG    = 27
+_PIN_BTN_TOP    = 5
+_PIN_BTN_MID    = 6
+_PIN_BTN_BOTTOM = 12
+
 
 class ButtonDefinition(NamedTuple):
     name: str

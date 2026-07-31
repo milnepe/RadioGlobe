@@ -6,7 +6,10 @@ from typing import Optional
 import RPi.GPIO as GPIO  # type: ignore
 
 from radioglobe.audio_async import AudioPlayer
-from radioglobe.buttons import AsyncButtonManager, ButtonDefinition
+from radioglobe.buttons import (
+    AsyncButtonManager, ButtonDefinition,
+    _PIN_BTN_JOG, _PIN_BTN_TOP, _PIN_BTN_MID, _PIN_BTN_BOTTOM,
+)
 from radioglobe.constants import (
     COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
     MODE_CITY, MODE_STATION,
@@ -20,8 +23,7 @@ from radioglobe.navigation import Navigator
 from radioglobe.positional_encoders import PositionalEncoders
 from radioglobe.radio_config import (
     BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
-    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, PIN_BTN_BOTTOM, PIN_BTN_JOG,
-    PIN_BTN_MID, PIN_BTN_TOP, STATE_CACHE_PATH, STICKINESS,
+    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
 from radioglobe.rgb_led import RGBLed
@@ -259,10 +261,10 @@ class App:
         loop = asyncio.get_running_loop()
 
         button_definitions = [
-            ButtonDefinition("Jog",    PIN_BTN_JOG,    self._handle_short_jog,    None,                     self._on_jog_press),
-            ButtonDefinition("Top",    PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
-            ButtonDefinition("Mid",    PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
-            ButtonDefinition("Bottom", PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
+            ButtonDefinition("Jog",    _PIN_BTN_JOG,    self._handle_short_jog,    None,                     self._on_jog_press),
+            ButtonDefinition("Top",    _PIN_BTN_TOP,    self._handle_short_top,    self._handle_long_top,   self._on_sound_press),
+            ButtonDefinition("Mid",    _PIN_BTN_MID,    self._handle_short_mid,    self._handle_long_mid,   self._on_mid_press),
+            ButtonDefinition("Bottom", _PIN_BTN_BOTTOM, self._handle_short_bottom, self._handle_long_bottom, self._on_sound_press),
         ]
 
         button_manager = AsyncButtonManager(button_definitions, loop)
