@@ -1,6 +1,7 @@
 import asyncio
 import time
 import inspect
+import logging
 from typing import Callable, NamedTuple, Optional
 
 import RPi.GPIO as GPIO  # type: ignore
@@ -96,17 +97,26 @@ class AsyncButtonManager:
             await asyncio.sleep(0.05)
 
     async def handle_events(self):
-        """Continuously process events with the appropriate handler."""
+        """Continuously process events with the appropriate handler.
+
+        A handler that raises must not kill this loop - it's the single
+        consumer for every button's events, so an uncaught exception here
+        would silently stop short/long dispatch for all buttons, not just
+        the one whose handler failed.
+        """
         while True:
             name, event_type = await self.event_queue.get()
             for btn in self.buttons:
                 if btn.name == name:
                     handler = getattr(btn, f"{event_type}_cb", None)
                     if handler:
-                        if inspect.iscoroutinefunction(handler):
-                            await handler()
-                        else:
-                            handler()
+                        try:
+                            if inspect.iscoroutinefunction(handler):
+                                await handler()
+                            else:
+                                handler()
+                        except Exception:
+                            logging.exception(f"Button handler failed: {btn.name} {event_type}")
 
     def get_event_nowait(self):
         try:

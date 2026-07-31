@@ -10,6 +10,7 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 |--------|-------------------|---------|
 | `led_test.py` | GPIO | Cycles RED → GREEN → BLUE then blinks concurrently with async tasks to verify LED wiring and `led_task` behaviour |
 | `button_test.py` | GPIO | Confirms short and long press detection for a single named button |
+| `button_reliability_test.py` | GPIO | Compares a raw GPIO poll against AsyncButton's registered presses to catch dropped/stuck presses |
 | `dial_test.py` | GPIO (kernel `rotary-encoder` overlay + evdev) | Prints Clockwise / Counter-clockwise on each encoder pulse to verify dial wiring and direction |
 | `positional_encoders_test.py` | SPI | Reads the two SPI positional encoders and prints coordinates continuously |
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
@@ -27,6 +28,10 @@ python tests/integration/button_test.py top
 python tests/integration/button_test.py mid
 python tests/integration/button_test.py bottom
 python tests/integration/button_test.py top --long-threshold 0.5
+
+# Button reliability — checks for dropped/stuck presses against a raw GPIO poll
+python tests/integration/button_reliability_test.py mid
+python tests/integration/button_reliability_test.py mid --presses 30
 
 # Dial — prints direction on each pulse
 python tests/integration/dial_test.py
