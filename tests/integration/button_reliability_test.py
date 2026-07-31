@@ -93,6 +93,11 @@ async def main():
     async def on_long():
         count_state["async"] += 1
 
+    # AsyncButton.setup() requires this to have been called first. The real
+    # app does it once in App.__init__ (main.py) - this script never
+    # constructs an App, so it has to do it itself.
+    GPIO.setmode(GPIO.BCM)
+
     loop = asyncio.get_running_loop()
     button_definitions = [ButtonDefinition(args.button, pin, on_short, on_long, None)]
     manager = AsyncButtonManager(button_definitions, loop)
