@@ -103,7 +103,11 @@ def get_stations_by_city(stations: dict, city_country: str) -> list:
     if not station_info or "urls" not in station_info:
         return []
 
-    return [(entry["name"], entry["url"]) for entry in station_info["urls"]]
+    return [
+        (entry["name"], entry["url"])
+        for entry in station_info["urls"]
+        if isinstance(entry.get("name"), str) and isinstance(entry.get("url"), str)
+    ]
 
 
 def get_coords_by_city(stations: dict, city: str) -> Coordinate:

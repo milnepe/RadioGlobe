@@ -82,7 +82,7 @@ class Display:
             station = " " * (padding // 2) + station + " " * (padding - padding // 2)
             station = "< " + station + " >"
         else:
-            station = station[:DISPLAY_COLUMNS]
+            station = str(station)[:DISPLAY_COLUMNS]
         self.buffer[3] = station.center(DISPLAY_COLUMNS)
 
         self.changed.set()
