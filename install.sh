@@ -116,6 +116,7 @@ sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
 echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
+echo "RADIOGLOBE_VERSION=$VERSION" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
@@ -136,7 +137,6 @@ SERVICE_FILE=/etc/systemd/user/radioglobe.service
 sudo cp "$SRC_DIR/services/radioglobe.service" $SERVICE_FILE
 
 sudo sed -i "s|__RADIOGLOBE_DIR__|$RADIOGLOBE_DIR|g" $SERVICE_FILE
-sudo sed -i "s|__VERSION__|$VERSION|g" $SERVICE_FILE
 
 # -----------------------------
 # Enable lingering (required for user services)

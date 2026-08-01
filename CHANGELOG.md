@@ -15,6 +15,18 @@ All notable changes to this project are documented in this file.
   app/stations/VERSION and restarts the already-installed service — no
   `sudo` needed anywhere. It also now restarts the service itself
   instead of telling the operator to do it by hand.
+- The above change had a side effect: the service unit baked its version
+  banner in as a literal `Environment=RADIOGLOBE_VERSION=__VERSION__`,
+  substituted once by `install.sh`. Since `update.sh` no longer touches
+  the (sudo-only) unit file, that banner went stale after the first
+  install and never updated again on routine updates, even though
+  `/opt/radioglobe/VERSION` and the running code were correct. Fixed by
+  switching the unit to `EnvironmentFile=__RADIOGLOBE_DIR__/version.env`
+  — a plain file inside `/opt/radioglobe`, owned by the `radioglobe`
+  user, that both `install.sh` and `update.sh` can freely rewrite.
+  systemd re-reads an `EnvironmentFile` fresh on every service start, so
+  a plain restart (no `daemon-reload`) is enough to pick up the new
+  version.
 
 ## [0.5.16] - 2026-08-01
 ### Changed
