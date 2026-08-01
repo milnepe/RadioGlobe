@@ -74,6 +74,14 @@ class App:
         volume = self.audio_player.change_volume_level(level)
         await self._show_volume_briefly(volume)
 
+    def _select_station_for_city(self, city: str) -> bool:
+        """Look up city's stations and select one into nav state.
+
+        Returns False (leaving nav state untouched) if city has none.
+        """
+        stations = get_stations_by_city(self.nav.stations_info, city)
+        return self.nav.state.select_station(stations)
+
     def _play_station(self) -> str:
         """Show and play self.nav.state.station; returns the URL played."""
         coords = self.nav.current_coords
@@ -140,8 +148,7 @@ class App:
                     f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.nav.state.cities} {self.encoders.is_latched()}"
                 )
                 self.nav.state.city = self.nav.state.cities[0]
-                stations = get_stations_by_city(self.nav.stations_info, self.nav.state.city)
-                if not self.nav.state.select_station(stations):
+                if not self._select_station_for_city(self.nav.state.city):
                     logging.warning(f"No stations for {self.nav.state.city!r} — skipping latch")
                     self.encoders.reset_latch()
                     continue
@@ -166,8 +173,7 @@ class App:
                 self.nav.next_station(direction)
             elif self.nav.state.mode == MODE_CITY:
                 self.nav.next_city(direction)
-                stations = get_stations_by_city(self.nav.stations_info, self.nav.state.city)
-                if not self.nav.state.select_station(stations):
+                if not self._select_station_for_city(self.nav.state.city):
                     logging.warning(f"No stations for {self.nav.state.city!r} — keeping previous station")
                     continue
 
