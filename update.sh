@@ -37,9 +37,15 @@ cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 # if stations.json needs cleaning.
 cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
 cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
+echo "RADIOGLOBE_VERSION=$VERSION" > "$RADIOGLOBE_DIR/version.env"
 
 # -----------------------------
 # Restart the service to pick up the new code
+#
+# version.env is an EnvironmentFile= referenced by the (sudo-only) unit
+# file, not the unit file itself — systemd re-reads it fresh on every
+# service start, so a plain restart is enough to pick up the new version
+# banner. No daemon-reload needed; that's only for unit-file changes.
 # -----------------------------
 echo "🔄 Restarting service..."
 systemctl --user restart radioglobe.service
