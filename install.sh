@@ -6,6 +6,10 @@ RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🚀 Installing RadioGlobe..."
+echo "One-time system setup: OS deps, dtoverlay, sudoers, /opt/radioglobe"
+echo "ownership, the service unit, and lingering. Needs sudo throughout."
+echo "For routine code/data updates afterward, use update.sh instead —"
+echo "it needs no sudo once this has run."
 
 # -----------------------------
 # Version: prefer VERSION injected by `make deploy` from the dev

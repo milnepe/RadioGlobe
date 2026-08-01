@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
-RADIOGLOBE_USER=radioglobe
 RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🚀 Updating RadioGlobe..."
-echo "Safe for small code changes only"
+echo "Safe for small code changes only — copies files and restarts the"
+echo "service. Touches no system configuration (OS deps, dtoverlay,"
+echo "sudoers, the service unit, lingering) and needs no sudo — run"
+echo "install.sh instead for first-time setup or if any of that changed."
 
 # -----------------------------
 # Version (injected from dev machine)
@@ -20,66 +22,27 @@ fi
 echo "📦 Version: $VERSION"
 
 # -----------------------------
-# Prepare install directory
-# -----------------------------
-echo "📁 Preparing install dir..."
-sudo mkdir -p $RADIOGLOBE_DIR
-sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
-
-# -----------------------------
 # Copy application (SAFE: no delete)
+# $RADIOGLOBE_DIR is owned by the radioglobe user (set up once by
+# install.sh), so a plain cp works here with no sudo — this script is
+# meant to run entirely as the radioglobe user over SSH.
 # -----------------------------
 echo "📂 Copying application..."
-sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
-
-# Stations + version
-sudo mkdir -p "$RADIOGLOBE_DIR/stations"
-sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
-
-sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
+cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 
 # NOTE: unlike install.sh, this script does NOT sanitize stations.json
 # (no NaN/query-string cleanup, no jq validation). Only run update.sh
 # against a stations.json that's already clean — running it against a
 # dirty one just ships the dirty data to the device again. Use install.sh
 # if stations.json needs cleaning.
+cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
+cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
 
 # -----------------------------
-# Install systemd user service
+# Restart the service to pick up the new code
 # -----------------------------
-echo "⚙️ Installing service..."
+echo "🔄 Restarting service..."
+systemctl --user restart radioglobe.service
 
-SERVICE_FILE=/etc/systemd/user/radioglobe.service
-sudo cp "$SRC_DIR/services/radioglobe.service" $SERVICE_FILE
-
-sudo sed -i "s|__RADIOGLOBE_DIR__|$RADIOGLOBE_DIR|g" $SERVICE_FILE
-sudo sed -i "s|__VERSION__|$VERSION|g" $SERVICE_FILE
-
-# -----------------------------
-# Enable lingering (required for user services)
-# -----------------------------
-echo "🔑 Enabling lingering..."
-sudo loginctl enable-linger $RADIOGLOBE_USER
-
-# -----------------------------
-# Enable service (DO NOT start here)
-# -----------------------------
-USER_ID=$(id -u $RADIOGLOBE_USER)
-export XDG_RUNTIME_DIR=/run/user/$USER_ID
-
-echo "🔄 Enabling service..."
-
-sudo -u $RADIOGLOBE_USER \
-    XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
-    systemctl --user daemon-reload
-
-sudo -u $RADIOGLOBE_USER \
-    XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR \
-    systemctl --user enable radioglobe.service
-
-echo "✅ Installation updated!"
-echo "⚠️ Restart service on Radioglobe"
-echo "   systemctl --user restart radioglobe.service"
-echo "📖 Logs after reboot:"
-echo "   journalctl --user-unit=radioglobe.service -f"
+echo "✅ Update complete — running $VERSION"
+echo "📖 Logs: journalctl --user-unit=radioglobe.service -f"
