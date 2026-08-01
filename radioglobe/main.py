@@ -14,7 +14,6 @@ from radioglobe.constants import (
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
-from radioglobe.database import get_stations_by_city
 from radioglobe.dial import AsyncDial
 from radioglobe.display import Display
 from radioglobe.navigation import Navigator
@@ -74,14 +73,6 @@ class App:
         volume = self.audio_player.change_volume_level(level)
         await self._show_volume_briefly(volume)
 
-    def _select_station_for_city(self, city: str) -> bool:
-        """Look up city's stations and select one into nav state.
-
-        Returns False (leaving nav state untouched) if city has none.
-        """
-        stations = get_stations_by_city(self.nav.stations_info, city)
-        return self.nav.state.select_station(stations)
-
     def _play_station(self) -> str:
         """Show and play self.nav.state.station; returns the URL played."""
         coords = self.nav.current_coords
@@ -135,26 +126,21 @@ class App:
             self.encoders.updated.clear()
 
             coords = self.encoders.get_readings()
-            self.nav.state.cities = self.nav.find_cities_near(coords)
+            cities = self.nav.refresh_nearby_cities(coords)
 
-            if not self.encoders.is_latched() and self.nav.state.cities:
-                logging.debug(f"latch: {self.encoders.is_latched()} Cities: {self.nav.state.cities}")
+            if not self.encoders.is_latched() and cities:
+                logging.debug(f"latch: {self.encoders.is_latched()} Cities: {cities}")
                 asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
-                self.nav.state.jog_idx = 0
-                logging.debug(
-                    f"Matching cities: jog:{self.nav.state.jog_idx} "
-                    f"stick:{STICKINESS} fuzz:{FUZZINESS} {self.nav.state.cities} {self.encoders.is_latched()}"
-                )
-                self.nav.state.city = self.nav.state.cities[0]
-                if not self._select_station_for_city(self.nav.state.city):
+                logging.debug(f"Matching cities: stick:{STICKINESS} fuzz:{FUZZINESS} {cities} {self.encoders.is_latched()}")
+                if not self.nav.select_city():
                     logging.warning(f"No stations for {self.nav.state.city!r} — skipping latch")
                     self.encoders.reset_latch()
                     continue
-                logging.info(f"Cities: {self.nav.state.cities}")
+                logging.info(f"Cities: {cities}")
                 logging.debug(
-                    f"📻 Tuning to: jog:{self.nav.state.jog_idx} "
+                    f"📻 Tuning to: city_idx:{self.nav.state.city_idx} "
                     f"{self.nav.state.city} {self.nav.state.station}\n{self.nav.state.stations}"
                 )
                 self._start_monitor_stream(self._play_station())
@@ -172,8 +158,7 @@ class App:
             if self.nav.state.mode == MODE_STATION:
                 self.nav.next_station(direction)
             elif self.nav.state.mode == MODE_CITY:
-                self.nav.next_city(direction)
-                if not self._select_station_for_city(self.nav.state.city):
+                if not self.nav.next_city_and_select_station(direction):
                     logging.warning(f"No stations for {self.nav.state.city!r} — keeping previous station")
                     continue
 
@@ -188,8 +173,11 @@ class App:
 
     async def _handle_short_jog(self):
         self.nav.switch_mode()
-        result = self.nav.state.stations if self.nav.state.mode == MODE_STATION else self.nav.state.cities
-        logging.debug(f"🖲️ Jog button short press! Change mode jog: {self.nav.state.jog_idx} {result}")
+        if self.nav.state.mode == MODE_STATION:
+            idx, result = self.nav.state.station_idx, self.nav.state.stations
+        else:
+            idx, result = self.nav.state.city_idx, self.nav.state.cities
+        logging.debug(f"🖲️ Jog button short press! Change mode idx: {idx} {result}")
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")

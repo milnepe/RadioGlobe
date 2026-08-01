@@ -69,7 +69,12 @@ def build_look_around_offsets(fuzziness: int) -> list[tuple[int, int]]:
 def look_around(origin: tuple, offsets: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """Returns the search area around origin by applying pre-computed offsets.
 
-    Build offsets once at startup with build_look_around_offsets(fuzziness)."""
+    Build offsets once at startup with build_look_around_offsets(fuzziness).
+
+    Superseded in production by find_cities_near(), which fuses this with
+    the city-index lookup in one pass. Kept only for tests/integration/
+    main_test.py and streaming_cvlc_test.py, the hand-run hardware
+    diagnostic scripts — don't delete without updating those."""
 
     latitude, longitude = origin
     return [
@@ -140,6 +145,11 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
     """
     Get station info found within search area
     Can return more than one locations worth of urls depending on fuzziness
+
+    Superseded in production by find_cities_near(), which fuses this with
+    the search-area expansion in one pass. Kept only for tests/integration/
+    main_test.py and streaming_cvlc_test.py, the hand-run hardware
+    diagnostic scripts — don't delete without updating those.
     """
     cities = []
     # Check the search area.  Saving the first location name encountered
@@ -157,6 +167,12 @@ def get_found_cities(search_area: list, city_map: dict) -> list:
 def get_stations_info(city, stations) -> list[tuple | None]:
     """
     Return a list of station name, url pairs for a given city,country
+
+    Superseded in production by get_stations_by_city(), which requires an
+    exact city key match and filters out non-string name/url entries (this
+    function does case-insensitive matching and no such filter). Kept only
+    for tests/integration/streaming_cvlc_test.py, a hand-run hardware
+    diagnostic script — don't delete without updating that.
     """
     for key in stations:
         if city.lower() == key.lower():  # Exact match, case-insensitive

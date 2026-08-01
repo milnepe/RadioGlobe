@@ -76,9 +76,10 @@ class Navigator:
         self.state = AppState(
             stations=state.get("stations") or [],
             station=tuple(state["station"]) if state.get("station") else None,
+            station_idx=state.get("station_idx") or 0,
             cities=state.get("cities") or [],
             city=state.get("city"),
-            jog_idx=state.get("jog_idx") or 0,
+            city_idx=state.get("city_idx") or 0,
             mode=state.get("mode") or MODE_STATION,
         )
 
@@ -94,7 +95,7 @@ class Navigator:
             else:
                 self.state.stations = get_stations_by_city(self.stations_info, self.state.city)
                 saved_name = state["station"][0] if state.get("station") else None
-                self.state.station, self.state.jog_idx = match_saved_station(
+                self.state.station, self.state.station_idx = match_saved_station(
                     saved_name, self.state.stations
                 )
 
@@ -110,33 +111,30 @@ class Navigator:
         if not self.state.stations:
             logging.debug("⚠️ No stations available.")
             return
-        self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.stations)
-        logging.debug(f"jog:{self.state.jog_idx} {self.state.stations}")
-        self.state.station = self.state.stations[self.state.jog_idx]
-        logging.debug(f"📻 Tuning to: jog:{self.state.jog_idx} {self.state.station}")
+        self.state.station_idx = (self.state.station_idx + direction) % len(self.state.stations)
+        logging.debug(f"station_idx:{self.state.station_idx} {self.state.stations}")
+        self.state.station = self.state.stations[self.state.station_idx]
+        logging.debug(f"📻 Tuning to: station_idx:{self.state.station_idx} {self.state.station}")
 
     def next_city(self, direction):
         """Navigate to the next or previous city."""
         if not self.state.cities:
             logging.debug("⚠️ No cities available.")
             return
-        self.state.jog_idx = (self.state.jog_idx + direction) % len(self.state.cities)
-        self.state.city = self.state.cities[self.state.jog_idx]
-        logging.debug(f"📻 Changed city: jog:{self.state.jog_idx} {self.state.city}")
+        self.state.city_idx = (self.state.city_idx + direction) % len(self.state.cities)
+        self.state.city = self.state.cities[self.state.city_idx]
+        logging.debug(f"📻 Changed city: city_idx:{self.state.city_idx} {self.state.city}")
 
     def switch_mode(self):
-        """Toggle between application modes."""
-        if self.state.mode == MODE_STATION:
-            self.state.mode = MODE_CITY
-            items, current = self.state.cities, self.state.city
-        else:
-            self.state.mode = MODE_STATION
-            items, current = self.state.stations, self.state.station
+        """Toggle between application modes.
 
-        self.state.jog_idx = items.index(current) if current in items else 0
+        station_idx/city_idx are each tracked independently by
+        next_station()/next_city(), so switching modes needs no recompute.
+        """
+        self.state.mode = MODE_CITY if self.state.mode == MODE_STATION else MODE_STATION
 
         logging.debug(
-            f"🌀 Mode switched to: {self.state.mode} jog:{self.state.jog_idx} "
+            f"🌀 Mode switched to: {self.state.mode} "
             f"{self.state.city} {self.state.station}"
         )
 
@@ -152,5 +150,37 @@ class Navigator:
         if not self.state.stations:
             self.state.station = None
             return
-        self.state.jog_idx = self.state.jog_idx % len(self.state.stations)
-        self.state.station = self.state.stations[self.state.jog_idx]
+        self.state.station_idx = self.state.station_idx % len(self.state.stations)
+        self.state.station = self.state.stations[self.state.station_idx]
+
+    def refresh_nearby_cities(self, coords: tuple) -> list:
+        """Recompute and store the cities in the search zone around coords."""
+        self.state.cities = self.find_cities_near(coords)
+        return self.state.cities
+
+    def select_city(self) -> bool:
+        """Latch onto the closest nearby city (state.cities[0]) and select
+        its first station. Used by the encoder-latch path.
+
+        Returns False (state left untouched) if there are no nearby
+        cities, or the closest one has no stations.
+        """
+        if not self.state.cities:
+            return False
+        self.state.city = self.state.cities[0]
+        self.state.city_idx = 0
+        stations = get_stations_by_city(self.stations_info, self.state.city)
+        return self.state.select_station(stations)
+
+    def next_city_and_select_station(self, direction: int) -> bool:
+        """Cycle to the next/previous city and select its first station.
+        Used by the dial-loop city-cycling path.
+
+        Returns False (previous station keeps playing) if the new city
+        has no stations.
+        """
+        self.next_city(direction)
+        if not self.state.city:
+            return False
+        stations = get_stations_by_city(self.stations_info, self.state.city)
+        return self.state.select_station(stations)
