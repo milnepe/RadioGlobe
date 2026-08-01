@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.16] - 2026-08-01
+### Changed
+- Simplified the city/station navigation logic in `AppState`/`Navigator`/
+  `main.py` for readability, with no functional or performance change.
+  `AppState.jog_idx` was dual-purpose (station index in `MODE_STATION`,
+  city index in `MODE_CITY`), forcing `Navigator.switch_mode()` to
+  re-derive it via a linear search on every mode toggle, and forcing
+  `select_station()` to deliberately never touch it. Split into
+  independent `station_idx`/`city_idx` fields instead — `switch_mode()`
+  now needs no recompute at all. This also fixed two latent low-severity
+  bugs the shared field caused: `remove_failed_station()` could modulo a
+  city index into the station list if a stream failed while the dial was
+  in `MODE_CITY`, and `load_state()` always overwrote the shared index
+  with a station-match value on warm restart, discarding city-index
+  meaning from a `MODE_CITY` shutdown. Old on-disk cache files (single
+  `"jog_idx"` key) still load without error.
+- Moved city-latching/selection out of `main.py`'s `App` and into
+  `Navigator` (`select_city()`, `next_city_and_select_station()`,
+  `refresh_nearby_cities()`), matching the codebase's existing convention
+  that `Navigator` owns all state mutation — `App` no longer touches
+  `nav.state` directly anywhere, and the two event loops shrink to their
+  real hardware/orchestration concerns.
+- `database.py`'s legacy `look_around`/`get_found_cities`/`get_stations_info`
+  (superseded in production, used only by two hand-run hardware
+  diagnostic scripts) now have docstring notes explaining the duplication.
+
 ## [0.5.15] - 2026-08-01
 ### Fixed
 - A raw JSON `NaN` in a station's `name` field (some entries in

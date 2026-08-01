@@ -198,8 +198,8 @@ immediately (warm-restart path).
 | Method | Purpose |
 |---|---|
 | `run()` | Restore saved state, then start and gather `_encoder_loop()` and `_dial_loop()` |
-| `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.find_cities_near()` for nearby cities, latch and start playback when one is found |
-| `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()`/`self.nav.next_city()`, update playback |
+| `_encoder_loop()` | Wake on `encoders.updated`, ask `self.nav.refresh_nearby_cities()` for nearby cities, latch via `self.nav.select_city()` and start playback when one is found |
+| `_dial_loop()` | Wake on `dial.queue`, delegate to `self.nav.next_station()` or `self.nav.next_city_and_select_station()`, update playback |
 | `save_state()` | Pass `self.encoders.get_calibration()` to `self.nav.save_state()` (§4.3) |
 | `load_state()` | Pass `self.nav.load_state()`'s (§4.3) returned dict to `self.encoders.restore_calibration()` |
 | `_update_volume(delta)` | Adjust volume by delta, briefly show level on display |
@@ -214,8 +214,11 @@ immediately (warm-restart path).
 | `_on_jog_press` / `_on_sound_press` / `_on_mid_press` | Immediate press-down LED feedback |
 
 Navigation logic that used to live here directly — `next_station`,
-`next_city`, `switch_mode`, station-list bookkeeping, coordinate lookup —
-now lives on `Navigator` (§4.3).
+`next_city`, `switch_mode`, station-list bookkeeping, coordinate lookup,
+and (as of the 2026-08-01 navigation-cleanup pass) city latching/selection
+— now lives entirely on `Navigator` (§4.3). `App` performs zero direct
+mutations of `nav.state` in either event loop; every mutation goes through
+a named `Navigator` method.
 
 **Non-obvious details:**
 - `self.nav.state.city` is passed to `display.show_station()`/`display.update()` as a raw string (e.g. `"London,GB"`). The display truncates it to 20 characters before centering.
@@ -245,14 +248,22 @@ has to live somewhere that doesn't transitively pull that in.
 |---|---|---|
 | `stations` | `list[(name, url)]` | Stations for the current city |
 | `station` | `tuple \| None` | Currently playing station |
+| `station_idx` | `int` | Index of `station` within `stations` |
 | `cities` | `list[str]` | Cities found in the current search zone |
 | `city` | `str \| None` | Currently selected city (e.g. `"London,GB"`) |
-| `jog_idx` | `int` | Shared index — station index in `MODE_STATION`, city index in `MODE_CITY`; recomputed by `Navigator.switch_mode()` on every mode change, since the two lists have unrelated indices |
+| `city_idx` | `int` | Index of `city` within `cities` |
 | `mode` | `str` | `"station"` or `"city"` |
 
 **Methods:**
 - `is_complete() -> bool` — whether both `city` and `station` are set. Used throughout `main.py` and `navigation.py` as the guard for "is there anything to display/play/navigate."
-- `select_station(stations) -> bool` — sets `self.stations` and, if the list is non-empty, `self.station = stations[0]`; returns whether a station was selected. Deliberately does **not** touch `jog_idx` — see the correctness note in §4.3.
+- `select_station(stations) -> bool` — sets `self.stations`, resets `self.station_idx = 0`, and if the list is non-empty, `self.station = stations[0]`; returns whether a station was selected.
+
+Until 2026-08-01, `station_idx`/`city_idx` were a single shared `jog_idx`
+field (station index in `MODE_STATION`, city index in `MODE_CITY`,
+recomputed by `Navigator.switch_mode()` on every mode change via a linear
+search). Splitting it into two independent fields removed that recompute
+entirely and let `select_station()` always reset its own index safely —
+see the correctness note in §4.3.
 
 Unit-tested directly (`tests/app_state_test.py`) — pure data, no mocking needed.
 
@@ -276,11 +287,14 @@ station dict, no mocking).
 | Method | Purpose |
 |---|---|
 | `current_coords` (property) | `Coordinate` for `self.state.city`, or `None` if no city is selected — replaces a manually-maintained cache `App` used to keep (the old `_current_coords` attribute) |
-| `find_cities_near(origin)` | Thin wrapper around `database.find_cities_near()` using `self.look_around_offsets`/`self.cities_info` — exists so `App._encoder_loop()` doesn't need to reach into two of `Navigator`'s internals directly |
-| `next_station(direction)` | Cycle `jog_idx` within `self.state.stations` |
-| `next_city(direction)` | Cycle `jog_idx` within `self.state.cities` |
-| `switch_mode()` | Toggle `self.state.mode`; recomputes `jog_idx` for the new mode's list (falls back to 0 if the current selection isn't in it) |
-| `remove_failed_station()` | Drop the current station from the session list and advance to the next by `jog_idx`; called from `App._monitor_stream()` on playback failure |
+| `find_cities_near(origin)` | Thin wrapper around `database.find_cities_near()` using `self.look_around_offsets`/`self.cities_info` |
+| `refresh_nearby_cities(coords)` | Recompute `self.state.cities` via `find_cities_near(coords)` and return it |
+| `select_city()` | Latch onto the closest nearby city (`self.state.cities[0]`) and select its first station; returns `False` (state untouched) if there are no nearby cities or the closest one has no stations. Used by `App._encoder_loop()`'s latch path |
+| `next_city_and_select_station(direction)` | Cycle to the next/previous city (`next_city()`) and select its first station; returns `False` (previous station keeps playing) if the new city has no stations. Used by `App._dial_loop()`'s `MODE_CITY` branch |
+| `next_station(direction)` | Cycle `station_idx` within `self.state.stations` |
+| `next_city(direction)` | Cycle `city_idx` within `self.state.cities` |
+| `switch_mode()` | Toggle `self.state.mode` — no index recompute needed; `station_idx`/`city_idx` are independent fields, each kept correct by whichever method owns it |
+| `remove_failed_station()` | Drop the current station from the session list and advance to the next by `station_idx`; called from `App._monitor_stream()` on playback failure |
 | `save_state(encoder_offsets, cache)` | Serialise `self.state` + `encoder_offsets` (a plain dict — keys `lat`/`lon`/`lat_offset`/`lon_offset` — supplied by the caller, since `Navigator` has no hardware access of its own) to `cache` as JSON |
 | `load_state(cache)` | Restore `self.state` from `cache`, re-querying/validating the saved city and station against the live `stations_info`; returns the saved encoder offsets as a plain dict (or `{}` if no cache file exists) for the caller to apply |
 
@@ -288,7 +302,8 @@ station dict, no mocking).
 (`App.__init__` still builds all 6 hardware wrappers directly as a flat
 list — not wrapped in a factory, since that would add indirection serving
 testability/hardware-swappability, which wasn't the goal of this refactor),
-the two event loops, and button dispatch/`run()`.
+the two event loops (as timing/LED/logging orchestration around `Navigator`
+calls), and button dispatch/`run()`.
 
 `save_state()`/`load_state()` originally stayed on `App` too, for the same
 reason: they touched `self.encoders`, a hardware object `Navigator` can't
@@ -301,17 +316,23 @@ call into `self.nav`. The on-disk cache format (`~/cache/radioglobe.json`)
 didn't change, so this was a behavior-preserving move — existing cache
 files on deployed devices remain readable.
 
-**Non-obvious detail — `jog_idx` and `AppState.select_station()`:**
-`jog_idx` is dual-purpose (station index in `MODE_STATION`, city index in
-`MODE_CITY`). `select_station()` (§4.2) deliberately never touches it. An
-earlier draft of this refactor had a single `select_city()` method that
-reset `jog_idx = 0` on every call — correct for the encoder-latch path in
-`_encoder_loop()` (where index 0 into the freshly-fetched `cities`/
-`stations` lists is always right), but that would have silently broken
-dial city-cycling in `_dial_loop()`, where `jog_idx` has to keep tracking
-the *city* index across calls for `next_city()`'s own increment logic to
-work. `select_station()` only ever sets `stations`/`station`, leaving
-`jog_idx` to whichever caller already owns it correctly.
+**Non-obvious detail — history of the `jog_idx` split (2026-08-01):**
+Before this date, `station_idx`/`city_idx` were a single shared `jog_idx`
+field (station index in `MODE_STATION`, city index in `MODE_CITY`).
+`switch_mode()` had to re-derive it via a linear search (`items.index(current)`)
+into the new mode's list on every toggle, and `select_station()` deliberately
+never touched it, since resetting it while in `MODE_CITY` would have
+corrupted city-cycling sharing the same field. Splitting the field removed
+both hazards structurally — `switch_mode()` needs no recompute, and
+`select_station()` can safely always reset `station_idx`. This also fixed
+two latent low-severity bugs the shared field caused: `remove_failed_station()`
+previously used `jog_idx` regardless of `self.state.mode`, so a stream
+failure while the dial was in `MODE_CITY` could modulo a city index into
+the station list; and `load_state()` always overwrote `jog_idx` with a
+station-match index on warm restart, discarding city-index meaning if the
+app was last in `MODE_CITY` at shutdown. Old on-disk cache files (single
+`"jog_idx"` key) still load without error — `load_state()` simply defaults
+both new fields to 0 and ignores the stale key.
 
 ---
 
@@ -330,7 +351,7 @@ Pure functions with no side effects and no hardware dependencies. The most testa
 | `find_cities_near(origin, offsets, cities_index)` | `list` of city strings, closest-first | The production city search; wrapped by `Navigator.find_cities_near()` (§4.3), called from `_encoder_loop()` in `main.py` |
 | `get_stations_by_city(stations, city)` | `list` of `(name, url)` tuples | The canonical station list format |
 | `get_coords_by_city(stations, city)` | `Coordinate` | Raises `KeyError` if the city isn't in the data — backs `Navigator.current_coords` and the stale-city check in `Navigator.load_state()` (§4.3) |
-| `match_saved_station(saved_name, stations)` | `(station, jog_idx)` tuple | Finds a saved station by name in a refreshed station list, falling back to index 0 if not found; used by `Navigator.load_state()`'s warm-restart path (§4.3) |
+| `match_saved_station(saved_name, stations)` | `(station, station_idx)` tuple | Finds a saved station by name in a refreshed station list, falling back to index 0 if not found; used by `Navigator.load_state()`'s warm-restart path (§4.3) |
 | `get_found_cities(search_area, city_map)` | `list` of city strings | Used only by integration test scripts; superseded in production by `find_cities_near` |
 
 **Coordinate formula:** `index = round((degrees + 180) * 1024 / 360)`. This maps −180°→0 and +180°→1024.
@@ -589,23 +610,22 @@ If you need to understand the audio subsystem, read `audio_async.py`. The `strea
 
 1. `PositionalEncoders.run_encoder()` polls SPI every 50ms. While unlatched, each successful read sets `encoders.updated` (an `asyncio.Event`).
 2. `_encoder_loop()` wakes on that event, clears it, and calls `encoders.get_readings()` — returns the offset-adjusted `(lat, lon)` tuple.
-3. `self.nav.find_cities_near(coords)` (`Navigator`, §4.3) applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — and returns matching cities, closest-first.
+3. `self.nav.refresh_nearby_cities(coords)` (`Navigator`, §4.3) applies the pre-computed offset pattern — 25 points (5×5 area) for the default `FUZZINESS = 3` — stores and returns matching cities, closest-first.
 4. If cities are found and the encoders are not already latched:
    - `encoders.latch(*coords, stickiness=STICKINESS)` freezes the position.
-   - `self.nav.state.jog_idx` resets to 0.
    - The LED flashes green (`self.led.flash(...)`, §4.10).
-5. `get_stations_by_city(self.nav.stations_info, city)` fetches the station list as `[(name, url), ...]`; `self.nav.state.select_station(stations)` (`AppState`, §4.2) sets it as current, or skips the latch and warns if the city has no stations.
-6. `audio_player.play(station[1])` passes the URL to VLC.
-7. `display.show_station(coords, city, station_name)` refreshes the LCD (§4.8).
-8. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one, which checks playback every 3 s and switches to the next station on failure.
+   - `self.nav.select_city()` (`Navigator`, §4.3) latches `state.cities[0]` as the current city, resets `city_idx` to 0, and selects its first station via `get_stations_by_city()` + `AppState.select_station()`; returns `False` (and the latch is undone) if the closest city has no stations.
+5. `audio_player.play(station[1])` passes the URL to VLC.
+6. `display.show_station(coords, city, station_name)` refreshes the LCD (§4.8).
+7. `_start_monitor_stream(station_url)` cancels any previous monitor and starts a new one, which checks playback every 3 s and switches to the next station on failure.
 
 ### Flow B: User Turns the Dial
 
 1. The kernel's `rotary_encoder` driver decodes GPIO 17/18 transitions and emits an `EV_REL`/`REL_X` evdev event; `AsyncDial`'s `loop.add_reader` callback reads it and pushes the direction onto `dial.queue`.
 2. `_dial_loop()` wakes with `await self.dial.queue.get()` — no polling.
 3. The LED flashes blue.
-4. If `mode == "station"`: `self.nav.next_station(direction)` increments/decrements `jog_idx` within `self.nav.state.stations` (wraps around).
-5. If `mode == "city"`: `self.nav.next_city(direction)` increments/decrements `jog_idx` within `self.nav.state.cities`; `_dial_loop()` then fetches the new city's stations and calls `self.nav.state.select_station(...)` to load the first one — `next_city()` itself no longer touches the station list, only the city selection.
+4. If `mode == "station"`: `self.nav.next_station(direction)` increments/decrements `station_idx` within `self.nav.state.stations` (wraps around).
+5. If `mode == "city"`: `self.nav.next_city_and_select_station(direction)` (`Navigator`, §4.3) increments/decrements `city_idx` within `self.nav.state.cities` and selects the new city's first station in one call, returning `False` (previous station keeps playing) if the new city has no stations.
 6. `display.show_station()` and `audio_player.play()` update immediately.
 
 ---
@@ -785,8 +805,9 @@ action needed.
 ```python
 state = {
     "station": list(self.state.station) if self.state.station else None,
+    "station_idx": self.state.station_idx,
     "city": self.state.city,
-    "jog_idx": self.state.jog_idx,
+    "city_idx": self.state.city_idx,
     "mode": self.state.mode,
 }
 state.update(encoder_offsets)

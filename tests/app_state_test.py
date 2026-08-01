@@ -37,10 +37,10 @@ class TestAppStateSelectStation(unittest.TestCase):
         self.assertIsNone(state.station)
         self.assertEqual(state.stations, [])
 
-    def test_does_not_touch_jog_idx(self):
-        state = AppState(jog_idx=5)
+    def test_resets_station_idx(self):
+        state = AppState(station_idx=5)
         state.select_station(self.stations)
-        self.assertEqual(state.jog_idx, 5)
+        self.assertEqual(state.station_idx, 0)
 
 
 if __name__ == "__main__":
