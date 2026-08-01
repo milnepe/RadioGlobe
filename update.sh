@@ -39,6 +39,12 @@ sudo cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 
+# NOTE: unlike install.sh, this script does NOT sanitize stations.json
+# (no NaN/query-string cleanup, no jq validation). Only run update.sh
+# against a stations.json that's already clean — running it against a
+# dirty one just ships the dirty data to the device again. Use install.sh
+# if stations.json needs cleaning.
+
 # -----------------------------
 # Install systemd user service
 # -----------------------------
