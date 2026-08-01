@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.17] - 2026-08-01
+### Fixed
+- `update.sh` re-ran install-time system setup (chown, service-file
+  reinstall, `enable-linger`, `daemon-reload`/`enable`) via `sudo` on
+  every small update, which needs an interactive password prompt and
+  can't be satisfied non-interactively over SSH — every routine update
+  required running it by hand from a real terminal. Split
+  responsibilities instead: `install.sh` remains the one-time,
+  `sudo`-requiring system setup; since it already hands `/opt/radioglobe`
+  ownership to the `radioglobe` user, `update.sh` now just copies the
+  app/stations/VERSION and restarts the already-installed service — no
+  `sudo` needed anywhere. It also now restarts the service itself
+  instead of telling the operator to do it by hand.
+
 ## [0.5.16] - 2026-08-01
 ### Changed
 - Simplified the city/station navigation logic in `AppState`/`Navigator`/
