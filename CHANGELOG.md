@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.15] - 2026-08-01
+### Fixed
+- A raw JSON `NaN` in a station's `name` field (some entries in
+  `stations.json` had never been cleaned up) reached `Display.update()`
+  and crashed the whole service with `TypeError: 'float' object is not
+  subscriptable`, since floats aren't subscriptable. Third recurrence of
+  this class of bug (see `c5d5058`, `d9df2d9`), fixed in code this time
+  instead of just the data: `database.get_stations_by_city()` now filters
+  out any station entry whose `name`/`url` aren't strings, and
+  `Display.update()` coerces `station` to `str()` before slicing in the
+  branch that was missed by an earlier fix (`7c44cc5`) to the arrows
+  branch.
+
 ## [0.5.14] - 2026-07-31
 ### Changed
 - `AudioPlayer.play()` took a `city` string (used only for a debug log) and
