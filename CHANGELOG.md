@@ -27,6 +27,11 @@ All notable changes to this project are documented in this file.
   systemd re-reads an `EnvironmentFile` fresh on every service start, so
   a plain restart (no `daemon-reload`) is enough to pick up the new
   version.
+- `make install`'s `ssh $(REMOTE) "..."` never allocated a pseudo-terminal
+  on the remote side, so `sudo` inside `install.sh` had no controlling
+  terminal to prompt through — `make install` failed with "a terminal is
+  required to read the password" even when run from a genuinely
+  interactive local terminal. Added `-t` to force pty allocation.
 
 ## [0.5.16] - 2026-08-01
 ### Changed

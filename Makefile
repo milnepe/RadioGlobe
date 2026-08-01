@@ -71,7 +71,7 @@ update:
 # Install on device
 # -----------------------------
 install:
-	ssh $(REMOTE) "cd $(REMOTE_DIR) && ./install.sh"
+	ssh -t $(REMOTE) "cd $(REMOTE_DIR) && ./install.sh"
 
 # -----------------------------
 # Full release
