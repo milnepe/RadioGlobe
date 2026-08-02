@@ -56,6 +56,8 @@ deploy: build
 	@WHEEL=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
 	if [ -z "$$WHEEL" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
 	WHEEL_NAME=$$(basename "$$WHEEL") ; \
+	# Remove any previous radioglobe wheels from the remote /tmp so pip sees only the newly uploaded wheel
+	ssh $(REMOTE) 'rm -f /tmp/radioglobe-*.whl || true' ; \
 	echo "Uploading $$WHEEL to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
 	scp "$$WHEEL" $(REMOTE):/tmp/$$WHEEL_NAME ; \
 	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
@@ -89,6 +91,8 @@ force-deploy: build
 	@WHEEL=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
 	if [ -z "$$WHEEL" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
 	WHEEL_NAME=$$(basename "$$WHEEL") ; \
+	# Remove any previous radioglobe wheels from the remote /tmp so pip sees only the newly uploaded wheel
+	ssh $(REMOTE) 'rm -f /tmp/radioglobe-*.whl || true' ; \
 	echo "Uploading $$WHEEL to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
 	scp "$$WHEEL" $(REMOTE):/tmp/$$WHEEL_NAME ; \
 	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
