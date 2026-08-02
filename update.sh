@@ -32,10 +32,10 @@ echo "📂 Installing updated package into venv..."
 if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
     WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
     echo "📦 Installing wheel: $WHEEL"
-    $RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$WHEEL"
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "/tmp/$WHEEL"
 else
     echo "📦 Installing from source: $SRC_DIR"
-    $RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$SRC_DIR"
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR"
 fi
 
 # NOTE: unlike install.sh, this script does NOT sanitize stations.json
