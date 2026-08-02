@@ -5,6 +5,8 @@ RADIOGLOBE_USER=radioglobe
 RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+cd "$SRC_DIR"
+
 echo "🚀 Installing RadioGlobe..."
 echo "One-time system setup: OS deps, dtoverlay, sudoers, /opt/radioglobe"
 echo "ownership, the service unit, and lingering. Needs sudo throughout."

@@ -4,6 +4,8 @@ set -e
 RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+cd "$SRC_DIR"
+
 echo "🚀 Updating RadioGlobe..."
 echo "Safe for small code changes only — copies files and restarts the"
 echo "service. Touches no system configuration (OS deps, dtoverlay,"
@@ -32,7 +34,7 @@ echo "📂 Installing updated package into venv..."
 if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
     WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
     echo "📦 Installing wheel: $WHEEL"
-    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "/tmp/$WHEEL"
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR/dist/$WHEEL"
 else
     echo "📦 Installing from source: $SRC_DIR"
     $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR"
