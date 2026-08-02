@@ -106,6 +106,7 @@ echo "📦 Installing Python dependencies..."
 sudo -u $RADIOGLOBE_USER \
     $RADIOGLOBE_DIR/venv/bin/python -m pip install --upgrade pip setuptools wheel
 
+
 # Install the project into the venv (pyproject.toml points to src/).
 # Prefer a built wheel in $SRC_DIR/dist if present (faster, reproducible), otherwise install from source.
 if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
