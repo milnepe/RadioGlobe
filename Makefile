@@ -6,7 +6,8 @@ REMOTE_DIR=~/RadioGlobe
 # Version is derived from git tags for developer builds
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0+dev")
 
-.PHONY: version
+.PHONY: version build deploy update install release clean device-version
+
 version:
 	@echo $(VERSION)
 
@@ -40,6 +41,8 @@ set-version:
 build:
 	@echo "📦 Building version..."
 	@python -m pip install --upgrade build setuptools_scm >/dev/null; \
+	# Ensure old build artifacts don't make 'make' consider the target up-to-date
+	rm -rf dist build || true; \
 	VERSION=$$(python -c "from setuptools_scm import get_version; print(get_version())"); \
 	echo $$VERSION > VERSION; \
 	python -m build --wheel --outdir dist; \
