@@ -5,6 +5,8 @@ RADIOGLOBE_USER=radioglobe
 RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+cd "$SRC_DIR"
+
 echo "🚀 Installing RadioGlobe..."
 echo "One-time system setup: OS deps, dtoverlay, sudoers, /opt/radioglobe"
 echo "ownership, the service unit, and lingering. Needs sudo throughout."
@@ -100,23 +102,35 @@ if [ ! -f "$RADIOGLOBE_DIR/venv/bin/python" ]; then
 fi
 
 echo "📦 Installing Python dependencies..."
+# Ensure pip/setuptools/wheel are recent in the new venv, then install the project
 sudo -u $RADIOGLOBE_USER \
-    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade pip
+    $RADIOGLOBE_DIR/venv/bin/python -m pip install --upgrade pip setuptools wheel
 
-sudo -u $RADIOGLOBE_USER \
-    $RADIOGLOBE_DIR/venv/bin/pip install -r "$SRC_DIR/requirements.txt"
+# Install the project into the venv (pyproject.toml points to src/).
+# Prefer a built wheel in $SRC_DIR/dist if present (faster, reproducible), otherwise install from source.
+if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
+    WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
+    echo "📦 Installing wheel: $WHEEL"
+    sudo -u $RADIOGLOBE_USER \
+        $RADIOGLOBE_DIR/venv/bin/pip install "$WHEEL"
+else
+    echo "📦 Installing from source: $SRC_DIR"
+    sudo -u $RADIOGLOBE_USER \
+        $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR"
+fi
 
 # -----------------------------
-# Copy application (SAFE: no delete)
+# Stations + version (runtime data)
 # -----------------------------
-echo "📂 Copying application..."
-sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
-
-# Stations + version
+# The Python package is installed into the venv; runtime data such as stations
+# and VERSION remain under $RADIOGLOBE_DIR so they can be edited/updated in-place.
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
-echo "RADIOGLOBE_VERSION=$VERSION" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
+# Determine installed package version from the venv and write it for the service to display
+INSTALLED_VER=$($RADIOGLOBE_DIR/venv/bin/python -c "import importlib.metadata as m; print(m.version('radioglobe'))" 2>/dev/null || echo "$VERSION")
+
+echo "$INSTALLED_VER" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
+echo "RADIOGLOBE_VERSION=$INSTALLED_VER" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 

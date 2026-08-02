@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.0] - 2026-08-02
+### Added
+- Repackaged project into a standard src/ layout and added a console
+  entrypoint (`radioglobe = radioglobe.cli:main`) so RadioGlobe is
+  installable via pip/wheel.
+- Reproducible, commit-aware versioning using setuptools_scm with
+  write_to = `src/radioglobe/_version.py` and `local_scheme = "node-and-date"`.
+- Robust deployment automation:
+  - `Makefile` targets: `make build`, `make deploy`, `make force-deploy`,
+    and `make device-version` for developer workflows.
+  - `scripts/deploy_remote.sh` and `scripts/force_deploy_remote.sh` handle
+    single-wheel upload, remote install into `/opt/radioglobe/venv`,
+    stations.json copy and safe force-reinstall.
+- Installer improvements: `install.sh` / `update.sh` now prefer a built
+  wheel in `dist/`, safely manage `/opt/radioglobe/stations`, and write
+  `/opt/radioglobe/VERSION` and `version.env` for the systemd unit.
+- Documentation updated: `README.md`, `CONTRIBUTING.md`, and
+  `ARCHITECTURE.md` now describe the src/ layout and the new deploy
+  workflow.
+
+### Changed
+- `radio_config.py` now resolves runtime data paths robustly (environment
+  override, `/opt/radioglobe/stations`, or repo default) so the installed
+  package can find `stations.json` when run as a systemd service.
+- Deployment scripts now remove old `/tmp/radioglobe-*.whl` on the device
+  before uploading a single wheel to avoid pip dependency-resolution
+  conflicts.
+- Makefile `build` now writes the resolved setuptools_scm version into
+  `VERSION` and builds a wheel to `dist/`.
+- `update.sh` no longer performs interactive `sudo` provisioning; it
+  reinstalls into the existing venv and restarts the service (safe for
+  routine code updates).
+
+### Fixed
+- Various Makefile quoting and recipe-scoping issues that caused deploys
+  to fail in certain shells; complex remote logic moved to dedicated
+  scripts for robustness.
+- `.gitignore` updated to ignore generated `src/radioglobe/_version.py`.
+
+(See Git history and the updated docs for a more detailed breakdown.)
+
 ## [0.5.17] - 2026-08-01
 ### Fixed
 - `update.sh` re-ran install-time system setup (chown, service-file

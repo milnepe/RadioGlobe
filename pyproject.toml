@@ -1,10 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "setuptools_scm", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "radioglobe"
-version = "0.5.17"
+# version is managed dynamically via setuptools_scm
+dynamic = ["version"]
 description = "RadioGlobe is an internet radio player originally by Jude Pullen (Hey Jude), Donald Robson and Peter Milne."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,7 +26,17 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["radioglobe*"]
+
+[project.scripts]
+radioglobe = "radioglobe.cli:main"
+
+[tool.setuptools_scm]
+# write the resolved version into the package so runtime can import it
+write_to = "src/radioglobe/_version.py"
+tag_regex = "^v?(?P<version>\\d+\\.\\d+\\.\\d+)$"
+local_scheme = "node-and-date"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -73,9 +73,9 @@ git clone https://github.com/milnepe/RadioGlobe
 ```
 
 ### Step 6 - Run installer
-The installation script `install.sh` will pull in all the software packages (quite a few) and setup a virtual environment for Python (required since Bookworm) and setup systemd services to start RadioGlobe on startup.
+The installation script `install.sh` will pull in all the software packages (quite a few), create a Python virtual environment, and install the RadioGlobe Python package into that venv (the project uses a `src/` layout). The installer also installs and enables a systemd user service to start RadioGlobe on startup.
 
-The startup template service `services/radioglobe.service` assumes RadioGlobe is installed in the `radioglobe` users home directory. If not you will need to edit the template accordingly.  
+The startup template service `services/radioglobe.service` assumes RadioGlobe is installed into `/opt/radioglobe` (the installer creates the venv and installs the package there). If you change the install directory you will need to edit the template accordingly.
 
 You can run the installer multiple times if you have any issues.
 ```
@@ -87,6 +87,37 @@ bash -x install.sh
 sudo reboot
 ```
 This is required, not just recommended: the dial's kernel `rotary-encoder` device-tree overlay (added to `/boot/firmware/config.txt` by `install.sh`) only takes effect after a reboot. If all went well RadioGlobe will start with the welcome screen after about 30 seconds.
+
+### Optional developer deploy workflow
+For development and repeated device updates, the repository includes a Makefile that builds a wheel and deploys it to the device.
+
+From the repo root on your development machine:
+
+```
+make build
+```
+
+This generates a wheel in `dist/` and writes the resolved package version into `VERSION`.
+
+To upload and install the built wheel on the remote device:
+
+```
+make deploy
+```
+
+To force-reinstall the exact built wheel into an existing device venv and verify the installed version matches the local build:
+
+```
+make force-deploy
+```
+
+To inspect the version currently installed on the target device:
+
+```
+make device-version
+```
+
+Use `install.sh` for the first-time device setup or when the device needs the full OS and service installation. Use `make deploy` / `make force-deploy` for iterative code updates once the device is already provisioned.
 
 ### Step 7 - Calibration
 When starting for the first time the encoders need calibrating. Set the reticule cross-hairs to the intersection of the 0 latitude and 0 longitude lines. Now press and hold the middle button until the LED flashes `GREEN` and the display shows `Calibrated`.

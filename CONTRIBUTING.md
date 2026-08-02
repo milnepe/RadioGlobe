@@ -33,8 +33,17 @@ dependencies.
    ```
    uv run pytest
    ```
+   or, if you prefer, from the project root:
+   ```
+   pytest -q
+   ```
 5. Lint with `ruff` (config in `pyproject.toml`).
-6. Open a pull request against `develop` on GitHub. Commit messages for
+6. Build the package locally to validate the installable wheel and version
+   generation:
+   ```
+   make build
+   ```
+7. Open a pull request against `develop` on GitHub. Commit messages for
    merges follow the pattern `<Branch description> (#<PR number>)`.
 
 There is no CI pipeline configured yet — tests and linting must be run
@@ -65,6 +74,10 @@ your own hardware target.
 The `VERSION` file is generated (via `make build` or a version bump) from
 `pyproject.toml` / `git describe`; it's git-ignored and never committed —
 don't edit it by hand.
+
+When you are ready to deploy a built wheel to a device, use `make deploy` for
+normal installs or `make force-deploy` to reinstall the exact wheel into an
+existing `/opt/radioglobe/venv` on the device.
 
 ## Reporting issues
 
