@@ -81,6 +81,28 @@ deploy: build
 		./ $(REMOTE):$(REMOTE_DIR)/ && ssh $(REMOTE) "cd $(REMOTE_DIR) && ./install.sh")
 
 # -----------------------------
+# Force deploy (reinstall wheel and verify installed version)
+# -----------------------------
+force-deploy: build
+	@echo "🚀 Force deploying wheel to $(REMOTE)..."
+	@WHEEL=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
+	if [ -z "$$WHEEL" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
+	echo "Uploading $$WHEEL to $(REMOTE):/tmp/" ; \
+	scp "$$WHEEL" $(REMOTE):/tmp/ ; \
+	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
+	# Install wheel into venv with force-reinstall if venv exists; otherwise rsync+install.sh
+	ssh $(REMOTE) 'if [ -f /opt/radioglobe/venv/bin/pip ]; then exit 0; else exit 1; fi' && \
+	ssh $(REMOTE) "echo 'Installing wheel into existing venv (force reinstall)...' ; /opt/radioglobe/venv/bin/pip install --upgrade --force-reinstall /tmp/radioglobe-*.whl ; mkdir -p /opt/radioglobe/stations || true ; cp /tmp/stations.json /opt/radioglobe/stations/stations.json || true ; /bin/sh -lc '\''INSTALLED_VER=$$((/opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\\\"radioglobe\\\"))") 2>/dev/null || echo unknown); echo $$INSTALLED_VER > /opt/radioglobe/VERSION; echo "RADIOGLOBE_VERSION=$$INSTALLED_VER" > /opt/radioglobe/version.env'\''" || \
+	(rsync -av --delete ./ $(REMOTE):$(REMOTE_DIR)/ && ssh $(REMOTE) "cd $(REMOTE_DIR) && ./install.sh") ; \
+	# Fetch installed version and compare
+	REMOTE_VER=$$(ssh $(REMOTE) 'cat /opt/radioglobe/VERSION 2>/dev/null || /opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\"radioglobe\"))"') ; \
+	LOCAL_VER=$$(cat VERSION 2>/dev/null || echo unknown) ; \
+	echo "Local version: $$LOCAL_VER" ; \
+	echo "Remote version: $$REMOTE_VER" ; \
+	if [ "$$LOCAL_VER" != "$$REMOTE_VER" ]; then echo "Version mismatch: local ($$LOCAL_VER) != remote ($$REMOTE_VER)"; exit 2; fi ; \
+	echo "✅ Force deploy succeeded: versions match ($$LOCAL_VER)"
+
+# -----------------------------
 # Update on device
 # -----------------------------
 update:
