@@ -104,9 +104,18 @@ echo "📦 Installing Python dependencies..."
 sudo -u $RADIOGLOBE_USER \
     $RADIOGLOBE_DIR/venv/bin/python -m pip install --upgrade pip setuptools wheel
 
-# Install the project into the venv (pyproject.toml points to src/). This creates the console script 'radioglobe'.
-sudo -u $RADIOGLOBE_USER \
-    $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR"
+# Install the project into the venv (pyproject.toml points to src/).
+# Prefer a built wheel in $SRC_DIR/dist if present (faster, reproducible), otherwise install from source.
+if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
+    WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
+    echo "📦 Installing wheel: $WHEEL"
+    sudo -u $RADIOGLOBE_USER \
+        $RADIOGLOBE_DIR/venv/bin/pip install "$WHEEL"
+else
+    echo "📦 Installing from source: $SRC_DIR"
+    sudo -u $RADIOGLOBE_USER \
+        $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR"
+fi
 
 # -----------------------------
 # Stations + version (runtime data)

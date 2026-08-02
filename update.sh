@@ -28,9 +28,15 @@ echo "📦 Version: $VERSION"
 # meant to run entirely as the radioglobe user over SSH.
 # -----------------------------
 echo "📂 Installing updated package into venv..."
-# Reinstall the project into the existing venv. This is run as the radioglobe user
-# (update.sh is intended to be executed by that user over SSH), so call the venv pip directly.
-$RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$SRC_DIR"
+# Reinstall the project into the existing venv. Prefer a built wheel in $SRC_DIR/dist if present.
+if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
+    WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
+    echo "📦 Installing wheel: $WHEEL"
+    $RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$WHEEL"
+else
+    echo "📦 Installing from source: $SRC_DIR"
+    $RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$SRC_DIR"
+fi
 
 # NOTE: unlike install.sh, this script does NOT sanitize stations.json
 # (no NaN/query-string cleanup, no jq validation). Only run update.sh
