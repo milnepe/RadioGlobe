@@ -53,13 +53,13 @@ build:
 # -----------------------------
 deploy: build
 	@echo "🚀 Deploying wheel to $(REMOTE)..."
-	@WHEEL=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
-	if [ -z "$$WHEEL" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
-	WHEEL_NAME=$$(basename "$$WHEEL") ; \
+	@WHEEL_PATH=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
+	if [ -z "$$WHEEL_PATH" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
+	WHEEL_NAME=$$(basename "$$WHEEL_PATH") ; \
 	# Remove any previous radioglobe wheels from the remote /tmp so pip sees only the newly uploaded wheel
 	ssh $(REMOTE) 'rm -f /tmp/radioglobe-*.whl || true' ; \
-	echo "Uploading $$WHEEL to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
-	scp "$$WHEEL" $(REMOTE):/tmp/$$WHEEL_NAME ; \
+	echo "Uploading $$WHEEL_PATH to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
+	scp "$$WHEEL_PATH" $(REMOTE):/tmp/$$WHEEL_NAME ; \
 	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
 	# If a venv exists on the device, install into it. Otherwise rsync the repo and run install.sh on the remote.
 	ssh $(REMOTE) 'if [ -f /opt/radioglobe/venv/bin/pip ]; then exit 0; else exit 1; fi' && \
@@ -88,13 +88,13 @@ deploy: build
 # -----------------------------
 force-deploy: build
 	@echo "🚀 Force deploying wheel to $(REMOTE)..."
-	@WHEEL=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
-	if [ -z "$$WHEEL" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
-	WHEEL_NAME=$$(basename "$$WHEEL") ; \
+	@WHEEL_PATH=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
+	if [ -z "$$WHEEL_PATH" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
+	WHEEL_NAME=$$(basename "$$WHEEL_PATH") ; \
 	# Remove any previous radioglobe wheels from the remote /tmp so pip sees only the newly uploaded wheel
 	ssh $(REMOTE) 'rm -f /tmp/radioglobe-*.whl || true' ; \
-	echo "Uploading $$WHEEL to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
-	scp "$$WHEEL" $(REMOTE):/tmp/$$WHEEL_NAME ; \
+	echo "Uploading $$WHEEL_PATH to $(REMOTE):/tmp/$$WHEEL_NAME" ; \
+	scp "$$WHEEL_PATH" $(REMOTE):/tmp/$$WHEEL_NAME ; \
 	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
 	# Install wheel into venv with force-reinstall if venv exists; otherwise rsync+install.sh
 	ssh $(REMOTE) 'if [ -f /opt/radioglobe/venv/bin/pip ]; then exit 0; else exit 1; fi' && \
