@@ -27,8 +27,10 @@ echo "📦 Version: $VERSION"
 # install.sh), so a plain cp works here with no sudo — this script is
 # meant to run entirely as the radioglobe user over SSH.
 # -----------------------------
-echo "📂 Copying application..."
-cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
+echo "📂 Installing updated package into venv..."
+# Reinstall the project into the existing venv. This is run as the radioglobe user
+# (update.sh is intended to be executed by that user over SSH), so call the venv pip directly.
+$RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$SRC_DIR"
 
 # NOTE: unlike install.sh, this script does NOT sanitize stations.json
 # (no NaN/query-string cleanup, no jq validation). Only run update.sh

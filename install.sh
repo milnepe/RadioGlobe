@@ -100,21 +100,22 @@ if [ ! -f "$RADIOGLOBE_DIR/venv/bin/python" ]; then
 fi
 
 echo "📦 Installing Python dependencies..."
+# Ensure pip/setuptools/wheel are recent in the new venv, then install the project
 sudo -u $RADIOGLOBE_USER \
-    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade pip
+    $RADIOGLOBE_DIR/venv/bin/python -m pip install --upgrade pip setuptools wheel
 
+# Install the project into the venv (pyproject.toml points to src/). This creates the console script 'radioglobe'.
 sudo -u $RADIOGLOBE_USER \
-    $RADIOGLOBE_DIR/venv/bin/pip install -r "$SRC_DIR/requirements.txt"
+    $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR"
 
 # -----------------------------
-# Copy application (SAFE: no delete)
+# Stations + version (runtime data)
 # -----------------------------
-echo "📂 Copying application..."
-sudo cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
-
-# Stations + version
+# The Python package is installed into the venv; runtime data such as stations
+# and VERSION remain under $RADIOGLOBE_DIR so they can be edited/updated in-place.
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
+# Write version into the install dir for the service to display
 echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
 echo "RADIOGLOBE_VERSION=$VERSION" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
 

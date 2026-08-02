@@ -73,9 +73,9 @@ git clone https://github.com/milnepe/RadioGlobe
 ```
 
 ### Step 6 - Run installer
-The installation script `install.sh` will pull in all the software packages (quite a few) and setup a virtual environment for Python (required since Bookworm) and setup systemd services to start RadioGlobe on startup.
+The installation script `install.sh` will pull in all the software packages (quite a few), create a Python virtual environment, and install the RadioGlobe Python package into that venv (the project uses a `src/` layout). The installer also installs and enables a systemd user service to start RadioGlobe on startup.
 
-The startup template service `services/radioglobe.service` assumes RadioGlobe is installed in the `radioglobe` users home directory. If not you will need to edit the template accordingly.  
+The startup template service `services/radioglobe.service` assumes RadioGlobe is installed into `/opt/radioglobe` (the installer creates the venv and installs the package there). If you change the install directory you will need to edit the template accordingly.
 
 You can run the installer multiple times if you have any issues.
 ```
