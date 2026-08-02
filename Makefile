@@ -39,9 +39,10 @@ set-version:
 # -----------------------------
 build:
 	@echo "📦 Building version..."
-	@VERSION=$$(git describe --tags --always --dirty 2>/dev/null || echo $(VERSION)); \
+	@python -m pip install --upgrade build setuptools_scm >/dev/null; \
+	VERSION=$$(python -c "from setuptools_scm import get_version; print(get_version())"); \
 	echo $$VERSION > VERSION; \
-	python -m pip install --upgrade build && python -m build --wheel --outdir dist; \
+	python -m build --wheel --outdir dist; \
 	echo "Version: $$VERSION"
 
 # -----------------------------

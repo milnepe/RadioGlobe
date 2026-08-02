@@ -36,6 +36,7 @@ radioglobe = "radioglobe.cli:main"
 # write the resolved version into the package so runtime can import it
 write_to = "src/radioglobe/_version.py"
 tag_regex = "^v?(?P<version>\\d+\\.\\d+\\.\\d+)$"
+local_scheme = "node-and-date"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
