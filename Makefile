@@ -53,7 +53,7 @@ build:
 # -----------------------------
 deploy: build
 	@echo "🚀 Deploying wheel to $(REMOTE)..."; \
-	@WHEEL_PATH=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
+	WHEEL_PATH=$(shell ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
 	if [ -z "$$WHEEL_PATH" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
 	./scripts/deploy_remote.sh "$$WHEEL_PATH" $(REMOTE) $(REMOTE_DIR)
 
@@ -62,7 +62,7 @@ deploy: build
 # -----------------------------
 force-deploy: build
 	@echo "🚀 Force deploying wheel to $(REMOTE)..."; \
-	@WHEEL_PATH=$$(ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
+	WHEEL_PATH=$(shell ls dist/radioglobe-*.whl 2>/dev/null | tail -n1) ; \
 	if [ -z "$$WHEEL_PATH" ]; then echo "No wheel found in dist/; run 'make build' first"; exit 1; fi ; \
 	./scripts/force_deploy_remote.sh "$$WHEEL_PATH" $(REMOTE) $(REMOTE_DIR) ; \
 	REMOTE_VER=$$(ssh $(REMOTE) 'cat /opt/radioglobe/VERSION 2>/dev/null || /opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\"radioglobe\"))"') ; \
