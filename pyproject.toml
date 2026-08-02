@@ -18,6 +18,7 @@ dependencies = [
     "rpi-lgpio>=0.6",
     "smbus>=1.1.post2",
     "spidev>=3.7",
+    "liquidcrystal-i2c @ git+https://github.com/pl31/python-liquidcrystal_i2c.git@e26e4d22f039e9a2c04580dda072e8ca9693d1bb",
 ]
 
 [dependency-groups]
