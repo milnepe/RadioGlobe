@@ -4,6 +4,8 @@ set -e
 RADIOGLOBE_DIR=/opt/radioglobe
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+cd "$SRC_DIR"
+
 echo "🚀 Updating RadioGlobe..."
 echo "Safe for small code changes only — copies files and restarts the"
 echo "service. Touches no system configuration (OS deps, dtoverlay,"
@@ -27,8 +29,16 @@ echo "📦 Version: $VERSION"
 # install.sh), so a plain cp works here with no sudo — this script is
 # meant to run entirely as the radioglobe user over SSH.
 # -----------------------------
-echo "📂 Copying application..."
-cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
+echo "📂 Installing updated package into venv..."
+# Reinstall the project into the existing venv. Prefer a built wheel in $SRC_DIR/dist if present.
+if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1; then
+    WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
+    echo "📦 Installing wheel: $WHEEL"
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR/dist/$WHEEL"
+else
+    echo "📦 Installing from source: $SRC_DIR"
+    $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR"
+fi
 
 # NOTE: unlike install.sh, this script does NOT sanitize stations.json
 # (no NaN/query-string cleanup, no jq validation). Only run update.sh
@@ -36,8 +46,11 @@ cp -r "$SRC_DIR/radioglobe" "$RADIOGLOBE_DIR/"
 # dirty one just ships the dirty data to the device again. Use install.sh
 # if stations.json needs cleaning.
 cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
-echo "RADIOGLOBE_VERSION=$VERSION" > "$RADIOGLOBE_DIR/version.env"
+# Capture the installed package version from the venv and write it for the service
+INSTALLED_VER=$($RADIOGLOBE_DIR/venv/bin/python -c "import importlib.metadata as m; print(m.version('radioglobe'))" 2>/dev/null || echo "$VERSION")
+
+echo "$INSTALLED_VER" > "$RADIOGLOBE_DIR/VERSION"
+echo "RADIOGLOBE_VERSION=$INSTALLED_VER" > "$RADIOGLOBE_DIR/version.env"
 
 # -----------------------------
 # Restart the service to pick up the new code

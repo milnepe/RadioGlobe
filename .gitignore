@@ -8,3 +8,4 @@ venv
 *.egg-info
 dist/
 build/
+src/radioglobe/_version.py

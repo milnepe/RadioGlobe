@@ -1,6 +1,16 @@
 """Global settings"""
+import os
 
-STATIONS_JSON = "stations/stations.json"
+# Allow overriding the stations file via env var for testing and deployment.
+# Prefer an explicit RADIOGLOBE_STATIONS path, then the system install path
+# (/opt/radioglobe/stations/stations.json), and finally the repo-relative
+# default 'stations/stations.json'.
+DEFAULT_STATIONS = "stations/stations.json"
+SYSTEM_STATIONS = "/opt/radioglobe/stations/stations.json"
+
+STATIONS_JSON = os.environ.get("RADIOGLOBE_STATIONS") or (
+    SYSTEM_STATIONS if os.path.exists(SYSTEM_STATIONS) else DEFAULT_STATIONS
+)
 
 # Higher values of fuzziness increases the search area.
 # May include more than one city may be included if they are located close together.
