@@ -25,7 +25,11 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["radioglobe*"]
+
+[project.scripts]
+radioglobe = "radioglobe.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
