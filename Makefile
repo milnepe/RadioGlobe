@@ -93,7 +93,7 @@ force-deploy: build
 	# Install wheel into venv with force-reinstall if venv exists; otherwise rsync+install.sh
 	ssh $(REMOTE) 'if [ -f /opt/radioglobe/venv/bin/pip ]; then exit 0; else exit 1; fi' && \
 	ssh $(REMOTE) "echo 'Installing wheel into existing venv (force reinstall)...' ; /opt/radioglobe/venv/bin/pip install --upgrade --force-reinstall /tmp/radioglobe-*.whl ; mkdir -p /opt/radioglobe/stations || true ; cp /tmp/stations.json /opt/radioglobe/stations/stations.json || true ; /bin/sh -lc '\''INSTALLED_VER=$$((/opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\\\"radioglobe\\\"))") 2>/dev/null || echo unknown); echo $$INSTALLED_VER > /opt/radioglobe/VERSION; echo "RADIOGLOBE_VERSION=$$INSTALLED_VER" > /opt/radioglobe/version.env'\''" || \
-	(rsync -av --delete ./ $(REMOTE):$(REMOTE_DIR)/ && ssh $(REMOTE) "cd $(REMOTE_DIR) && ./install.sh") ; \
+	(echo "No venv found on remote at /opt/radioglobe/venv — aborting force-deploy. Run install.sh on the device or use 'make deploy' for a fresh install."; exit 3) ; \
 	# Fetch installed version and compare
 	REMOTE_VER=$$(ssh $(REMOTE) 'cat /opt/radioglobe/VERSION 2>/dev/null || /opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\"radioglobe\"))"') ; \
 	LOCAL_VER=$$(cat VERSION 2>/dev/null || echo unknown) ; \
