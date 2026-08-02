@@ -57,9 +57,8 @@ deploy: build
 	scp stations/stations.json $(REMOTE):/tmp/stations.json || true ; \
 	# If a venv exists on the device, install into it. Otherwise rsync the repo and run install.sh on the remote.
 	ssh $(REMOTE) 'if [ -f /opt/radioglobe/venv/bin/pip ]; then exit 0; else exit 1; fi' && \
-	ssh $(REMOTE) "WHEEL=/tmp/$$(basename $$WHEEL); \
-	    echo 'Installing wheel into existing venv...' ; \
-	    /opt/radioglobe/venv/bin/pip install --upgrade $$WHEEL ; \
+	ssh $(REMOTE) "echo 'Installing wheel into existing venv...' ; \
+	    /opt/radioglobe/venv/bin/pip install --upgrade /tmp/radioglobe-*.whl ; \
 	    mkdir -p /opt/radioglobe/stations || true ; \
 	    cp /tmp/stations.json /opt/radioglobe/stations/stations.json || true ; \
 	    INSTALLED_VER=$$(/opt/radioglobe/venv/bin/python -c 'import importlib.metadata as m; print(m.version("radioglobe"))' 2>/dev/null || echo unknown) ; \
