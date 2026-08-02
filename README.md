@@ -61,15 +61,14 @@ sudo raspi-config
 4. Reboot
 
 ### Step 5 - RadioGlobe download
-Install Git and download the RadioGlobe source from GitHub:
+Install Git and download the RadioGlobe source from GitHub. Check out the latest version tag, for example `v0.6.0`, using the development repo as documented below:
 ```
 cd ~
 sudo apt install git
-git clone https://github.com/DesignSparkRS/RadioGlobe
-```
-Or the development system:
-```
 git clone https://github.com/milnepe/RadioGlobe
+cd RadioGlobe
+git fetch --tags
+git checkout v0.6.0
 ```
 
 ### Step 6 - Run installer
