@@ -38,8 +38,11 @@ $RADIOGLOBE_DIR/venv/bin/pip install --no-deps --upgrade "$SRC_DIR"
 # dirty one just ships the dirty data to the device again. Use install.sh
 # if stations.json needs cleaning.
 cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-cp "$SRC_DIR/VERSION" "$RADIOGLOBE_DIR/VERSION"
-echo "RADIOGLOBE_VERSION=$VERSION" > "$RADIOGLOBE_DIR/version.env"
+# Capture the installed package version from the venv and write it for the service
+INSTALLED_VER=$($RADIOGLOBE_DIR/venv/bin/python -c "import importlib.metadata as m; print(m.version('radioglobe'))" 2>/dev/null || echo "$VERSION")
+
+echo "$INSTALLED_VER" > "$RADIOGLOBE_DIR/VERSION"
+echo "RADIOGLOBE_VERSION=$INSTALLED_VER" > "$RADIOGLOBE_DIR/version.env"
 
 # -----------------------------
 # Restart the service to pick up the new code

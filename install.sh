@@ -115,9 +115,11 @@ sudo -u $RADIOGLOBE_USER \
 # and VERSION remain under $RADIOGLOBE_DIR so they can be edited/updated in-place.
 sudo mkdir -p "$RADIOGLOBE_DIR/stations"
 sudo cp "$SRC_DIR/stations/stations.json" "$RADIOGLOBE_DIR/stations/"
-# Write version into the install dir for the service to display
-echo "$VERSION" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
-echo "RADIOGLOBE_VERSION=$VERSION" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
+# Determine installed package version from the venv and write it for the service to display
+INSTALLED_VER=$($RADIOGLOBE_DIR/venv/bin/python -c "import importlib.metadata as m; print(m.version('radioglobe'))" 2>/dev/null || echo "$VERSION")
+
+echo "$INSTALLED_VER" | sudo tee "$RADIOGLOBE_DIR/VERSION" > /dev/null
+echo "RADIOGLOBE_VERSION=$INSTALLED_VER" | sudo tee "$RADIOGLOBE_DIR/version.env" > /dev/null
 
 sudo chown -R $RADIOGLOBE_USER:$RADIOGLOBE_USER $RADIOGLOBE_DIR
 

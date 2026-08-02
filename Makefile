@@ -3,9 +3,8 @@ APP_NAME=radioglobe
 REMOTE=radioglobe@radioglobe.local
 REMOTE_DIR=~/RadioGlobe
 
-VERSION_FILE=pyproject.toml
-
-VERSION=$(shell grep '^version' $(VERSION_FILE) | cut -d '"' -f2)
+# Version is derived from git tags for developer builds
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "0+dev")
 
 .PHONY: version
 version:
@@ -42,6 +41,7 @@ build:
 	@echo "📦 Building version..."
 	@VERSION=$$(git describe --tags --always --dirty 2>/dev/null || echo $(VERSION)); \
 	echo $$VERSION > VERSION; \
+	python -m pip install --upgrade build && python -m build --wheel --outdir dist; \
 	echo "Version: $$VERSION"
 
 # -----------------------------
