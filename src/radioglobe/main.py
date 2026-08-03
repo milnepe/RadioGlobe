@@ -8,11 +8,11 @@ from radioglobe.buttons import (
     _VOLUME_STEP, _VOLUME_ON_LEVEL, _VOLUME_OFF_LEVEL, _LED_FLASH_SHORT,
 )
 from radioglobe.constants import (
-    COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
     MODE_CITY, MODE_STATION,
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
+from radioglobe.dial import _LED_FLASH_DIAL
 from radioglobe.hal.protocols import (
     AudioPlayerProtocol,
     DialProtocol,
@@ -22,10 +22,11 @@ from radioglobe.hal.protocols import (
 )
 from radioglobe.navigation import Navigator
 from radioglobe.radio_config import (
-    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
+    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_LONG,
     LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
     STREAM_CHECK_INTERVAL,
 )
+from radioglobe.rgb_led import COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED
 
 
 class App:
@@ -161,7 +162,7 @@ class App:
             direction = await self.dial.queue.get()
             if not self.nav.state.is_complete():
                 continue
-            asyncio.create_task(self.led.flash(COLOUR_BLUE, LED_FLASH_DIAL))
+            asyncio.create_task(self.led.flash(COLOUR_BLUE, _LED_FLASH_DIAL))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )

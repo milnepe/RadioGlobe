@@ -31,10 +31,12 @@ MESSAGE_DISPLAY_DURATION = 2   # startup splash, calibrating, shutdown message h
 # Stream health check grace period (seconds)
 STREAM_CHECK_INTERVAL = 3
 
-# LED flash durations (seconds). Button-press feedback duration lives in
-# buttons.py instead (_LED_FLASH_SHORT) - see note above.
+# LED flash duration (seconds) shared by two unrelated App-level events
+# (city latch in _encoder_loop, stream error in _monitor_stream) - genuine
+# app-behavior tuning, not owned by one hardware module. Button-press and
+# dial-turn feedback durations live in buttons.py/dial.py instead
+# (_LED_FLASH_SHORT/_LED_FLASH_DIAL) since each has exactly one owner.
 LED_FLASH_LONG = 0.5    # city latch / stream error indication
-LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
 
 # State persistence
 STATE_CACHE_PATH = "~/cache/radioglobe.json"

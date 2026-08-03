@@ -450,6 +450,13 @@ CW/CCW direction — confirmed working on-device.
 - `main.py`'s `_dial_loop()` is unchanged: it still consumes `await self.dial.queue.get()`
   — the kernel-driver migration is entirely internal to `dial.py`.
 
+`_LED_FLASH_DIAL` (§8) — the dial-turn LED flash duration — is a private
+constant here rather than in `radio_config.py`: `_dial_loop()` is its only
+caller, matching the same reasoning as `_LED_FLASH_SHORT` in `buttons.py`
+(§4.7). Note the cost: `main.py` importing this constant means it now
+transitively requires `evdev` to be importable, not just `RPi.GPIO` — see
+§4.14's residual import gap.
+
 ---
 
 ### 4.7 `buttons.py` — Button Manager
@@ -598,6 +605,16 @@ Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
 
 This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7. `RGBLed.stop()` mirrors this on teardown: it turns the LED off, then calls `GPIO.cleanup(list(self.pins.values()))` to release only its own 3 pins, rather than relying on a process-wide `GPIO.cleanup()` call in `main.py`.
 
+`COLOUR_RED`/`COLOUR_GREEN`/`COLOUR_BLUE`/`COLOUR_WHITE`/`COLOUR_OFF` are
+public constants owned here (moved from `constants.py`), and `RGBLed.COLOURS`
+(the colour-name → RGB-tuple mapping) is built from them rather than
+separately hardcoding the same 5 string keys — previously these were two
+independent definitions of the same vocabulary with no structural link, so a
+typo in either place would have broken silently. `main.py` and the
+integration test scripts (`led_test.py`, `main_test.py`,
+`streaming_cvlc_test.py`) import the colour names from `radioglobe.rgb_led`
+now, not `radioglobe.constants`.
+
 **Colour conventions used in `main.py`:**
 - Green: city found/latched, button press feedback
 - Blue: dial turned, volume button press
@@ -694,11 +711,15 @@ approach remains the way to test `AsyncButtonManager`/`AsyncButton` themselves.
 `BOTTOM_BUTTON` from `buttons.py` at module scope for the button-definition
 constants, and `buttons.py` imports `RPi.GPIO` at module scope — so
 `import radioglobe.main` (and therefore `radioglobe.cli`) still requires
-`RPi.GPIO` to be importable (real or stubbed), independent of this HAL. Any
-test importing `radioglobe.main` needs the same
-`sys.modules.setdefault("RPi.GPIO", MagicMock())` stub `tests/buttons_test.py`
-already uses (see `tests/main_test.py`). `radioglobe.hal` itself has no such
-requirement — it never imports `radioglobe.buttons` or `radioglobe.main`.
+`RPi.GPIO` to be importable (real or stubbed), independent of this HAL. The
+same is now true of `evdev`: `main.py` also imports `_LED_FLASH_DIAL` from
+`dial.py` at module scope (§4.6), and `dial.py` imports `evdev` at module
+scope — so both `RPi.GPIO` and `evdev` need to be importable (real or
+stubbed) to `import radioglobe.main`. Any test importing `radioglobe.main`
+needs both stubs — `sys.modules.setdefault("RPi.GPIO", MagicMock())` and
+`sys.modules.setdefault("evdev", MagicMock())`, as `tests/main_test.py` does.
+`radioglobe.hal` itself has no such requirement — it never imports
+`radioglobe.buttons`, `radioglobe.dial`, or `radioglobe.main`.
 
 Pi-specific packages (`evdev`, `lgpio`, `rpi-lgpio`, `smbus`, `spidev`,
 `liquidcrystal-i2c`, `python-vlc`) moved from `pyproject.toml`'s base
@@ -822,7 +843,7 @@ module — `main.py` and the integration test scripts consume the higher-level
 | `DEFAULT_VOLUME` | 50 | `main.py` — `App.__init__` startup volume, unrelated to button presses |
 | `BRIEF_DISPLAY_DURATION` / `MESSAGE_DISPLAY_DURATION` | 0.5 / 2 | `main.py` — display hold durations |
 | `STREAM_CHECK_INTERVAL` | 3 | `main.py` — stream health check grace period |
-| `LED_FLASH_LONG` / `LED_FLASH_DIAL` | 0.5 / 0.1 | `main.py` — LED feedback durations passed to `RGBLed.flash()` from the encoder/dial loops |
+| `LED_FLASH_LONG` | 0.5 | `main.py` — LED feedback duration for two unrelated events (`_encoder_loop`'s city latch, `_monitor_stream`'s stream error) with no single owning hardware module, so it stays here rather than moving to `positional_encoders.py`/`audio_async.py`/`rgb_led.py` |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
 | `LOG_LEVEL` | `"DEBUG"` | `main.py` — `__main__` logging setup |
 
@@ -833,7 +854,9 @@ module — `main.py` and the integration test scripts consume the higher-level
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
 | `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
 | `_VOLUME_STEP` / `_VOLUME_ON_LEVEL` / `_VOLUME_OFF_LEVEL` / `_LED_FLASH_SHORT` | 10 / 80 / 0 / 0.2 | `buttons.py` — imported by name into `main.py`'s button-callback bodies (§4.7); fixed by this board's 4-button UX (volume step/on/off levels, press-feedback flash duration), not user-tunable app behavior, so not in `radio_config.py` |
+| `_LED_FLASH_DIAL` | 0.1 | `dial.py` (§4.6) — imported by name into `main.py`'s `_dial_loop()`; its only caller, same reasoning as `_LED_FLASH_SHORT` above. Importing it makes `main.py` transitively require `evdev` in addition to `RPi.GPIO` (§4.14's residual import gap) |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
+| `COLOUR_RED` / `COLOUR_GREEN` / `COLOUR_BLUE` / `COLOUR_WHITE` / `COLOUR_OFF` | `"red"` / `"green"` / `"blue"` / `"white"` / `"off"` | `rgb_led.py` (§4.10) — public (not underscore-prefixed, unlike this table's other rows), since `main.py` and integration test scripts need them; moved from `constants.py` to eliminate a duplicate definition of the same vocabulary in `RGBLed.COLOURS` |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
 | SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
@@ -881,7 +904,7 @@ uv run pytest
 | `hal/protocols_test.py` | `isinstance(FakeX(), XProtocol)` for all 6 fakes — a regression guard that fakes stay in sync with the Protocol shape |
 | `main_test.py` | `App`'s `_encoder_loop`/`_dial_loop`/`_monitor_stream`/`save_state`/`load_state` (§4.1, §4.14), driven end-to-end via HAL fakes with no real hardware — distinct from the hardware-only `tests/integration/main_test.py` |
 
-All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` and `main_test.py` stub `RPi.GPIO` in `sys.modules` before importing `radioglobe.buttons`/`radioglobe.main`, since those modules still touch real GPIO functions/imports at construction/module-load time (§4.14's residual import gap). `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons` or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
+All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` stubs `RPi.GPIO` in `sys.modules` before importing `radioglobe.buttons`, since that module still touches real GPIO functions at construction/module-load time; `main_test.py` stubs both `RPi.GPIO` and `evdev` before importing `radioglobe.main`, since `main.py` transitively imports both `buttons.py` and `dial.py` at module scope (§4.14's residual import gap). `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons`, `radioglobe.dial`, or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
 
 **Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi. See [tests/integration/README.md](tests/integration/README.md) for the full, maintained list, usage examples, and hardware setup notes — duplicating it here previously went stale (a `simulation_test.py` that never existed lingered in this table for a while; three scripts also silently broke when `led_task` was folded into `RGBLed.flash()`, since nothing exercises them automatically). Highlights:
 
