@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.3] - 2026-08-03
+### Changed
+- Simplified `AsyncDial` (`dial.py`): removed the software debounce/coalescing
+  timer added in 0.5.x to filter kernel `REL_X` contact-bounce bursts.
+  On-device testing with the new `tests/integration/encoder_hardware_test.py`
+  script showed raw per-event direction reporting is reliable, so each event
+  now pushes its direction onto the queue directly.
+- Swapped the rotary-encoder overlay's `pin_a`/`pin_b` (now 18/17) in
+  `install.sh` to correct the physical CW/CCW direction of the dial.
+
+### Fixed
+- Corrected `ARCHITECTURE.md`, `tests/integration/README.md`, and `install.sh`
+  comments that mislabeled the two encoder pins as a clock/direction pair —
+  they're the encoder's two quadrature switch outputs (A/B).
+
 ## [0.6.0] - 2026-08-02
 ### Added
 - Repackaged project into a standard src/ layout and added a console
