@@ -188,9 +188,10 @@ The `App` class is the central controller, but a much thinner one since the
 navigation state. `App` itself now handles only: hardware construction, the
 two event-driven loops, button dispatch, and `run()`.
 
-`run()` wires up button definitions, restores any saved state, and then
-starts and gathers the `_encoder_loop()` and `_dial_loop()` tasks — these
-two event-driven loops are the app's actual "main loop."
+`run()` calls `buttons.create_button_manager()` (§4.7) to wire its own
+callback methods to this board's fixed button layout, restores any saved
+state, and then starts and gathers the `_encoder_loop()` and `_dial_loop()`
+tasks — these two event-driven loops are the app's actual "main loop."
 
 **State** lives on `self.nav.state` (an `AppState` — §4.2); `App` no longer
 holds it directly. `save_state()`/`load_state()` are thin wrappers around
@@ -467,19 +468,38 @@ The name+pin pairing is fixed by this project's custom board (Jog/Top/Mid/Bottom
 are wired to specific header pins, not an app-level choice), so `buttons.py`
 owns it completely: `JOG_BUTTON`, `TOP_BUTTON`, `MID_BUTTON`, `BOTTOM_BUTTON`
 are module-level `ButtonDefinition` constants with `name`/`pin` set and every
-callback field left at its `None` default. `main.py` never imports a pin
-number — it attaches its own callbacks via `NamedTuple._replace()`:
+callback field left at its `None` default. The wiring itself — attaching a
+caller's callbacks to those four fixed slots and constructing the manager —
+is also fixed by the board, so it lives here too, as `create_button_manager()`:
 ```python
-button_definitions = [
-    JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
-    TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
-    ...
-]
+def create_button_manager(loop, *, jog_short=None, jog_press=None, ...) -> AsyncButtonManager:
+    button_definitions = [
+        JOG_BUTTON._replace(short_cb=jog_short, press_cb=jog_press),
+        TOP_BUTTON._replace(short_cb=top_short, long_cb=top_long, press_cb=top_press),
+        ...
+    ]
+    return AsyncButtonManager(button_definitions, loop)
 ```
+`main.py`'s `run()` (§4.1) calls this once with its own callback methods —
+it never imports `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` or
+`AsyncButtonManager` itself, only `create_button_manager`. The callback
+*bodies* (`_handle_short_jog` etc.) stay on `App`, unchanged — they orchestrate
+`self.nav`/`self.display`/`self.led`/`self.encoders`/`self.audio_player`, which
+`buttons.py` deliberately knows nothing about (§4.14's HAL boundary). Like
+`hal/factory.py`'s `build_hardware()`, `create_button_manager()` only
+constructs — `run()` still calls `await button_manager.start()` and creates
+the `handle_events()` task itself.
+
 The underlying `_PIN_BTN_*` constants (§8) are truly private — nothing
 outside `buttons.py` imports them; callers that need a specific pin (e.g.
 the single-button integration test scripts under `tests/integration/`) read
-`TOP_BUTTON.pin` etc. instead.
+`TOP_BUTTON.pin` etc. instead. `_VOLUME_STEP`/`_VOLUME_ON_LEVEL`/
+`_VOLUME_OFF_LEVEL`/`_LED_FLASH_SHORT` (§8) are similarly private to this
+module despite being used only inside `App`'s button-callback bodies in
+`main.py` — the values themselves are fixed by this board's 4-button UX, not
+tunable app behavior, so `main.py` imports them by name rather than
+`radio_config.py` holding them (same pattern as `_ENCODER_RESOLUTION`,
+owned by `database.py` and imported by `positional_encoders.py`, §4.5).
 
 `AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
 
@@ -794,10 +814,10 @@ module — `main.py` and the integration test scripts consume the higher-level
 | `STATIONS_JSON` | `"stations/stations.json"` | `navigation.py` — station data path |
 | `FUZZINESS` | 3 | `navigation.py` — `Navigator.__init__` default, builds the 25-point (5×5) search zone; also logged (but not otherwise used) in `main.py`'s `_encoder_loop()` debug output |
 | `STICKINESS` | 2 | `main.py` — unlatch threshold in encoder steps |
-| `VOLUME_STEP` / `DEFAULT_VOLUME` / `VOLUME_ON_LEVEL` / `VOLUME_OFF_LEVEL` | 10 / 50 / 80 / 0 | `main.py` — volume handling |
+| `DEFAULT_VOLUME` | 50 | `main.py` — `App.__init__` startup volume, unrelated to button presses |
 | `BRIEF_DISPLAY_DURATION` / `MESSAGE_DISPLAY_DURATION` | 0.5 / 2 | `main.py` — display hold durations |
 | `STREAM_CHECK_INTERVAL` | 3 | `main.py` — stream health check grace period |
-| `LED_FLASH_SHORT` / `LED_FLASH_LONG` / `LED_FLASH_DIAL` | 0.2 / 0.5 / 0.1 | `main.py` — LED feedback durations passed to `RGBLed.flash()` |
+| `LED_FLASH_LONG` / `LED_FLASH_DIAL` | 0.5 / 0.1 | `main.py` — LED feedback durations passed to `RGBLed.flash()` from the encoder/dial loops |
 | `STATE_CACHE_PATH` | `"~/cache/radioglobe.json"` | `main.py` — default arg for `App.save_state()`, passed explicitly to `self.nav.load_state()`; also `navigation.py` — default arg for `Navigator.save_state()`/`load_state()` |
 | `LOG_LEVEL` | `"DEBUG"` | `main.py` — `__main__` logging setup |
 
@@ -807,6 +827,7 @@ module — `main.py` and the integration test scripts consume the higher-level
 |---|---|---|
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
 | `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
+| `_VOLUME_STEP` / `_VOLUME_ON_LEVEL` / `_VOLUME_OFF_LEVEL` / `_LED_FLASH_SHORT` | 10 / 80 / 0 / 0.2 | `buttons.py` — imported by name into `main.py`'s button-callback bodies (§4.7); fixed by this board's 4-button UX (volume step/on/off levels, press-feedback flash duration), not user-tunable app behavior, so not in `radio_config.py` |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
