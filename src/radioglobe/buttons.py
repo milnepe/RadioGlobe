@@ -31,6 +31,13 @@ class ButtonDefinition(NamedTuple):
     press_cb: Optional[Callable] = None
 
 
+class ButtonCallbacks(NamedTuple):
+    """ButtonDefinition minus name/pin - just the callback slots a caller wires up."""
+    short_cb: Optional[Callable] = None
+    long_cb: Optional[Callable] = None
+    press_cb: Optional[Callable] = None
+
+
 # Name+pin pairs for the 4 buttons wired to this project's custom board -
 # fixed by the hardware, not a choice callers make. Callers attach their own
 # callbacks with e.g. TOP_BUTTON._replace(short_cb=..., long_cb=..., press_cb=...);
@@ -164,10 +171,10 @@ class AsyncButtonManager:
 def create_button_manager(
     loop,
     *,
-    jog_short=None, jog_press=None,
-    top_short=None, top_long=None, top_press=None,
-    mid_short=None, mid_long=None, mid_press=None,
-    bottom_short=None, bottom_long=None, bottom_press=None,
+    jog: ButtonCallbacks = ButtonCallbacks(),
+    top: ButtonCallbacks = ButtonCallbacks(),
+    mid: ButtonCallbacks = ButtonCallbacks(),
+    bottom: ButtonCallbacks = ButtonCallbacks(),
 ) -> AsyncButtonManager:
     """Wire the given callbacks to this board's fixed 4-button layout and
     construct the manager.
@@ -176,9 +183,9 @@ def create_button_manager(
     hardware object (see hal/factory.py's build_hardware()).
     """
     button_definitions = [
-        JOG_BUTTON._replace(short_cb=jog_short, press_cb=jog_press),
-        TOP_BUTTON._replace(short_cb=top_short, long_cb=top_long, press_cb=top_press),
-        MID_BUTTON._replace(short_cb=mid_short, long_cb=mid_long, press_cb=mid_press),
-        BOTTOM_BUTTON._replace(short_cb=bottom_short, long_cb=bottom_long, press_cb=bottom_press),
+        JOG_BUTTON._replace(**jog._asdict()),
+        TOP_BUTTON._replace(**top._asdict()),
+        MID_BUTTON._replace(**mid._asdict()),
+        BOTTOM_BUTTON._replace(**bottom._asdict()),
     ]
     return AsyncButtonManager(button_definitions, loop)

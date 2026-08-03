@@ -472,10 +472,15 @@ callback field left at its `None` default. The wiring itself — attaching a
 caller's callbacks to those four fixed slots and constructing the manager —
 is also fixed by the board, so it lives here too, as `create_button_manager()`:
 ```python
-def create_button_manager(loop, *, jog_short=None, jog_press=None, ...) -> AsyncButtonManager:
+class ButtonCallbacks(NamedTuple):        # ButtonDefinition minus name/pin
+    short_cb: Optional[Callable] = None
+    long_cb: Optional[Callable] = None
+    press_cb: Optional[Callable] = None
+
+def create_button_manager(loop, *, jog=ButtonCallbacks(), top=ButtonCallbacks(), ...) -> AsyncButtonManager:
     button_definitions = [
-        JOG_BUTTON._replace(short_cb=jog_short, press_cb=jog_press),
-        TOP_BUTTON._replace(short_cb=top_short, long_cb=top_long, press_cb=top_press),
+        JOG_BUTTON._replace(**jog._asdict()),
+        TOP_BUTTON._replace(**top._asdict()),
         ...
     ]
     return AsyncButtonManager(button_definitions, loop)

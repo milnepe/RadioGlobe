@@ -4,7 +4,7 @@ import subprocess
 from typing import Optional
 
 from radioglobe.buttons import (
-    create_button_manager,
+    ButtonCallbacks, create_button_manager,
     _VOLUME_STEP, _VOLUME_ON_LEVEL, _VOLUME_OFF_LEVEL, _LED_FLASH_SHORT,
 )
 from radioglobe.constants import (
@@ -250,10 +250,10 @@ class App:
 
         button_manager = create_button_manager(
             loop,
-            jog_short=self._handle_short_jog, jog_press=self._on_jog_press,
-            top_short=self._handle_short_top, top_long=self._handle_long_top, top_press=self._on_sound_press,
-            mid_short=self._handle_short_mid, mid_long=self._handle_long_mid, mid_press=self._on_mid_press,
-            bottom_short=self._handle_short_bottom, bottom_long=self._handle_long_bottom, bottom_press=self._on_sound_press,
+            jog=ButtonCallbacks(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+            top=ButtonCallbacks(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+            mid=ButtonCallbacks(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
+            bottom=ButtonCallbacks(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
         )
         await button_manager.start()
         asyncio.create_task(button_manager.handle_events())
