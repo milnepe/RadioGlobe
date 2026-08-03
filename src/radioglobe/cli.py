@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from radioglobe.hal.factory import build_hardware
 from radioglobe.main import App
 from radioglobe.radio_config import LOG_LEVEL
 
@@ -14,7 +15,7 @@ def main() -> None:
 
     logging.info("Starting RadioGlobe...")
 
-    asyncio.run(App().run())
+    asyncio.run(App(*build_hardware()).run())
 
 
 if __name__ == "__main__":

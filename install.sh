@@ -114,11 +114,11 @@ if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1
     WHEEL="$SRC_DIR/dist/$(ls "$SRC_DIR/dist/radioglobe-"*.whl | tail -n1 | xargs -n1 basename)"
     echo "📦 Installing wheel: $WHEEL"
     sudo -u $RADIOGLOBE_USER \
-        $RADIOGLOBE_DIR/venv/bin/pip install "$WHEEL"
+        $RADIOGLOBE_DIR/venv/bin/pip install "$WHEEL[pi]"
 else
     echo "📦 Installing from source: $SRC_DIR"
     sudo -u $RADIOGLOBE_USER \
-        $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR"
+        $RADIOGLOBE_DIR/venv/bin/pip install "$SRC_DIR[pi]"
 fi
 
 # -----------------------------

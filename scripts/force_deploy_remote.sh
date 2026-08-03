@@ -26,7 +26,7 @@ if ! ssh "$REMOTE" '[ -f /opt/radioglobe/venv/bin/pip ]'; then
 fi
 
 echo "Installing wheel into existing venv (force reinstall)..."
-ssh "$REMOTE" "/opt/radioglobe/venv/bin/pip install --upgrade --force-reinstall /tmp/$WHEEL_NAME"
+ssh "$REMOTE" "/opt/radioglobe/venv/bin/pip install --upgrade --force-reinstall '/tmp/$WHEEL_NAME[pi]'"
 
 # Ensure stations copied and VERSION written
 ssh "$REMOTE" "mkdir -p /opt/radioglobe/stations || true; cp /tmp/stations.json /opt/radioglobe/stations/stations.json || true"

@@ -11,10 +11,18 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.12.13",
+    "requests>=2.32.4",
+]
+
+[project.optional-dependencies]
+# Hardware-backed modules (dial.py, positional_encoders.py, buttons.py,
+# rgb_led.py, display.py, audio_async.py) need these; the core package,
+# radioglobe.hal's Protocols/fakes, and the unit test suite do not.
+# Install with `pip install .[pi]` (or `uv sync --extra pi`) on the device.
+pi = [
     "evdev>=1.7.0",
     "lgpio>=0.2.2.0",
     "python-vlc>=3.0.21203",
-    "requests>=2.32.4",
     "rpi-lgpio>=0.6",
     "smbus>=1.1.post2",
     "spidev>=3.7",

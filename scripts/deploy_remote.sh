@@ -17,7 +17,7 @@ scp stations/stations.json "$REMOTE:/tmp/stations.json" || true
 # If venv exists, install into it; otherwise rsync and run install.sh on remote
 if ssh "$REMOTE" '[ -f /opt/radioglobe/venv/bin/pip ]'; then
     echo "Installing wheel into existing venv on $REMOTE..."
-    ssh "$REMOTE" "/opt/radioglobe/venv/bin/pip install --upgrade /tmp/$WHEEL_NAME"
+    ssh "$REMOTE" "/opt/radioglobe/venv/bin/pip install --upgrade '/tmp/$WHEEL_NAME[pi]'"
     ssh "$REMOTE" "mkdir -p /opt/radioglobe/stations || true; cp /tmp/stations.json /opt/radioglobe/stations/stations.json || true"
     INSTALLED_VER=$(ssh "$REMOTE" '/opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\"radioglobe\"))"' 2>/dev/null || echo unknown)
     ssh "$REMOTE" "echo \"$INSTALLED_VER\" > /opt/radioglobe/VERSION; echo RADIOGLOBE_VERSION=$INSTALLED_VER > /opt/radioglobe/version.env; systemctl --user restart radioglobe.service || true"

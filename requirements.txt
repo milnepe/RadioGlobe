@@ -1,3 +1,5 @@
+# evdev, lgpio, liquidcrystal-i2c, python-vlc, rpi-lgpio, smbus and spidev
+# correspond to pyproject.toml's `pi` extra (pip install .[pi]).
 evdev==1.9.3
 iniconfig==2.1.0
 lgpio==0.2.2.0

@@ -3,7 +3,6 @@ import logging
 import subprocess
 from typing import Optional
 
-from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import (
     AsyncButtonManager,
     JOG_BUTTON, TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
@@ -14,27 +13,38 @@ from radioglobe.constants import (
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
-from radioglobe.dial import AsyncDial
-from radioglobe.display import Display
+from radioglobe.hal.protocols import (
+    AudioPlayerProtocol,
+    DialProtocol,
+    DisplayProtocol,
+    PositionalEncodersProtocol,
+    RGBLedProtocol,
+)
 from radioglobe.navigation import Navigator
-from radioglobe.positional_encoders import PositionalEncoders
 from radioglobe.radio_config import (
     BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
     LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
-from radioglobe.rgb_led import RGBLed
 
 
 class App:
-    def __init__(self):
-        self.dial = AsyncDial()
-        self.audio_player = AudioPlayer()
+    def __init__(
+        self,
+        dial: DialProtocol,
+        audio_player: AudioPlayerProtocol,
+        encoders: PositionalEncodersProtocol,
+        display: DisplayProtocol,
+        led: RGBLedProtocol,
+        nav: Optional[Navigator] = None,
+    ):
+        self.dial = dial
+        self.audio_player = audio_player
         self.audio_player.change_volume_level(DEFAULT_VOLUME)
-        self.encoders = PositionalEncoders()
-        self.display = Display()
-        self.led = RGBLed()
-        self.nav = Navigator()
+        self.encoders = encoders
+        self.display = display
+        self.led = led
+        self.nav = nav if nav is not None else Navigator()
         self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
@@ -304,6 +314,8 @@ class App:
 
 
 if __name__ == "__main__":
+    from radioglobe.hal.factory import build_hardware
+
     logging.basicConfig(
         format="%(asctime)s: %(message)s",
         datefmt="%H:%M:%S",
@@ -312,4 +324,4 @@ if __name__ == "__main__":
 
     logging.info("Starting RadioGlobe...")
 
-    asyncio.run(App().run())
+    asyncio.run(App(*build_hardware()).run())
