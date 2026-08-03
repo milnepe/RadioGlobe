@@ -410,18 +410,14 @@ always represents a previously-latched city. These exist so `App.save_state()`/
 
 ### 4.6 `dial.py` — Station / City Selector
 
-Reads a quadrature rotary encoder on GPIO pins 17 (clock) and 18 (direction) — but unlike
-every other GPIO device in this project, decoding happens in the **kernel**, not in Python.
-`install.sh` adds `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1` to
+Reads a quadrature rotary encoder wired to GPIO pins 18 and 17 — these are the encoder's
+two switch/channel outputs (A/B), not a clock/direction pair — but unlike every other
+GPIO device in this project, decoding happens in the **kernel**, not in Python.
+`install.sh` adds `dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1` to
 `/boot/firmware/config.txt`, which binds the stock `drivers/input/misc/rotary_encoder.c`
-driver to those two pins. The driver's IRQ handler runs a gray-code state machine that
-rejects invalid transition sequences, but — confirmed by a raw on-device event capture,
-see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` §9 — it does **not** fully suppress
-mechanical contact bounce, even at the overlay's most conservative `steps-per-period=1`
-default: bounce can still produce bursts of several extra same-sign or cancelling
-opposite-sign `REL_X` events within a few milliseconds of a single physical click. A
-software coalescing layer in `dial.py` (below) filters this out. Investigated in full in
-`docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` §6 and §9.
+driver to those two pins and does the gray-code decode into `EV_REL`/`REL_X` events.
+`pin_a`/`pin_b` were swapped from an earlier `pin_a=17,pin_b=18` to correct the physical
+CW/CCW direction — confirmed working on-device.
 
 - `AsyncDial._find_rotary_device()` locates the resulting `/dev/input/eventN` device via
   `evdev.list_devices()`, matching by capability (`EV_REL`/`REL_X` present, `EV_KEY`
@@ -429,21 +425,18 @@ software coalescing layer in `dial.py` (below) filters this out. Investigated in
   eventN renumbering.
 - `start()` registers the device's file descriptor directly on the asyncio event loop with
   `loop.add_reader(fd, callback)` — no background task, no thread pool.
-- `_on_readable()` accumulates the signed `REL_X` value of each event into a running sum
-  and (re)arms a single `loop.call_later(_DIAL_DEBOUNCE_S, self._flush)` timer, cancelling
-  and rescheduling it on every new event — so the timer only fires once the encoder goes
-  quiet for `_DIAL_DEBOUNCE_S` (a private constant in this module). `_flush()` then pushes a single
-  `_POLARITY * sign(sum)` onto `self.queue` (an `asyncio.Queue[int]`, via `put_nowait`) —
-  or nothing at all if the accumulated sum is exactly zero, i.e. a bounce burst that fully
-  cancelled itself. A single `_POLARITY` constant corrects for physical wiring, same role
-  as the old code's sign inversion.
-- `stop()` cancels any pending debounce timer before calling `loop.remove_reader(fd)`,
-  which is synchronous and immediate — this fixed a real bug in the old GPIO-based
-  version, where `stop()` awaited a task blocked inside
+- `_on_readable()` pushes `_POLARITY * sign(event.value)` onto `self.queue` (an
+  `asyncio.Queue[int]`, via `put_nowait`) directly for each `REL_X` event — no
+  accumulation or timer. An earlier version added a software debounce/coalescing layer
+  here to filter contact-bounce bursts (see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md`
+  §9); on-device testing after the pin swap showed the raw per-event approach reliable, so
+  it was removed. A single `_POLARITY` constant corrects for physical wiring, same role as
+  the old code's sign inversion.
+- `stop()` calls `loop.remove_reader(fd)`, which is synchronous and immediate — this fixed
+  a real bug in the old GPIO-based version, where `stop()` awaited a task blocked inside
   `asyncio.to_thread(GPIO.wait_for_edge, ...)` and could hang until the next physical edge.
 - `main.py`'s `_dial_loop()` is unchanged: it still consumes `await self.dial.queue.get()`
-  — both the kernel-driver migration and the bounce-coalescing fix are entirely internal
-  to `dial.py`.
+  — the kernel-driver migration is entirely internal to `dial.py`.
 
 ---
 
@@ -590,7 +583,7 @@ Equality comparison rounds to 2 decimal places (`ROUNDING = 2`). Used consistent
 
 ### 4.12 `radio_config.py` — Configuration
 
-Defines app-behavior tuning constants shared across modules (volume levels, display/LED durations, search fuzziness/stickiness, file paths, log level). Constants tied to a single piece of physical hardware (GPIO pins, I2C address, encoder resolution, dial debounce timing) live as private (leading-underscore) constants in the module that owns that hardware instead — see [§8 Configuration Reference](#8-configuration-reference) for the full list and rationale.
+Defines app-behavior tuning constants shared across modules (volume levels, display/LED durations, search fuzziness/stickiness, file paths, log level). Constants tied to a single piece of physical hardware (GPIO pins, I2C address, encoder resolution) live as private (leading-underscore) constants in the module that owns that hardware instead — see [§8 Configuration Reference](#8-configuration-reference) for the full list and rationale.
 
 No side-effects on import — it is a constants-only module. Logging is configured in `main.py`'s `__main__` block.
 
@@ -672,7 +665,7 @@ The entire application runs on a single asyncio event loop, made up of several i
 **Tasks running concurrently (started from `run()` and component `start()` calls):**
 ```python
 # dial.start() is NOT a task — it's a loop.add_reader(fd, callback) registration.
-# The kernel's rotary_encoder driver does the decode/debounce; the event loop invokes
+# The kernel's rotary_encoder driver does the decode; the event loop invokes
 # the callback directly whenever the evdev fd is readable, pushing to dial.queue.
 asyncio.create_task(encoders.run_encoder())          # polls SPI every 50ms, sets encoders.updated
 asyncio.create_task(display._display_loop())         # writes LCD on `changed` event
@@ -729,7 +722,6 @@ module — `main.py` and the integration test scripts consume the higher-level
 | Parameter | Value | Owning module |
 |---|---|---|
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
-| `_DIAL_DEBOUNCE_S` | 0.03 | `dial.py` — `AsyncDial._on_readable()`/`_flush()`; coalesces bursts of kernel `REL_X` events (contact bounce) into a single net direction per physical click |
 | `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
@@ -737,13 +729,14 @@ module — `main.py` and the integration test scripts consume the higher-level
 | SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
 | `UNLATCH_CONFIRM_THRESHOLD` | 2 | `positional_encoders.py` class constant — consecutive out-of-band readings required before unlatching, added to filter sensor noise at the faster poll rate |
 
-**Dial clock/direction pins (removed):** `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR`
-(BCM 17/18) used to exist in `radio_config.py` despite having zero Python
-consumers — the kernel `rotary_encoder` driver reads the pins directly from
-`install.sh`'s `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,...` line (§4.6),
-which is the only place they're configured. They were deleted rather than
-relocated; `install.sh` now has a comment marking that line as the single
-source of truth for those two pins.
+**Dial switch pins (removed):** `PIN_DIAL_CLOCK`/`PIN_DIAL_DIR` (BCM 17/18 — the names
+predate the kernel-driver migration and don't reflect the hardware: both pins read one
+of the encoder's two quadrature switch outputs, neither is a clock or a direction line)
+used to exist in `radio_config.py` despite having zero Python consumers — the kernel
+`rotary_encoder` driver reads the pins directly from `install.sh`'s
+`dtoverlay=rotary-encoder,pin_a=18,pin_b=17,...` line (§4.6), which is the only place
+they're configured. They were deleted rather than relocated; `install.sh` now has a
+comment marking that line as the single source of truth for those two pins.
 
 ---
 

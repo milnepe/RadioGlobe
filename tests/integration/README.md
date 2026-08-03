@@ -77,8 +77,8 @@ pip install -e .
 
 | Signal | Pin |
 |--------|-----|
-| Dial clock | 17 |
-| Dial direction | 18 |
+| Dial switch A (`pin_a`) | 18 |
+| Dial switch B (`pin_b`) | 17 |
 | Jog button | 27 |
 | Top button | 5 |
 | Mid button | 6 |
@@ -98,10 +98,12 @@ sudo raspi-config   # Interface Options → SPI → Enable
 ### Dial (kernel rotary-encoder overlay)
 
 The dial is read via the kernel's `rotary_encoder` driver, not directly via `RPi.GPIO`.
-`install.sh` adds the required `dtoverlay=rotary-encoder,pin_a=17,pin_b=18,relative_axis=1`
-line to `/boot/firmware/config.txt` idempotently — a reboot is required for it to take
-effect (covered by the same reboot prompt `install.sh` already prints). No `raspi-config`
-step is needed for this; `rotary-encoder` isn't one of its interface toggles.
+`pin_a`/`pin_b` are the encoder's two quadrature switch outputs (A/B) — not a
+clock/direction pair. `install.sh` adds the required
+`dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1` line to
+`/boot/firmware/config.txt` idempotently — a reboot is required for it to take effect
+(covered by the same reboot prompt `install.sh` already prints). No `raspi-config` step
+is needed for this; `rotary-encoder` isn't one of its interface toggles.
 
 ### Calibration note
 
