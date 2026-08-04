@@ -3,14 +3,17 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# main.py imports radioglobe.buttons (for create_button_manager/
-# ButtonCallbacks), and buttons.py itself imports RPi.GPIO at module scope -
-# stub it before importing radioglobe.main so this test can run on any
-# machine, same as tests/buttons_test.py already does. radioglobe.hal
+# main.py imports radioglobe.rgb_led (for COLOUR_* constants), which
+# imports RPi.GPIO at module scope, and radioglobe.buttons (for
+# create_button_manager/ButtonCallbacks), which now imports evdev at module
+# scope (buttons.py reads all 4 buttons via the kernel gpio-keys driver) -
+# stub both before importing radioglobe.main so this test can run on any
+# machine, same as tests/buttons_test.py does for evdev. radioglobe.hal
 # (Protocols + fakes) needs no such stub, since it never imports
-# radioglobe.buttons or radioglobe.main.
+# radioglobe.buttons, radioglobe.rgb_led, or radioglobe.main.
 sys.modules.setdefault("RPi", MagicMock())
 sys.modules.setdefault("RPi.GPIO", MagicMock())
+sys.modules.setdefault("evdev", MagicMock())
 
 from radioglobe.constants import MODE_STATION  # noqa: E402
 from radioglobe.database import build_cities_index  # noqa: E402

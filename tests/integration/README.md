@@ -9,14 +9,12 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 | Script | Hardware required | Purpose |
 |--------|-------------------|---------|
 | `led_test.py` | GPIO | Cycles RED → GREEN → BLUE then blinks concurrently with async tasks to verify LED wiring and `RGBLed.flash()` behaviour |
-| `button_test.py` | GPIO | Confirms short and long press detection for a single named button |
-| `button_reliability_test.py` | GPIO | Compares a raw GPIO poll against AsyncButton's registered presses to catch dropped/stuck presses |
+| `button_test.py` | GPIO (kernel `gpio-keys` overlay + evdev) | Confirms short and long press detection for a single named button (jog/top/mid/bottom), via the real `create_button_manager()` production path |
 | `dial_test.py` | GPIO (kernel `rotary-encoder` overlay + evdev) | Prints Clockwise / Counter-clockwise on each encoder pulse to verify dial wiring and direction |
 | `positional_encoders_test.py` | SPI | Reads the two SPI positional encoders and prints coordinates continuously |
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
 | `streaming_cvlc_test.py` | GPIO + SPI + cvlc | Full stack test: encoders → city lookup → cvlc audio stream |
 | `async_streamer_test.py` | Network | Resolves and plays a list of internet radio URLs using the async aiohttp streamer (no Pi hardware needed) |
-| `jog_gpio_keys_test.py` | GPIO (experimental `gpio-key` overlay + evdev) | **Experimental.** Reads the Jog button via the kernel's `gpio-keys` driver instead of `buttons.py`'s `RPi.GPIO`, printing SHORT/LONG on each press. Not wired into the app — see "Experimental: Jog button via gpio-keys overlay" below before running |
 
 ## Examples
 
@@ -25,14 +23,10 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 python tests/integration/led_test.py
 
 # Buttons — test one button at a time; prints SHORT / LONG for each press
+python tests/integration/button_test.py jog
 python tests/integration/button_test.py top
 python tests/integration/button_test.py mid
 python tests/integration/button_test.py bottom
-python tests/integration/button_test.py top --long-threshold 0.5
-
-# Button reliability — checks for dropped/stuck presses against a raw GPIO poll
-python tests/integration/button_reliability_test.py mid
-python tests/integration/button_reliability_test.py mid --presses 30
 
 # Dial — prints direction on each pulse
 python tests/integration/dial_test.py
@@ -49,10 +43,6 @@ python tests/integration/streaming_cvlc_test.py
 
 # Async streamer (network only)
 python tests/integration/async_streamer_test.py
-
-# Experimental: Jog button via kernel gpio-keys driver (see setup section below
-# before running - conflicts with the running service on GPIO 27)
-python tests/integration/jog_gpio_keys_test.py
 ```
 
 ## Hardware setup
@@ -80,17 +70,17 @@ pip install -e .
 
 ### GPIO pin assignments (BCM numbering)
 
-| Signal | Pin |
-|--------|-----|
-| Dial switch A (`pin_a`) | 18 |
-| Dial switch B (`pin_b`) | 17 |
-| Jog button | 27 |
-| Top button | 5 |
-| Mid button | 6 |
-| Bottom button | 12 |
-| LED red | 22 |
-| LED green | 23 |
-| LED blue | 24 |
+| Signal | Pin | Keycode |
+|--------|-----|---------|
+| Dial switch A (`pin_a`) | 18 | — |
+| Dial switch B (`pin_b`) | 17 | — |
+| Jog button | 27 | `BTN_0` (256) |
+| Top button | 5 | `BTN_1` (257) |
+| Mid button | 6 | `BTN_2` (258) |
+| Bottom button | 12 | `BTN_3` (259) |
+| LED red | 22 | — |
+| LED green | 23 | — |
+| LED blue | 24 | — |
 
 ### SPI
 
@@ -110,35 +100,22 @@ clock/direction pair. `install.sh` adds the required
 (covered by the same reboot prompt `install.sh` already prints). No `raspi-config` step
 is needed for this; `rotary-encoder` isn't one of its interface toggles.
 
-### Experimental: Jog button via `gpio-keys` overlay
+### Buttons (kernel `gpio-keys` overlay)
 
-`jog_gpio_keys_test.py` tries reading the Jog button (GPIO 27) through the
-kernel's `gpio-keys` driver instead of `buttons.py`'s `RPi.GPIO`
-edge-detection, mirroring the kernel-driver approach already adopted for
-the dial's rotation. **This is exploratory** — not wired into `buttons.py`
-or the running service.
+All 4 buttons (Jog, Top, Mid, Bottom) are read via the kernel's `gpio-keys`
+driver, not directly via `RPi.GPIO` — the same kernel-driver approach
+already used for the dial's rotation. `install.sh` adds the required
+`dtoverlay=gpio-key,gpio=<pin>,gpio_pull=up,label=<name>,keycode=<code>`
+line for each button idempotently — a reboot is required for them to take
+effect (covered by the same reboot prompt `install.sh` already prints). No
+`raspi-config` step is needed; `gpio-key` isn't one of its interface
+toggles.
 
-Requires adding, in `/boot/firmware/config.txt` (confirm exact parameter
-names/defaults on-device first with `dtoverlay -h gpio-key` — don't assume
-these without checking, same as every other overlay in this project):
-
-```
-dtoverlay=gpio-key,gpio=27,gpio_pull=up,label=jog,keycode=<code>
-```
-
-The overlay claims GPIO 27 at boot, before Linux starts — the same
-mechanism documented for `dtoverlay=rotary-encoder` above and in
-`docs/JOG_WHEEL_INVESTIGATION.md` §4. This **conflicts** with
-`buttons.py`'s `RPi.GPIO.setup(27, ...)` for the Jog button, so:
-
-1. `systemctl --user stop radioglobe.service` first.
-2. Add the overlay line and reboot.
-3. Run `jog_gpio_keys_test.py` and press the Jog button — short and long —
-   to check the reported classification and timing feel reliable.
-4. When done, comment the overlay line back out, reboot, and confirm
-   `radioglobe.service` starts normally with the Jog button working via
-   `buttons.py` again before deciding whether this is worth adopting for
-   real.
+Each button's `keycode=` must match `buttons.py`'s `_KEYCODE_BTN_*`
+constants (see the pin table above) — device discovery matches on the
+keycode a device reports, **not** on its `label=` param, since the overlay
+was found on-device to not reliably set the evdev device name (every
+instance shows up as `button@<hex-gpio>` regardless of `label`).
 
 ### Calibration note
 
