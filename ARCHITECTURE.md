@@ -543,7 +543,7 @@ Drives a 20×4 I2C character LCD at address 0x27 on bus 1, using the `liquidcrys
 
 - Internally maintains a 4-line text buffer and an `asyncio.Event` (`changed`). When `update()` or `message()` is called, the buffer is updated and the event is set.
 - `_display_loop()` is an asyncio Task that waits for the event, writes all 4 lines to the LCD, and sleeps 100ms. This coalesces rapid updates — important because I2C is slow.
-- All strings are truncated to `DISPLAY_COLUMNS` characters before `center()` is applied, so overlong city or station names never overflow the hardware line buffer.
+- All 4 buffer lines (coords, location, volume bar, station) are truncated to `_DISPLAY_COLUMNS` characters before `center()` is applied, so overlong city or station names never overflow the hardware line buffer.
 - `show_station(coords, city, station_name)` and `show_status(status, coords=None)` wrap `update()`'s 5-argument shape for the two call patterns `App` actually uses (added in the decoupling refactor so `App` no longer needs to know `update()`'s full signature or repeat its `volume=0, arrows=False` boilerplate). The one place `App` still calls `update()` directly is the volume overlay in `_show_volume_briefly()`, which needs the `volume` argument `show_station()` hardcodes to 0.
 
 **Display layout when playing:**
@@ -818,7 +818,7 @@ constants in the module that owns that hardware, and are not re-exported.
 Where another module genuinely needs the value, it imports it directly from
 the owning module by name (e.g. `positional_encoders.py` imports
 `_ENCODER_RESOLUTION` from `database.py`, §4.5). This mirrors `display.py`'s
-pre-existing `DISPLAY_COLUMNS`/`DISPLAY_ROWS` pattern. `buttons.py` goes a
+pre-existing `_DISPLAY_COLUMNS`/`_DISPLAY_ROWS` pattern. `buttons.py` goes a
 step further: its `_PIN_BTN_*` pin constants have zero consumers outside the
 module — `main.py` and the integration test scripts consume the higher-level
 `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` constants instead
@@ -873,7 +873,7 @@ imports it.
 | `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
 | `COLOUR_RED` / `COLOUR_GREEN` / `COLOUR_BLUE` / `COLOUR_WHITE` / `COLOUR_OFF` | `"red"` / `"green"` / `"blue"` / `"white"` / `"off"` | `rgb_led.py` (§4.10) — public (not underscore-prefixed, unlike this table's other rows), since `main.py` and integration test scripts need them; moved from `constants.py` to eliminate a duplicate definition of the same vocabulary in `RGBLed.COLOURS` — passes the hardware-intrinsic test above (a different LED module could support a different colour set) |
-| `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `DISPLAY_I2C_PORT`/`DISPLAY_COLUMNS`/`DISPLAY_ROWS` |
+| `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `_DISPLAY_I2C_PORT`/`_DISPLAY_COLUMNS`/`_DISPLAY_ROWS` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
 | SPI clock speed | `max_speed_hz = 1000000` | `positional_encoders.py` — `read_spi()`; hardcoded. Raised from an original 5000 Hz to the Bourns EMS22A50-D28-LT6 datasheet maximum |
 | `UNLATCH_CONFIRM_THRESHOLD` | 2 | `positional_encoders.py` class constant — consecutive out-of-band readings required before unlatching, added to filter sensor noise at the faster poll rate |
