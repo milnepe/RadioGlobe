@@ -6,8 +6,6 @@ from evdev import ecodes
 
 _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 
-_LED_FLASH_DIAL = 0.1   # dial turn feedback (brief since frequent)
-
 
 class AsyncDial:
     def __init__(self):

@@ -12,16 +12,6 @@ _PIN_BTN_TOP    = 5
 _PIN_BTN_MID    = 6
 _PIN_BTN_BOTTOM = 12
 
-# Button-triggered tuning values - fixed by this board's 4-button UX (e.g.
-# "how far one Top-button press nudges the volume"), not user-tunable app
-# behavior, so they live here rather than in radio_config.py (see
-# ARCHITECTURE.md §8's _ENCODER_RESOLUTION/database.py precedent). Referenced
-# by name from main.py's button-callback bodies, which own the actual logic.
-_VOLUME_STEP = 10
-_VOLUME_ON_LEVEL = 80
-_VOLUME_OFF_LEVEL = 0
-_LED_FLASH_SHORT = 0.2   # button press feedback (brief since frequent)
-
 
 class ButtonDefinition(NamedTuple):
     name: str

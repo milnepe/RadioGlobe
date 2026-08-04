@@ -19,10 +19,11 @@ FUZZINESS = 3
 # Affects ability to latch on to cities
 STICKINESS = 2
 
-# Edit to suit your audio settings. Button-triggered volume step/on/off
-# levels live in buttons.py instead (_VOLUME_STEP/_VOLUME_ON_LEVEL/
-# _VOLUME_OFF_LEVEL) - fixed by this board's 4-button UX, not tunable here.
+# Edit these to suit your audio settings
+VOLUME_STEP = 10
 DEFAULT_VOLUME = 50
+VOLUME_ON_LEVEL = 80
+VOLUME_OFF_LEVEL = 0
 
 # Display hold durations (seconds)
 BRIEF_DISPLAY_DURATION = 0.5   # volume level / final shutdown display hold
@@ -31,12 +32,10 @@ MESSAGE_DISPLAY_DURATION = 2   # startup splash, calibrating, shutdown message h
 # Stream health check grace period (seconds)
 STREAM_CHECK_INTERVAL = 3
 
-# LED flash duration (seconds) shared by two unrelated App-level events
-# (city latch in _encoder_loop, stream error in _monitor_stream) - genuine
-# app-behavior tuning, not owned by one hardware module. Button-press and
-# dial-turn feedback durations live in buttons.py/dial.py instead
-# (_LED_FLASH_SHORT/_LED_FLASH_DIAL) since each has exactly one owner.
+# LED flash durations (seconds)
+LED_FLASH_SHORT = 0.2   # button press feedback (brief since frequent)
 LED_FLASH_LONG = 0.5    # city latch / stream error indication
+LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
 
 # State persistence
 STATE_CACHE_PATH = "~/cache/radioglobe.json"
