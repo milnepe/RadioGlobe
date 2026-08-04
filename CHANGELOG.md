@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1] - 2026-08-04
+### Fixed
+- Moved `_VOLUME_STEP`/`_VOLUME_ON_LEVEL`/`_VOLUME_OFF_LEVEL`/
+  `_LED_FLASH_SHORT` (had landed in `buttons.py` in 0.7.0) and
+  `_LED_FLASH_DIAL` (had landed in `dial.py`) back to `radio_config.py`.
+  These describe App/UX behavior, not hardware — swapping the physical
+  button or dial for a different part wouldn't change any of these
+  values, so putting them in the HAL modules made those modules depend
+  on App concepts they have no business knowing about. Concretely,
+  importing `_LED_FLASH_DIAL` from `dial.py` had forced `main.py` to
+  transitively require `evdev`, not just `RPi.GPIO`, just to read a
+  plain float — confirmed this is gone; `radioglobe.main`/`cli` now
+  import with only `RPi.GPIO` stubbed.
+- `ARCHITECTURE.md` §8 now states the ownership test explicitly: would
+  this constant's value need to change if the physical part were
+  swapped for a different one doing the same job? The `COLOUR_*` move
+  into `rgb_led.py` (also from 0.7.0) stays, since it passes this test.
+
 ## [0.7.0] - 2026-08-04
 ### Added
 - Hardware Abstraction Layer (`radioglobe.hal`): `protocols.py` defines a
