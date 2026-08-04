@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.0] - 2026-08-04
+### Added
+- `tests/integration/rgb_led_gpio_led_test.py`: standalone, zero-`radioglobe`-
+  dependency diagnostic for the RGB LED via the kernel `gpio-led` driver,
+  kept alongside `dial.py`/`buttons.py`'s equivalent diagnostics.
+- `install.sh` installs a udev rule
+  (`/etc/udev/rules.d/99-radioglobe-leds.rules`) granting the `gpio` group
+  write access to LED sysfs brightness files, so the service doesn't need
+  root.
+
+### Changed
+- `rgb_led.py` now drives all 3 LED channels via the kernel's `leds-gpio`
+  driver + sysfs (`/sys/class/leds/<label>/brightness`) instead of
+  `RPi.GPIO.output()` — the same kernel-driver approach `dial.py` and
+  `buttons.py` already use. No brightness/dimming behavior change
+  (`max_brightness` is `1` on these LEDs either way).
+- `install.sh` adds the 3 required `dtoverlay=gpio-led` lines idempotently
+  (reboot required).
+
+### Removed
+- `lgpio`/`rpi-lgpio` from `pyproject.toml`'s `pi` extra, and the
+  `swig`/`liblgpio-dev` apt packages from `install.sh` — `rgb_led.py` was
+  the last module using `RPi.GPIO`; migrating it means `import RPi.GPIO`
+  has zero remaining consumers anywhere in `src/`.
+
 ## [0.8.0] - 2026-08-04
 ### Added
 - `tests/integration/jog_gpio_keys_test.py`: standalone, zero-`radioglobe`-
