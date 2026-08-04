@@ -38,11 +38,11 @@ The Raspberry Pi 4B runs Raspberry Pi OS Bookworm Lite. Audio plays through VLC 
 | Physical Component | Interface | GPIO / Address | Module |
 |---|---|---|---|
 | Globe reticule encoders (lat, lon) | SPI bus 0, devices 0 & 1 | — | `positional_encoders.py` |
-| Station/city select dial | GPIO quadrature (kernel `rotary_encoder` driver + evdev) | Pins 17 (clock), 18 (direction) | `dial.py` |
-| Jog button (mode toggle) | GPIO | Pin 27 | `buttons.py` |
-| Top button (volume up) | GPIO | Pin 5 | `buttons.py` |
-| Mid button (calibrate / shutdown) | GPIO | Pin 6 | `buttons.py` |
-| Bottom button (volume down) | GPIO | Pin 12 | `buttons.py` |
+| Station/city select dial | GPIO quadrature (kernel `rotary_encoder` driver + evdev) | Pins 18 (`pin_a`), 17 (`pin_b`) | `dial.py` |
+| Jog button (mode toggle) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 27 | `buttons.py` |
+| Top button (volume up) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 5 | `buttons.py` |
+| Mid button (calibrate / shutdown) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 6 | `buttons.py` |
+| Bottom button (volume down) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 12 | `buttons.py` |
 | 20×4 character LCD | I2C | Bus 1, address 0x27 | `display.py` |
 | RGB status LED | GPIO | R=22, G=23, B=24 | `rgb_led.py` |
 | Audio output | VLC / PulseAudio | 3.5mm / Bluetooth | `audio_async.py` |
@@ -126,7 +126,7 @@ RadioGlobe/
 
 ## 3. Architecture Overview
 
-The application is a single-process asyncio program. One event loop runs on the main thread, and all hardware I/O runs as asyncio Tasks or is bridged into the loop from GPIO interrupt threads.
+The application is a single-process asyncio program. One event loop runs on the main thread, and all hardware I/O runs as asyncio Tasks or pollable-fd registrations (`loop.add_reader`) — see §7.
 
 **The central concept is the reticule position.** `PositionalEncoders.run_encoder()` polls SPI every 50ms. While unlatched, every successful reading sets an `asyncio.Event` (`encoders.updated`); the `_encoder_loop()` task wakes on that event, searches the spatial city index for any city near the current position, and if one is found, latches and starts playing its radio stream. Once latched, the event only fires again when the reticule drifts far enough to unlatch. The dial and buttons adjust the experience once a city is latched.
 
@@ -144,7 +144,7 @@ graph TD
 
     main --> positional["positional_encoders.py\nSPI → lat/lon + latch"]
     main --> dial["dial.py\nkernel rotary-encoder + evdev"]
-    main --> buttons["buttons.py\nGPIO button manager"]
+    main --> buttons["buttons.py\nkernel gpio-keys + evdev"]
     main --> display["display.py\nI2C LCD display"]
     main --> led["rgb_led.py\nGPIO LED"]
     main --> audio["audio_async.py\nVLC audio player"]
@@ -160,9 +160,9 @@ graph TD
     audio --> vlc[("python-vlc")]
     positional --> spidev[("spidev")]
     display --> i2c[("liquidcrystal_i2c")]
-    buttons --> gpio[("lgpio / RPi.GPIO")]
     dial --> input[("evdev /dev/input/eventN")]
-    led --> gpio
+    buttons --> input
+    led --> gpio[("lgpio / RPi.GPIO")]
 ```
 
 `App` still imports `get_stations_by_city` (`database.py`) directly — used
@@ -454,36 +454,45 @@ CW/CCW direction — confirmed working on-device.
 
 ### 4.7 `buttons.py` — Button Manager
 
-Manages four GPIO buttons with short and long press detection.
+Manages four buttons with short and long press detection, each read via the
+kernel's `gpio-keys` driver + evdev — the same kernel-driver approach
+`dial.py` (§4.6) already uses for the dial's rotation — rather than
+`RPi.GPIO` edge-detection. Migrated because the single-button experiment
+(`tests/integration/jog_gpio_keys_test.py`, still kept as a standalone
+zero-`radioglobe`-dependency diagnostic, same role
+`encoder_hardware_test.py` plays for the dial) showed clean, reliable
+results with no code-side debounce/polling needed.
 
 **Button definition tuple:**
 ```python
-ButtonDefinition(name, pin, short_cb, long_cb, press_cb)
+ButtonDefinition(name, pin, short_cb, long_cb, press_cb, keycode)
 ```
 - `press_cb` fires immediately on press-down (used for instant LED feedback)
 - `short_cb` fires on release if held < 1.0 second
 - `long_cb` fires on release if held ≥ 1.0 second
+- `keycode` identifies which evdev device belongs to this button (see below)
 
-The name+pin pairing is fixed by this project's custom board (Jog/Top/Mid/Bottom
-are wired to specific header pins, not an app-level choice), so `buttons.py`
-owns it completely: `JOG_BUTTON`, `TOP_BUTTON`, `MID_BUTTON`, `BOTTOM_BUTTON`
-are module-level `ButtonDefinition` constants with `name`/`pin` set and every
-callback field left at its `None` default. The wiring itself — attaching a
-caller's callbacks to those four fixed slots and constructing the manager —
-is also fixed by the board, so it lives here too, as `create_button_manager()`:
+The name+pin+keycode triple is fixed by this project's custom board
+(Jog/Top/Mid/Bottom are wired to specific header pins, not an app-level
+choice), so `buttons.py` owns it completely: `JOG_BUTTON`, `TOP_BUTTON`,
+`MID_BUTTON`, `BOTTOM_BUTTON` are module-level `ButtonDefinition` constants
+with `name`/`pin`/`keycode` set and every callback field left at its `None`
+default. The wiring itself — attaching a caller's callbacks to those four
+fixed slots and constructing the manager — is also fixed by the board, so
+it lives here too, as `create_button_manager()`:
 ```python
-class ButtonCallbacks(NamedTuple):        # ButtonDefinition minus name/pin
+class ButtonCallbacks(NamedTuple):        # ButtonDefinition minus name/pin/keycode
     short_cb: Optional[Callable] = None
     long_cb: Optional[Callable] = None
     press_cb: Optional[Callable] = None
 
-def create_button_manager(loop, *, jog=ButtonCallbacks(), top=ButtonCallbacks(), ...) -> AsyncButtonManager:
+def create_button_manager(*, jog=ButtonCallbacks(), top=ButtonCallbacks(), ...) -> AsyncButtonManager:
     button_definitions = [
         JOG_BUTTON._replace(**jog._asdict()),
         TOP_BUTTON._replace(**top._asdict()),
         ...
     ]
-    return AsyncButtonManager(button_definitions, loop)
+    return AsyncButtonManager(button_definitions)
 ```
 `main.py`'s `run()` (§4.1) calls this once with its own callback methods —
 it never imports `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` or
@@ -493,47 +502,53 @@ it never imports `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` or
 `buttons.py` deliberately knows nothing about (§4.14's HAL boundary). Like
 `hal/factory.py`'s `build_hardware()`, `create_button_manager()` only
 constructs — `run()` still calls `await button_manager.start()` and creates
-the `handle_events()` task itself.
+the `handle_events()` task itself. Neither function takes a `loop` parameter
+any more — `AsyncButton.start()` calls `asyncio.get_running_loop()`
+internally instead, matching `dial.py`/`positional_encoders.py`'s existing
+pattern; it was pure plumbing to support the old `RPi.GPIO`
+`call_soon_threadsafe()` bridge (below), which no longer exists.
 
-The underlying `_PIN_BTN_*` constants (§8) are truly private — nothing
-outside `buttons.py` imports them; callers that need a specific pin (e.g.
-the single-button integration test scripts under `tests/integration/`) read
-`TOP_BUTTON.pin` etc. instead.
+The underlying `_PIN_BTN_*` constants (§8) are documentation only —
+the kernel driver claims these pins directly via `install.sh`'s
+`dtoverlay=gpio-key,...` lines, not via anything in this module. Device
+discovery instead keys off `_KEYCODE_BTN_*` (§8): each overlay instance is
+given a distinct Linux "generic button" keycode (`evdev.ecodes.BTN_0..BTN_3`),
+and `AsyncButton._find_button_device()` scans `evdev.list_devices()` for the
+one whose `EV_KEY` capability includes that keycode (and has no `EV_REL`,
+ruling out the dial). This is necessary, not just tidy: with 4 buttons'
+`gpio-key` overlay instances active simultaneously, the kernel names every
+one of them `button@<hex-gpio>` regardless of the overlay's `label=`
+parameter (confirmed on-device) — there's no reliable name-based way to
+tell them apart, so the keycode each device is configured to report is the
+only distinguishing signal. `install.sh`'s overlay lines must use the same
+keycode values.
 
-`AsyncButton` uses GPIO fall-edge callbacks that bridge into the asyncio event loop via `loop.call_soon_threadsafe()`. `AsyncButtonManager` holds all buttons, runs a background polling task, and dispatches events via an `asyncio.Queue`.
+Device discovery is deferred to `AsyncButton.start()`/`AsyncButtonManager.start()`
+rather than done in `__init__` — this is what lets `tests/buttons_test.py`
+keep constructing `AsyncButtonManager`/`ButtonDefinition` with synthetic
+data and testing `handle_events()`'s dispatch logic in isolation, since
+those tests never call `.start()` and so never touch real evdev devices.
 
-`AsyncButtonManager.__init__` calls `GPIO.setmode(GPIO.BCM)` itself, before
-constructing any `AsyncButton` (whose `GPIO.setup()` call requires it). This
-used to be centralized in `App.__init__` (`main.py`, §4.1) instead, on the
-assumption every `AsyncButton` is constructed via `App` — but the standalone
-integration scripts under `tests/integration/` construct
-`AsyncButtonManager` directly without ever building an `App`, so that
-assumption broke them (`GPIO.setup()` raising "Please set pin numbering
-mode..."). `AsyncButtonManager` now guarantees its own precondition instead
-of trusting the caller. `rgb_led.py`'s `RGBLed` owns the identical call for
-the identical reason (§4.10) — `App.__init__` no longer calls
-`GPIO.setmode()` at all as of the 2026-07-31 hardware-config release; each
-GPIO-owning class is fully self-sufficient. `GPIO.setmode()` is idempotent,
-so constructing both an `AsyncButtonManager` and an `RGBLed` in the same
-process (as `App` does) calls it twice harmlessly.
+`AsyncButton._on_readable()` is registered on the asyncio loop via
+`loop.add_reader(fd, callback)` once its device is found — no thread, no
+polling task, same pattern `dial.py` uses. On a key-down event it fires
+`press_cb` immediately; on key-up it computes the held duration and
+`put_nowait`s `(name, "short"/"long")` onto the manager's shared
+`event_queue` — the kernel guarantees a clean release event, so there's no
+more busy-wait release-polling state machine (`while GPIO.input(pin) ==
+LOW: ...`) and no way for a press to get "stuck" the way the old
+`_pressed` flag could (this was `tests/integration/button_reliability_test.py`'s
+whole reason for existing; it was retired for this reason once the failure
+mode it was built to catch became structurally impossible).
 
-Teardown mirrors setup: `AsyncButtonManager.stop()` calls
-`GPIO.cleanup([btn.pin for btn in self.buttons])`, releasing only the pins
-this manager itself set up. `App.run()`'s `finally` block no longer calls a
-bare `GPIO.cleanup()` — it just awaits `.stop()` on every hardware object it
-holds (including `button_manager`, §4.1), and each object releases exactly
-the channels it owns. `rgb_led.py` does the same in `RGBLed.stop()` (§4.10).
-
-`handle_events()` wraps each handler call in try/except, logging failures
-via `logging.exception()`. Without this, an unhandled exception from any
-one button's `short_cb`/`long_cb` would kill this loop outright — since
-it's the single consumer for every button's queued events, that silently
-stops short/long dispatch for *all four buttons*, not just the one whose
-handler failed. Press-down feedback (`press_cb`) keeps working regardless,
-since it runs on each button's own independent task — the failure mode
-without this fix looks like "the LED still flashes on press but nothing
-else ever happens again," with no visible error beyond an easy-to-miss
-"Task exception was never retrieved" warning.
+`handle_events()` is unchanged: it wraps each handler call in try/except,
+logging failures via `logging.exception()`. Without this, an unhandled
+exception from any one button's `short_cb`/`long_cb` would kill this loop
+outright — since it's the single consumer for every button's queued
+events, that silently stops short/long dispatch for *all four buttons*,
+not just the one whose handler failed. Press-down feedback (`press_cb`)
+keeps working regardless, since it fires via its own `asyncio.create_task()`
+rather than going through this shared loop.
 
 ---
 
@@ -670,9 +685,9 @@ platform. Three files, all new, none of which required changing `dial.py`,
   `inject_event()`, `set_error()`, `.calls`/`.played`/`.buffer` recordings)
   that let a test drive `App`'s real event loops end-to-end with no real I/O.
   These fakes intentionally do **not** re-implement the real modules'
-  internals (SPI parity checks, evdev capability matching, GPIO debounce/hold
+  internals (SPI parity checks, evdev capability matching, press/hold
   timing) — that stays covered separately, e.g. `tests/buttons_test.py`'s
-  existing `sys.modules` `RPi.GPIO` stub-and-test-the-real-class approach.
+  existing `sys.modules` stub-and-test-the-real-class approach.
 - **`factory.py`** — `build_hardware()` constructs and returns the real,
   Pi-backed `(dial, audio_player, encoders, display, led)` tuple. The concrete
   hardware modules are imported inside its function body, not at module
@@ -690,27 +705,33 @@ both now `App(*build_hardware()).run()`.
 (`self._handle_short_jog`, etc., via `ButtonDefinition._replace(...)`) that
 don't exist until `App` itself is constructed — the same category of reason
 button dispatch stayed on `App` rather than `Navigator` (§4.3). `FakeButtonManager`
-exists in `hal/fake.py` for tests that want to drive `App` without any GPIO
-involvement at all, but `tests/buttons_test.py`'s real-class-plus-`RPi.GPIO`-stub
-approach remains the way to test `AsyncButtonManager`/`AsyncButton` themselves.
+exists in `hal/fake.py` for tests that want to drive `App` without any
+hardware involvement at all, but `tests/buttons_test.py`'s
+real-class-plus-stub approach remains the way to test
+`AsyncButtonManager`/`AsyncButton` themselves.
 
 **Residual import gap:** `main.py` imports `create_button_manager`/
-`ButtonCallbacks` from `buttons.py` at module scope, and `buttons.py` imports
-`RPi.GPIO` at module scope — so `import radioglobe.main` (and therefore
-`radioglobe.cli`) still requires `RPi.GPIO` to be importable (real or
-stubbed), independent of this HAL. Any test importing `radioglobe.main`
-needs the same `sys.modules.setdefault("RPi.GPIO", MagicMock())` stub
-`tests/buttons_test.py` already uses (see `tests/main_test.py`).
+`ButtonCallbacks` from `buttons.py` at module scope, and (since the
+`gpio-keys` migration, §4.7) `buttons.py` now imports `evdev` at module
+scope instead of `RPi.GPIO`. Separately, `main.py` also imports
+`COLOUR_RED`/`COLOUR_GREEN`/`COLOUR_BLUE` from `rgb_led.py`, which still
+imports `RPi.GPIO`. So `import radioglobe.main` (and therefore
+`radioglobe.cli`) requires **both** `evdev` and `RPi.GPIO` to be importable
+(real or stubbed), independent of this HAL. Any test importing
+`radioglobe.main` needs both stubs — see `tests/main_test.py`.
+`tests/buttons_test.py` only needs the `evdev` stub, since it imports
+`radioglobe.buttons` directly, not `radioglobe.main`/`radioglobe.rgb_led`.
 `radioglobe.hal` itself has no such requirement — it never imports
-`radioglobe.buttons` or `radioglobe.main`.
+`radioglobe.buttons`, `radioglobe.rgb_led`, or `radioglobe.main`.
 
-An earlier pass also moved `_LED_FLASH_DIAL` into `dial.py`, which
-transitively pulled `evdev` into this same gap — but that constant didn't
-actually belong there (see §8's note on hardware-intrinsic vs. app-behavior
-constants) and moving it back to `radio_config.py` removed the `evdev`
-requirement entirely. Worth remembering: a HAL module's import cost isn't
-just about the classes it exports — a single misplaced constant can drag in
-a whole optional dependency.
+This is worth distinguishing from an earlier, *avoidable* version of this
+same gap: a pass once moved `_LED_FLASH_DIAL` (a pure UX duration, not a
+hardware property) into `dial.py`, which pulled `evdev` into `main.py`'s
+import chain for no functional reason — moving it back to `radio_config.py`
+removed that requirement entirely (see §8's hardware-intrinsic-vs-app-behavior
+test). The `evdev` requirement described here is different: `buttons.py`
+genuinely does evdev I/O now, so `main.py` needing it transitively is a
+real, expected cost of the migration, not a misplaced constant to fix.
 
 Pi-specific packages (`evdev`, `lgpio`, `rpi-lgpio`, `smbus`, `spidev`,
 `liquidcrystal-i2c`, `python-vlc`) moved from `pyproject.toml`'s base
@@ -778,21 +799,32 @@ The entire application runs on a single asyncio event loop, made up of several i
 
 **Tasks running concurrently (started from `run()` and component `start()` calls):**
 ```python
-# dial.start() is NOT a task — it's a loop.add_reader(fd, callback) registration.
-# The kernel's rotary_encoder driver does the decode; the event loop invokes
-# the callback directly whenever the evdev fd is readable, pushing to dial.queue.
+# dial.start() and each button's start() are NOT tasks — they're
+# loop.add_reader(fd, callback) registrations. The kernel driver
+# (rotary_encoder for the dial, gpio-keys for each button) does the
+# decode; the event loop invokes the callback directly whenever the
+# evdev fd is readable, pushing to dial.queue / button_manager.event_queue.
 asyncio.create_task(encoders.run_encoder())          # polls SPI every 50ms, sets encoders.updated
 asyncio.create_task(display._display_loop())         # writes LCD on `changed` event
-asyncio.create_task(button_manager._poll_buttons())  # polls button state every 50ms, pushes to event_queue
 asyncio.create_task(button_manager.handle_events())  # dispatches queued button events
 asyncio.create_task(self._encoder_loop())            # wakes on encoders.updated — latches cities
 asyncio.create_task(self._dial_loop())               # wakes on dial.queue — navigates stations/cities
 ```
 `run()` only awaits the last two (`await asyncio.gather(encoder_task, dial_task)`); the others run in the background for the app's lifetime.
 
-**GPIO interrupt bridging:** RPi.GPIO fires button callbacks on a separate interrupt thread. These callbacks call `loop.call_soon_threadsafe(...)` to schedule coroutines back onto the asyncio event loop. This is the correct pattern — do not call `asyncio.create_task()` directly from a GPIO callback thread.
-
-**Blocking calls:** `GPIO.wait_for_edge()` is blocking and is wrapped with `asyncio.to_thread()` in `buttons.py`'s underlying GPIO callback dispatch. Any new hardware code that polls with blocking calls must do the same. For anything that exposes a pollable file descriptor instead (evdev devices, sockets, pipes), prefer `loop.add_reader(fd, callback)` — this is what `dial.py` now does, avoiding a thread entirely rather than wrapping a blocking call in one.
+**No more GPIO interrupt-thread bridging.** Every hardware source is now
+purely event-driven via `loop.add_reader(fd, callback)` — `positional_encoders.py`'s
+SPI poll is the only remaining fixed-interval task in the app. This used to
+need a `loop.call_soon_threadsafe(...)` bridge (RPi.GPIO fires button
+callbacks on a separate interrupt thread) and a `button_manager._poll_buttons()`
+task (50ms, polling each button's state) — both gone once `buttons.py`
+migrated to the kernel `gpio-keys` driver (§4.7), the same evdev-based
+approach `dial.py` already used. If any future hardware module ever needs a
+genuinely blocking call, wrap it with `asyncio.to_thread()` rather than
+calling `asyncio.create_task()` directly from a non-asyncio thread; prefer
+`loop.add_reader(fd, callback)` whenever the hardware exposes a pollable
+file descriptor instead (evdev devices, sockets, pipes), as every hardware
+module now does.
 
 **LED tasks** are always `create_task`'d rather than awaited — they are fire-and-forget. `RGBLed`'s own internal `self._running` Event prevents concurrent flashes (§4.10).
 
@@ -870,7 +902,8 @@ imports it.
 | Parameter | Value | Owning module |
 |---|---|---|
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
-| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — never imported elsewhere; exposed to `main.py` only indirectly via the `JOG_BUTTON`/`TOP_BUTTON`/`MID_BUTTON`/`BOTTOM_BUTTON` `ButtonDefinition` constants (§4.7), which pair each pin with its fixed board role |
+| `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — documentation only since the `gpio-keys` migration (§4.7); the kernel driver claims these pins directly via `install.sh`'s overlay lines, nothing in Python reads them |
+| `_KEYCODE_BTN_JOG` / `_KEYCODE_BTN_TOP` / `_KEYCODE_BTN_MID` / `_KEYCODE_BTN_BOTTOM` | `BTN_0`/`BTN_1`/`BTN_2`/`BTN_3` (256-259) | `buttons.py` — functionally load-bearing (§4.7): `AsyncButton._find_button_device()` matches evdev devices by keycode, since the `gpio-key` overlay's `label=` param doesn't reliably set the device name. `install.sh`'s overlay lines must use these same values |
 | `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
 | `COLOUR_RED` / `COLOUR_GREEN` / `COLOUR_BLUE` / `COLOUR_WHITE` / `COLOUR_OFF` | `"red"` / `"green"` / `"blue"` / `"white"` / `"off"` | `rgb_led.py` (§4.10) — public (not underscore-prefixed, unlike this table's other rows), since `main.py` and integration test scripts need them; moved from `constants.py` to eliminate a duplicate definition of the same vocabulary in `RGBLed.COLOURS` — passes the hardware-intrinsic test above (a different LED module could support a different colour set) |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `_DISPLAY_I2C_PORT`/`_DISPLAY_COLUMNS`/`_DISPLAY_ROWS` |
@@ -920,14 +953,13 @@ uv run pytest
 | `hal/protocols_test.py` | `isinstance(FakeX(), XProtocol)` for all 6 fakes — a regression guard that fakes stay in sync with the Protocol shape |
 | `main_test.py` | `App`'s `_encoder_loop`/`_dial_loop`/`_monitor_stream`/`save_state`/`load_state` (§4.1, §4.14), driven end-to-end via HAL fakes with no real hardware — distinct from the hardware-only `tests/integration/main_test.py` |
 
-All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` and `main_test.py` both stub `RPi.GPIO` in `sys.modules` before importing `radioglobe.buttons`/`radioglobe.main`, since `buttons.py` still touches real GPIO functions/imports at construction/module-load time (§4.14's residual import gap). `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons` or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
+All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` stubs `evdev` in `sys.modules` before importing `radioglobe.buttons`, since that module now imports evdev at module scope (§4.7's `gpio-keys` migration); `main_test.py` stubs both `evdev` and `RPi.GPIO`, since `radioglobe.main` transitively imports both `radioglobe.buttons` (evdev) and `radioglobe.rgb_led` (RPi.GPIO) (§4.14's residual import gap). `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons`, `radioglobe.rgb_led`, or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
 
 **Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi. See [tests/integration/README.md](tests/integration/README.md) for the full, maintained list, usage examples, and hardware setup notes — duplicating it here previously went stale (a `simulation_test.py` that never existed lingered in this table for a while; three scripts also silently broke when `led_task` was folded into `RGBLed.flash()`, since nothing exercises them automatically). Highlights:
 
 | Script | What it tests |
 |---|---|
-| `button_test.py` | GPIO button short/long press detection — `python ../tests/integration/button_test.py mid` |
-| `button_reliability_test.py` | Compares a raw GPIO poll against `AsyncButtonManager`'s registered presses to catch dropped/stuck presses (§4.7) — see CHANGELOG.md for the Mid button connector fault this diagnosed |
+| `button_test.py` | Kernel `gpio-keys` button short/long press detection via the real `create_button_manager()` path — `python ../tests/integration/button_test.py mid` |
 | `positional_encoders_test.py` | SPI encoder reading and latch mechanism |
 | `dial_test.py` | Kernel rotary-encoder evdev device discovery and direction detection |
 
@@ -997,7 +1029,7 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 **The spatial search approach.** Building a 1024×1024 grid dict at startup and doing dict lookups in `find_cities_near()` is efficient and simple. `build_look_around_offsets()` with fuzziness is the right way to handle the physical imprecision of pointing at a globe.
 
-**The asyncio architecture is fundamentally sound.** GPIO interrupt callbacks are correctly bridged back to the event loop via `call_soon_threadsafe`. Blocking GPIO calls are wrapped in `asyncio.to_thread` — `dial.py` is the one exception, since it reads a pollable evdev fd via `loop.add_reader` instead of a blocking GPIO call, needing neither a thread nor `call_soon_threadsafe`. Event-driven waits (`encoders.updated`, `dial.queue`) mean idle tasks cost nothing, rather than burning CPU on a fixed-interval poll.
+**The asyncio architecture is fundamentally sound.** Every hardware source (dial, all 4 buttons) is read via a pollable evdev fd registered with `loop.add_reader` — no threads, no `call_soon_threadsafe` bridging, no fixed-interval polling task for any of them. `positional_encoders.py`'s SPI poll is the one exception, since SPI has no equivalent kernel-driven evdev path. Event-driven waits (`encoders.updated`, `dial.queue`, `button_manager.event_queue`) mean idle tasks cost nothing, rather than burning CPU on a fixed-interval poll.
 
 **The latch mechanism.** Freezing the encoder position until the user moves significantly is a genuinely clever UX solution. Without it, browsing stations while holding the globe still would be impossible — any tiny vibration would trigger a city change.
 

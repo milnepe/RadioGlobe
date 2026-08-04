@@ -59,6 +59,27 @@ if ! grep -qxF "$OVERLAY_LINE" "$CONFIG_TXT"; then
 fi
 
 # -----------------------------
+# Button dtoverlays (idempotent)
+# -----------------------------
+# Each button is read via the kernel gpio-keys driver instead of RPi.GPIO.
+# keycode= values must match buttons.py's _KEYCODE_BTN_* constants exactly
+# (256/257/258/259 = evdev.ecodes.BTN_0..BTN_3) - device discovery there
+# matches on keycode, not on the label= param below (confirmed on-device
+# that label doesn't reliably set the evdev device name).
+BUTTON_OVERLAY_LINES=(
+    "dtoverlay=gpio-key,gpio=27,gpio_pull=up,label=jog,keycode=256"
+    "dtoverlay=gpio-key,gpio=5,gpio_pull=up,label=top,keycode=257"
+    "dtoverlay=gpio-key,gpio=6,gpio_pull=up,label=mid,keycode=258"
+    "dtoverlay=gpio-key,gpio=12,gpio_pull=up,label=bottom,keycode=259"
+)
+for line in "${BUTTON_OVERLAY_LINES[@]}"; do
+    if ! grep -qxF "$line" "$CONFIG_TXT"; then
+        echo "⚙️ Adding button dtoverlay to $CONFIG_TXT: $line"
+        echo "$line" | sudo tee -a "$CONFIG_TXT" > /dev/null
+    fi
+done
+
+# -----------------------------
 # Ensure Bluetooth radio isn't soft-blocked (idempotent)
 # Some images/imagers leave hci0 rfkill-blocked, which silently
 # breaks Bluetooth speaker pairing until manually unblocked.

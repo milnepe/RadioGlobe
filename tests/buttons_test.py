@@ -3,11 +3,12 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# AsyncButton.__init__ calls real RPi.GPIO functions, and RPi.GPIO itself
-# refuses to import off a Raspberry Pi - stub it before importing
-# radioglobe.buttons so this test can run on any machine.
-sys.modules.setdefault("RPi", MagicMock())
-sys.modules.setdefault("RPi.GPIO", MagicMock())
+# buttons.py imports evdev at module scope - stub it before importing
+# radioglobe.buttons so this test can run on any machine. Device discovery
+# itself is deferred to AsyncButton.start()/AsyncButtonManager.start(),
+# which these tests never call (they drive handle_events() directly via
+# the event_queue), so the stub only needs to satisfy the import.
+sys.modules.setdefault("evdev", MagicMock())
 
 from radioglobe.buttons import AsyncButtonManager, ButtonDefinition  # noqa: E402
 
@@ -27,12 +28,11 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
         async def good_short():
             calls.append("good")
 
-        loop = asyncio.get_running_loop()
         definitions = [
             ButtonDefinition("Bad", 1, bad_short, None, None),
             ButtonDefinition("Good", 2, good_short, None, None),
         ]
-        manager = AsyncButtonManager(definitions, loop)
+        manager = AsyncButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         await manager.event_queue.put(("Bad", "short"))
@@ -56,12 +56,11 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
         def good_short():
             calls.append("good")
 
-        loop = asyncio.get_running_loop()
         definitions = [
             ButtonDefinition("Bad", 1, bad_short, None, None),
             ButtonDefinition("Good", 2, good_short, None, None),
         ]
-        manager = AsyncButtonManager(definitions, loop)
+        manager = AsyncButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         await manager.event_queue.put(("Bad", "short"))
@@ -79,9 +78,8 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
         async def bad_short():
             raise RuntimeError("boom")
 
-        loop = asyncio.get_running_loop()
         definitions = [ButtonDefinition("Bad", 1, bad_short, None, None)]
-        manager = AsyncButtonManager(definitions, loop)
+        manager = AsyncButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         with self.assertLogs(level="ERROR") as logs:

@@ -243,10 +243,7 @@ class App:
         self.encoders.start()
         self.display.start()
 
-        loop = asyncio.get_running_loop()
-
         button_manager = create_button_manager(
-            loop,
             jog=ButtonCallbacks(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
             top=ButtonCallbacks(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
             mid=ButtonCallbacks(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),

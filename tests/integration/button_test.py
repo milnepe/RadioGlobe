@@ -1,7 +1,10 @@
 """
-Hardware button test — run on the Pi to confirm short/long press detection.
+Hardware button test — run on the Pi to confirm short/long press detection
+via the real production path (buttons.create_button_manager()), reading the
+button through the kernel gpio-keys driver instead of RPi.GPIO.
 
 Usage (from the radioglobe/ directory):
+    python ../tests/integration/button_test.py jog
     python ../tests/integration/button_test.py top
     python ../tests/integration/button_test.py mid
     python ../tests/integration/button_test.py bottom
@@ -12,45 +15,25 @@ press. Ctrl-C to exit.
 
 import asyncio
 import argparse
-import sys
 import time
 import logging
 import pytest
 
-GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
+pytest.importorskip("evdev", reason="Requires the gpio-keys kernel driver + evdev")
 
-from radioglobe.buttons import (
-    AsyncButtonManager, ButtonDefinition,
-    TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
-)
+from radioglobe.buttons import ButtonCallbacks, create_button_manager  # noqa: E402
 
-BUTTONS = {
-    "top":    TOP_BUTTON.pin,
-    "mid":    MID_BUTTON.pin,
-    "bottom": BOTTOM_BUTTON.pin,
-}
+BUTTONS = ["jog", "top", "mid", "bottom"]
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="RadioGlobe button hardware test")
-    parser.add_argument(
-        "button",
-        choices=list(BUTTONS.keys()),
-        help="Which button to test",
-    )
-    parser.add_argument(
-        "--long-threshold",
-        type=float,
-        default=1.0,
-        metavar="SECONDS",
-        help="Hold time (s) that counts as a long press (default: 1.0)",
-    )
+    parser.add_argument("button", choices=BUTTONS, help="Which button to test")
     return parser.parse_args()
 
 
 async def main():
     args = parse_args()
-    pin = BUTTONS[args.button]
 
     press_count = {"short": 0, "long": 0}
 
@@ -68,19 +51,11 @@ async def main():
         ts = time.strftime("%H:%M:%S")
         print(f"[{ts}] ... button down (waiting for release)")
 
-    loop = asyncio.get_running_loop()
-
-    button_definitions = [
-        ButtonDefinition(args.button, pin, on_short, on_long, on_press),
-    ]
-
-    manager = AsyncButtonManager(
-        button_definitions, loop, long_press_threshold=args.long_threshold
-    )
+    callbacks = ButtonCallbacks(short_cb=on_short, long_cb=on_long, press_cb=on_press)
+    manager = create_button_manager(**{args.button: callbacks})
     await manager.start()
 
-    print(f"Testing '{args.button}' button on GPIO {pin}")
-    print(f"Long-press threshold: {args.long_threshold}s")
+    print(f"Testing '{args.button}' button via the kernel gpio-keys driver")
     print("Press the button — Ctrl-C to quit\n")
 
     try:

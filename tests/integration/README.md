@@ -9,8 +9,7 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 | Script | Hardware required | Purpose |
 |--------|-------------------|---------|
 | `led_test.py` | GPIO | Cycles RED → GREEN → BLUE then blinks concurrently with async tasks to verify LED wiring and `RGBLed.flash()` behaviour |
-| `button_test.py` | GPIO | Confirms short and long press detection for a single named button |
-| `button_reliability_test.py` | GPIO | Compares a raw GPIO poll against AsyncButton's registered presses to catch dropped/stuck presses |
+| `button_test.py` | GPIO (kernel `gpio-keys` overlay + evdev) | Confirms short and long press detection for a single named button (jog/top/mid/bottom), via the real `create_button_manager()` production path |
 | `dial_test.py` | GPIO (kernel `rotary-encoder` overlay + evdev) | Prints Clockwise / Counter-clockwise on each encoder pulse to verify dial wiring and direction |
 | `positional_encoders_test.py` | SPI | Reads the two SPI positional encoders and prints coordinates continuously |
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
@@ -24,14 +23,10 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 python tests/integration/led_test.py
 
 # Buttons — test one button at a time; prints SHORT / LONG for each press
+python tests/integration/button_test.py jog
 python tests/integration/button_test.py top
 python tests/integration/button_test.py mid
 python tests/integration/button_test.py bottom
-python tests/integration/button_test.py top --long-threshold 0.5
-
-# Button reliability — checks for dropped/stuck presses against a raw GPIO poll
-python tests/integration/button_reliability_test.py mid
-python tests/integration/button_reliability_test.py mid --presses 30
 
 # Dial — prints direction on each pulse
 python tests/integration/dial_test.py
@@ -75,17 +70,17 @@ pip install -e .
 
 ### GPIO pin assignments (BCM numbering)
 
-| Signal | Pin |
-|--------|-----|
-| Dial switch A (`pin_a`) | 18 |
-| Dial switch B (`pin_b`) | 17 |
-| Jog button | 27 |
-| Top button | 5 |
-| Mid button | 6 |
-| Bottom button | 12 |
-| LED red | 22 |
-| LED green | 23 |
-| LED blue | 24 |
+| Signal | Pin | Keycode |
+|--------|-----|---------|
+| Dial switch A (`pin_a`) | 18 | — |
+| Dial switch B (`pin_b`) | 17 | — |
+| Jog button | 27 | `BTN_0` (256) |
+| Top button | 5 | `BTN_1` (257) |
+| Mid button | 6 | `BTN_2` (258) |
+| Bottom button | 12 | `BTN_3` (259) |
+| LED red | 22 | — |
+| LED green | 23 | — |
+| LED blue | 24 | — |
 
 ### SPI
 
@@ -104,6 +99,23 @@ clock/direction pair. `install.sh` adds the required
 `/boot/firmware/config.txt` idempotently — a reboot is required for it to take effect
 (covered by the same reboot prompt `install.sh` already prints). No `raspi-config` step
 is needed for this; `rotary-encoder` isn't one of its interface toggles.
+
+### Buttons (kernel `gpio-keys` overlay)
+
+All 4 buttons (Jog, Top, Mid, Bottom) are read via the kernel's `gpio-keys`
+driver, not directly via `RPi.GPIO` — the same kernel-driver approach
+already used for the dial's rotation. `install.sh` adds the required
+`dtoverlay=gpio-key,gpio=<pin>,gpio_pull=up,label=<name>,keycode=<code>`
+line for each button idempotently — a reboot is required for them to take
+effect (covered by the same reboot prompt `install.sh` already prints). No
+`raspi-config` step is needed; `gpio-key` isn't one of its interface
+toggles.
+
+Each button's `keycode=` must match `buttons.py`'s `_KEYCODE_BTN_*`
+constants (see the pin table above) — device discovery matches on the
+keycode a device reports, **not** on its `label=` param, since the overlay
+was found on-device to not reliably set the evdev device name (every
+instance shows up as `button@<hex-gpio>` regardless of `label`).
 
 ### Calibration note
 

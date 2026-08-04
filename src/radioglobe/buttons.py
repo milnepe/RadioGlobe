@@ -1,16 +1,32 @@
 import asyncio
-import time
 import inspect
 import logging
+import time
 from typing import Callable, NamedTuple, Optional
 
-import RPi.GPIO as GPIO  # type: ignore
+import evdev
+from evdev import ecodes
 
-# GPIO pin assignments (BCM numbering)
+# GPIO pin assignments (BCM numbering) - documentation only. The kernel
+# gpio-keys driver claims these pins directly via install.sh's
+# dtoverlay=gpio-key,... lines; nothing in this module reads them.
 _PIN_BTN_JOG    = 27
 _PIN_BTN_TOP    = 5
 _PIN_BTN_MID    = 6
 _PIN_BTN_BOTTOM = 12
+
+# Linux "generic button" keycodes (see evdev.ecodes / input-event-codes.h),
+# one per gpio-key overlay instance's keycode= param - install.sh's overlay
+# lines must use these same values. Used to identify which evdev device
+# belongs to which button: the overlay's label= param does NOT reliably set
+# the device name (confirmed on-device - every instance shows up as
+# "button@<hex-gpio>" regardless of label), so matching on the keycode each
+# device reports is the only reliable way to tell 4 simultaneous button
+# devices apart. See tests/integration/README.md's gpio-keys section.
+_KEYCODE_BTN_JOG    = ecodes.BTN_0
+_KEYCODE_BTN_TOP    = ecodes.BTN_1
+_KEYCODE_BTN_MID    = ecodes.BTN_2
+_KEYCODE_BTN_BOTTOM = ecodes.BTN_3
 
 
 class ButtonDefinition(NamedTuple):
@@ -19,6 +35,7 @@ class ButtonDefinition(NamedTuple):
     short_cb: Optional[Callable] = None
     long_cb: Optional[Callable] = None
     press_cb: Optional[Callable] = None
+    keycode: int = 0
 
 
 class ButtonCallbacks(NamedTuple):
@@ -28,106 +45,107 @@ class ButtonCallbacks(NamedTuple):
     press_cb: Optional[Callable] = None
 
 
-# Name+pin pairs for the 4 buttons wired to this project's custom board -
-# fixed by the hardware, not a choice callers make. Callers attach their own
-# callbacks with e.g. TOP_BUTTON._replace(short_cb=..., long_cb=..., press_cb=...);
-# the numeric _PIN_BTN_* constants above are not meant to be imported directly.
-JOG_BUTTON    = ButtonDefinition("Jog",    _PIN_BTN_JOG)
-TOP_BUTTON    = ButtonDefinition("Top",    _PIN_BTN_TOP)
-MID_BUTTON    = ButtonDefinition("Mid",    _PIN_BTN_MID)
-BOTTOM_BUTTON = ButtonDefinition("Bottom", _PIN_BTN_BOTTOM)
+# Name+pin+keycode triples for the 4 buttons wired to this project's custom
+# board - fixed by the hardware, not a choice callers make. Callers attach
+# their own callbacks with e.g. TOP_BUTTON._replace(short_cb=..., ...); the
+# numeric _PIN_BTN_*/_KEYCODE_BTN_* constants above are not meant to be
+# imported directly.
+JOG_BUTTON    = ButtonDefinition("Jog",    _PIN_BTN_JOG,    keycode=_KEYCODE_BTN_JOG)
+TOP_BUTTON    = ButtonDefinition("Top",    _PIN_BTN_TOP,    keycode=_KEYCODE_BTN_TOP)
+MID_BUTTON    = ButtonDefinition("Mid",    _PIN_BTN_MID,    keycode=_KEYCODE_BTN_MID)
+BOTTOM_BUTTON = ButtonDefinition("Bottom", _PIN_BTN_BOTTOM, keycode=_KEYCODE_BTN_BOTTOM)
+
+
+def _fire(callback):
+    """Invoke a sync or async callback without blocking the caller."""
+    if callback is None:
+        return
+    if inspect.iscoroutinefunction(callback):
+        asyncio.create_task(callback())
+    else:
+        callback()
 
 
 class AsyncButton:
-    def __init__(self, name, gpio_pin, loop, long_press_threshold=1.0, press_cb=None):
+    """One button read via the kernel gpio-keys driver + evdev, instead of
+    RPi.GPIO edge-detection.
+
+    Device discovery is deferred to start() rather than done in __init__,
+    so constructing an AsyncButton/AsyncButtonManager (e.g. in tests) never
+    touches real hardware unless start() is actually called.
+    """
+
+    def __init__(self, name, keycode, long_press_threshold=1.0,
+                 short_cb=None, long_cb=None, press_cb=None):
         self.name = name
-        self.pin = gpio_pin
-        self.loop = loop
+        self.keycode = keycode
         self.long_press_threshold = long_press_threshold
+        self.short_cb = short_cb
+        self.long_cb = long_cb
+        self.press_cb = press_cb
 
-        self._pressed = False
+        self._device = None
+        self._loop = None
+        self._event_queue = None
         self._press_start = None
-        self._event_ready = None  # "short" or "long"
-        self.press_cb = press_cb  # callback for press-down
 
-        GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self._handle_press, bouncetime=50)
+    @staticmethod
+    def _find_button_device(keycode) -> evdev.InputDevice:
+        for path in evdev.list_devices():
+            dev = evdev.InputDevice(path)
+            caps = dev.capabilities()
+            if keycode in caps.get(ecodes.EV_KEY, ()) and ecodes.EV_REL not in caps:
+                return dev
+        raise RuntimeError(
+            f"No gpio-keys input device found for keycode {keycode} - check "
+            "'dtoverlay=gpio-key,...' in /boot/firmware/config.txt and reboot"
+        )
 
-    def _handle_press(self, channel):
-        self.loop.call_soon_threadsafe(lambda: asyncio.create_task(self._check_hold()))
+    def _on_readable(self):
+        for event in self._device.read():
+            if event.type != ecodes.EV_KEY or event.code != self.keycode:
+                continue
+            if event.value == 1:  # key down
+                self._press_start = time.monotonic()
+                _fire(self.press_cb)
+            elif event.value == 0 and self._press_start is not None:  # key up
+                held = time.monotonic() - self._press_start
+                self._press_start = None
+                kind = "long" if held >= self.long_press_threshold else "short"
+                self._event_queue.put_nowait((self.name, kind))
 
-    async def _check_hold(self):
-        await asyncio.sleep(0.05)  # debounce
-        if not self._pressed and GPIO.input(self.pin) == GPIO.LOW:
-            self._pressed = True
-            self._press_start = time.monotonic()
+    def start(self, event_queue: asyncio.Queue):
+        self._event_queue = event_queue
+        self._device = self._find_button_device(self.keycode)
+        self._loop = asyncio.get_running_loop()
+        self._loop.add_reader(self._device.fd, self._on_readable)
 
-            # 🔔 Fire press-down callback immediately
-            if self.press_cb:
-                if inspect.iscoroutinefunction(self.press_cb):
-                    await self.press_cb()
-                else:
-                    self.press_cb()
-
-            # Wait for release
-            while GPIO.input(self.pin) == GPIO.LOW:
-                await asyncio.sleep(0.05)
-
-            held_time = time.monotonic() - self._press_start
-            self._pressed = False
-            self._press_start = None
-
-            if held_time >= self.long_press_threshold:
-                self._event_ready = "long"
-            else:
-                self._event_ready = "short"
-
-    def get_event(self):
-        if self._event_ready:
-            result = self._event_ready
-            self._event_ready = None
-            return result
-        return None
-
-    def clear(self):
-        self._pressed = False
-        self._press_start = None
-        self._event_ready = None
+    def stop(self):
+        if self._loop is not None and self._device is not None:
+            self._loop.remove_reader(self._device.fd)
+        if self._device is not None:
+            self._device.close()
 
 
 class AsyncButtonManager:
-    def __init__(self, button_definitions, loop, long_press_threshold=1.0):
-        self.buttons = []
-        self.event_queue = asyncio.Queue()
-
-        # Required before any AsyncButton's GPIO.setup() call below. No other
-        # module sets this globally (each hardware module owns its own
-        # setmode call) - setmode is idempotent, so calling it here is safe
-        # even if another hardware object in the same process already has.
-        GPIO.setmode(GPIO.BCM)
-
-        for definition in button_definitions:
-            btn = AsyncButton(
-                definition.name, definition.pin, loop, long_press_threshold, definition.press_cb
+    def __init__(self, button_definitions, long_press_threshold=1.0):
+        self.event_queue: asyncio.Queue = asyncio.Queue()
+        self.buttons = [
+            AsyncButton(
+                d.name, d.keycode, long_press_threshold,
+                d.short_cb, d.long_cb, d.press_cb,
             )
-            self.buttons.append(btn)
-            setattr(btn, "short_cb", definition.short_cb)
-            setattr(btn, "long_cb", definition.long_cb)
+            for d in button_definitions
+        ]
 
     async def start(self):
-        asyncio.create_task(self._poll_buttons())
+        for btn in self.buttons:
+            btn.start(self.event_queue)
 
     async def stop(self):
-        """Release the GPIO pins for every managed button."""
-        GPIO.cleanup([btn.pin for btn in self.buttons])
-
-    async def _poll_buttons(self):
-        while True:
-            for button in self.buttons:
-                event_type = button.get_event()
-                if event_type:
-                    await self.event_queue.put((button.name, event_type))
-            await asyncio.sleep(0.05)
+        """Release every managed button's evdev device."""
+        for btn in self.buttons:
+            btn.stop()
 
     async def handle_events(self):
         """Continuously process events with the appropriate handler.
@@ -159,7 +177,6 @@ class AsyncButtonManager:
 
 
 def create_button_manager(
-    loop,
     *,
     jog: ButtonCallbacks = ButtonCallbacks(),
     top: ButtonCallbacks = ButtonCallbacks(),
@@ -178,4 +195,4 @@ def create_button_manager(
         MID_BUTTON._replace(**mid._asdict()),
         BOTTOM_BUTTON._replace(**bottom._asdict()),
     ]
-    return AsyncButtonManager(button_definitions, loop)
+    return AsyncButtonManager(button_definitions)
