@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.2] - 2026-08-04
+### Changed
+- `display.py`: renamed `DISPLAY_COLUMNS`/`DISPLAY_ROWS`/`DISPLAY_I2C_PORT`
+  to `_DISPLAY_COLUMNS`/`_DISPLAY_ROWS`/`_DISPLAY_I2C_PORT`, matching
+  `_I2C_LCD_ADDR`'s privacy in the same file (all have zero consumers
+  outside `display.py`).
+
+### Fixed
+- `update()`'s coords line now gets the same `[:_DISPLAY_COLUMNS]`
+  truncation guard `location`/`station` already had — previously latent
+  (`Coordinate.__str__()` always produces <20 chars) but not actually
+  guaranteed by the code.
+
+### Removed
+- Dead code in `display.py`: a commented-out logger-setup block, a
+  redundant `if not volume: volume = 0` no-op, and a commented-out
+  trailing debug log.
+
 ## [0.7.1] - 2026-08-04
 ### Fixed
 - Moved `_VOLUME_STEP`/`_VOLUME_ON_LEVEL`/`_VOLUME_OFF_LEVEL`/
