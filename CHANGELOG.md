@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.0] - 2026-08-04
+### Added
+- `tests/integration/jog_gpio_keys_test.py`: standalone, zero-`radioglobe`-
+  dependency diagnostic for the Jog button via the kernel `gpio-keys`
+  driver, kept alongside `dial.py`'s equivalent `encoder_hardware_test.py`.
+
+### Changed
+- `buttons.py` now reads all 4 buttons (Jog, Top, Mid, Bottom) via the
+  kernel's `gpio-keys` driver + evdev instead of `RPi.GPIO`
+  edge-detection — the same kernel-driver approach `dial.py` already
+  uses for the dial's rotation. Device discovery matches on a distinct
+  keycode (`BTN_0`..`BTN_3`) per button rather than device name, since
+  on-device testing showed the overlay's `label=` param doesn't
+  reliably set the evdev device name.
+- Removes the busy-wait release-polling state machine, the 50ms
+  `_poll_buttons()` task, and the `loop.call_soon_threadsafe()`
+  GPIO-interrupt-thread bridging entirely — every hardware source in
+  the app is now purely event-driven. Also drops the now-vestigial
+  `loop` parameter from `AsyncButton`/`AsyncButtonManager`/
+  `create_button_manager()`.
+- `install.sh` adds the 4 required `dtoverlay=gpio-key` lines
+  idempotently (reboot required, same as the existing dial overlay).
+- `button_test.py` rewritten around the real `create_button_manager()`
+  production path for all 4 buttons.
+
+### Removed
+- `tests/integration/button_reliability_test.py` — the stuck-polling
+  failure mode it existed to catch is now structurally impossible
+  under the kernel-driven design.
+
 ## [0.7.2] - 2026-08-04
 ### Changed
 - `display.py`: renamed `DISPLAY_COLUMNS`/`DISPLAY_ROWS`/`DISPLAY_I2C_PORT`
