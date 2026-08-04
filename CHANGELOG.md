@@ -2,6 +2,45 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-08-04
+### Added
+- Hardware Abstraction Layer (`radioglobe.hal`): `protocols.py` defines a
+  `typing.Protocol` per hardware role (dial, positional encoders, buttons,
+  RGB LED, display, audio) matching the existing hardware classes' real
+  signatures exactly, with no changes needed to those modules. `fake.py`
+  provides hand-written fakes (`FakeDial`, `FakePositionalEncoders`,
+  `FakeButtonManager`, `FakeRGBLed`, `FakeDisplay`, `FakeAudioPlayer`) with
+  test hooks for driving `App` end-to-end off real hardware. `factory.py`'s
+  `build_hardware()` constructs the real Pi-backed bundle.
+- `App.__init__` now takes its 5 hardware objects as constructor parameters
+  instead of building them itself; `cli.py` and `main.py`'s `__main__` block
+  call `App(*build_hardware())`.
+- New unit tests (`tests/hal/`, `tests/main_test.py`) exercising previously
+  hardware-locked `App` logic — the dial/encoder event loops, LED-flash
+  behavior, and stream-failure handling — with no real I/O.
+
+### Changed
+- Pi-specific packages (`evdev`, `lgpio`, `rpi-lgpio`, `smbus`, `spidev`,
+  `liquidcrystal-i2c`, `python-vlc`) moved from `pyproject.toml`'s base
+  `dependencies` into an optional `pi` extra, so the core package, the HAL,
+  and the unit test suite install and import cleanly off a Pi.
+  `install.sh`/`update.sh`/the deploy scripts now install `.[pi]` on-device.
+- Fixed button wiring (`button_definitions`/`AsyncButtonManager`
+  construction) moved from `main.py` into `buttons.create_button_manager()`,
+  taking a `ButtonCallbacks` bundle per button; callback bodies stay on
+  `App` since they orchestrate other hardware/app state.
+- Relocated several constants to the hardware module that's their only
+  consumer: `_VOLUME_STEP`/`_VOLUME_ON_LEVEL`/`_VOLUME_OFF_LEVEL`/
+  `_LED_FLASH_SHORT` into `buttons.py`, `_LED_FLASH_DIAL` into `dial.py`,
+  and LED colour constants (`COLOUR_RED`/`GREEN`/`BLUE`/`WHITE`/`OFF`) into
+  `rgb_led.py` — the last of these also fixes a pre-existing duplication
+  where `RGBLed.COLOURS` independently hardcoded the same 5 colour strings
+  `constants.py` also defined.
+
+### Fixed
+- A pre-existing wheel-path duplication bug in `update.sh` (noticed while
+  updating it for the `pi` extra).
+
 ## [0.6.3] - 2026-08-03
 ### Changed
 - Simplified `AsyncDial` (`dial.py`): removed the software debounce/coalescing
