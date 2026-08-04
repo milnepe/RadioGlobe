@@ -1,14 +1,14 @@
-# evdev, lgpio, liquidcrystal-i2c, python-vlc, rpi-lgpio, smbus and spidev
-# correspond to pyproject.toml's `pi` extra (pip install .[pi]).
+# evdev, liquidcrystal-i2c, python-vlc, smbus and spidev correspond to
+# pyproject.toml's `pi` extra (pip install .[pi]). lgpio/rpi-lgpio were
+# removed once rgb_led.py's gpio-led migration made them unused - the
+# dial/buttons/rgb_led are now all kernel-driven (evdev/sysfs), not RPi.GPIO.
 evdev==1.9.3
 iniconfig==2.1.0
-lgpio==0.2.2.0
 liquidcrystal-i2c @ git+https://github.com/pl31/python-liquidcrystal_i2c.git@e26e4d22f039e9a2c04580dda072e8ca9693d1bb
 packaging==25.0
 pluggy==1.6.0
 pygments==2.19.1
 pytest==8.4.0
 python-vlc==3.0.21203
-rpi-lgpio==0.6
 smbus==1.1.post2
 spidev==3.7

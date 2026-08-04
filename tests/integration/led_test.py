@@ -10,9 +10,12 @@ import asyncio
 import time
 import pytest
 
-GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
-
 from radioglobe.rgb_led import RGBLed, COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
+
+try:
+    RGBLed()
+except RuntimeError as e:
+    pytest.skip(str(e), allow_module_level=True)
 
 
 async def scheduler():

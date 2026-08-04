@@ -5,7 +5,6 @@ Test harness for async cvlc streamer
 import asyncio
 import pytest
 
-GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
@@ -13,6 +12,11 @@ from radioglobe.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
+
+try:
+    RGBLed()
+except RuntimeError as e:
+    pytest.skip(str(e), allow_module_level=True)
 
 
 async def get_cities(lat, lon, city_map, offsets) -> list:
