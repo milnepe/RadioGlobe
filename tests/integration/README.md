@@ -16,6 +16,7 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
 | `streaming_cvlc_test.py` | GPIO + SPI + cvlc | Full stack test: encoders → city lookup → cvlc audio stream |
 | `async_streamer_test.py` | Network | Resolves and plays a list of internet radio URLs using the async aiohttp streamer (no Pi hardware needed) |
+| `jog_gpio_keys_test.py` | GPIO (experimental `gpio-key` overlay + evdev) | **Experimental.** Reads the Jog button via the kernel's `gpio-keys` driver instead of `buttons.py`'s `RPi.GPIO`, printing SHORT/LONG on each press. Not wired into the app — see "Experimental: Jog button via gpio-keys overlay" below before running |
 
 ## Examples
 
@@ -48,6 +49,10 @@ python tests/integration/streaming_cvlc_test.py
 
 # Async streamer (network only)
 python tests/integration/async_streamer_test.py
+
+# Experimental: Jog button via kernel gpio-keys driver (see setup section below
+# before running - conflicts with the running service on GPIO 27)
+python tests/integration/jog_gpio_keys_test.py
 ```
 
 ## Hardware setup
@@ -104,6 +109,36 @@ clock/direction pair. `install.sh` adds the required
 `/boot/firmware/config.txt` idempotently — a reboot is required for it to take effect
 (covered by the same reboot prompt `install.sh` already prints). No `raspi-config` step
 is needed for this; `rotary-encoder` isn't one of its interface toggles.
+
+### Experimental: Jog button via `gpio-keys` overlay
+
+`jog_gpio_keys_test.py` tries reading the Jog button (GPIO 27) through the
+kernel's `gpio-keys` driver instead of `buttons.py`'s `RPi.GPIO`
+edge-detection, mirroring the kernel-driver approach already adopted for
+the dial's rotation. **This is exploratory** — not wired into `buttons.py`
+or the running service.
+
+Requires adding, in `/boot/firmware/config.txt` (confirm exact parameter
+names/defaults on-device first with `dtoverlay -h gpio-key` — don't assume
+these without checking, same as every other overlay in this project):
+
+```
+dtoverlay=gpio-key,gpio=27,gpio_pull=up,label=jog,keycode=<code>
+```
+
+The overlay claims GPIO 27 at boot, before Linux starts — the same
+mechanism documented for `dtoverlay=rotary-encoder` above and in
+`docs/JOG_WHEEL_INVESTIGATION.md` §4. This **conflicts** with
+`buttons.py`'s `RPi.GPIO.setup(27, ...)` for the Jog button, so:
+
+1. `systemctl --user stop radioglobe.service` first.
+2. Add the overlay line and reboot.
+3. Run `jog_gpio_keys_test.py` and press the Jog button — short and long —
+   to check the reported classification and timing feel reliable.
+4. When done, comment the overlay line back out, reboot, and confirm
+   `radioglobe.service` starts normally with the Jog button working via
+   `buttons.py` again before deciding whether this is worth adopting for
+   real.
 
 ### Calibration note
 
