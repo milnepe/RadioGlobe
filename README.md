@@ -28,7 +28,7 @@ If you want to use a BT speaker, you can configure it with `bluetoothctl`.
 
 ### Step 1 - Raspberry Pi OS Lite
 Get your Raspberry Pi up and running.
-Flash `Raspberry Pi OS Lite` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. Tested on both `Bookworm` and `Trixie`. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
+Flash `Raspberry Pi OS Lite` to a 16GB SD card using Raspberry Pi Imager from the `Raspberry Pi Other` section. Tested on `Trixie`. [Raspberry Pi OS installation](https://www.raspberrypi.com/software/) 
 
 Note: Use `OS Customisations` to set the hostname to `radioglobe`, default user to `radioglobe`, optional WiFi, timezone and SSH access. If you don't do this here, you will have a hard time getting SSH access! 
 
@@ -131,7 +131,7 @@ It is important to shut the Pi down correctly so that the SD card is not corrupt
 
 
 ## Upgrading
-If you have an existing system based on `Bullseye`, `Bookworm` or `Trixie` you can try upgrading. This may not work depending on how much custom config you have on your system.
+If you have an existing system based on an earlier Raspberry Pi OS release you can try upgrading to `Trixie`. This may not work depending on how much custom config you have on your system.
 Make a copy of your `stations.json` file if you have made any custom changes to this. It can be copied back to the new installation.
 Follow the above from `Step 5`.
 
@@ -193,18 +193,18 @@ Audio code is now in `radioglobe/streaming/python_vlc_streaming.py` which uses p
 
 To take advantage of pulseaudio it is important to have a logged in user and RadioGlobe must be started as the default user. This will start pulseaudio in a secure way and allow automatic detection of your output devices.
 
-Audio has changed across the last Debian versions; both `Bookworm` and `Trixie` have been tested.
+Audio has been tested on `Trixie`.
 
 Note that radio stations change their URLs all the time so a URL may be out-of-date. You can update this by editing the `stations.json` file. Save a copy first! Some stations go `off-line` in their night time, depending on your timezone. Try back later or you can remove them from `stations.json`.
 
 ## Troubleshooting
 If things are not working the first step is to make sure that your Pi is setup and up-to-date and you have followed the steps above carefully. We recommend to start with a powered speaker connected to the audio jack first, before moving on to Bluetooth speakers, which are more problematic.
 
-1. Check OS release is Bookworm or Trixie - these are what we have tested on
+1. Check OS release is Trixie - this is what we have tested on
 ```
 cat /etc/os-release 
 ...
-VERSION_CODENAME=bookworm
+VERSION_CODENAME=trixie
 ...
 
 ```
