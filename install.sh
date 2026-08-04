@@ -40,9 +40,7 @@ sudo apt install -y \
     python3-dev \
     pulseaudio-module-bluetooth \
     rfkill \
-    jq \
-    swig \
-    liblgpio-dev
+    jq
 
 # -----------------------------
 # Rotary encoder dtoverlay (idempotent)
@@ -78,6 +76,49 @@ for line in "${BUTTON_OVERLAY_LINES[@]}"; do
         echo "$line" | sudo tee -a "$CONFIG_TXT" > /dev/null
     fi
 done
+
+# -----------------------------
+# RGB LED dtoverlays (idempotent)
+# -----------------------------
+# The RGB status LED is driven via the kernel gpio-led (leds-gpio) driver
+# instead of RPi.GPIO. label= values must match rgb_led.py's
+# _LED_LABEL_RED/_GREEN/_BLUE constants exactly - unlike gpio-key, gpio-led's
+# label= was confirmed on-device to reliably set the sysfs device name
+# (/sys/class/leds/<label>/brightness), so no keycode-style workaround is
+# needed here.
+LED_OVERLAY_LINES=(
+    "dtoverlay=gpio-led,gpio=22,label=led-red"
+    "dtoverlay=gpio-led,gpio=23,label=led-green"
+    "dtoverlay=gpio-led,gpio=24,label=led-blue"
+)
+for line in "${LED_OVERLAY_LINES[@]}"; do
+    if ! grep -qxF "$line" "$CONFIG_TXT"; then
+        echo "⚙️ Adding LED dtoverlay to $CONFIG_TXT: $line"
+        echo "$line" | sudo tee -a "$CONFIG_TXT" > /dev/null
+    fi
+done
+
+# -----------------------------
+# LED sysfs udev rule (idempotent)
+# -----------------------------
+# /sys/class/leds/*/brightness is root:root mode 644 by default - unlike
+# /dev/input/* (readable via the `input` group), nothing grants a
+# non-root user write access. $RADIOGLOBE_USER is already in the `gpio`
+# group (used for GPIO character device access), so reuse it here rather
+# than inventing a new group.
+UDEV_RULES_FILE=/etc/udev/rules.d/99-radioglobe-leds.rules
+UDEV_RULES_CONTENT='SUBSYSTEM=="leds", KERNEL=="led-red", RUN+="/bin/chgrp gpio /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
+SUBSYSTEM=="leds", KERNEL=="led-green", RUN+="/bin/chgrp gpio /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"
+SUBSYSTEM=="leds", KERNEL=="led-blue", RUN+="/bin/chgrp gpio /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/brightness"'
+if [[ ! -f "$UDEV_RULES_FILE" ]] || ! diff -q <(echo "$UDEV_RULES_CONTENT") "$UDEV_RULES_FILE" > /dev/null 2>&1; then
+    echo "🔑 Installing udev rule for LED sysfs access..."
+    echo "$UDEV_RULES_CONTENT" | sudo tee "$UDEV_RULES_FILE" > /dev/null
+    sudo udevadm control --reload-rules
+    # Re-applies to LEDs that already exist from a prior boot (e.g. re-running
+    # install.sh after upgrading) - a no-op if the overlay hasn't loaded yet,
+    # which still needs the reboot below regardless.
+    sudo udevadm trigger --subsystem-match=leds || true
+fi
 
 # -----------------------------
 # Ensure Bluetooth radio isn't soft-blocked (idempotent)

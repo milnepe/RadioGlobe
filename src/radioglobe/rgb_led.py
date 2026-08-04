@@ -1,11 +1,25 @@
 import asyncio
 import logging
-import RPi.GPIO as GPIO  # type: ignore
+from pathlib import Path
 
-# GPIO pin assignments (BCM numbering)
+_LED_SYSFS_DIR = Path("/sys/class/leds")
+
+# GPIO pin assignments (BCM numbering) - documentation only. The kernel
+# gpio-led driver claims these pins directly via install.sh's
+# dtoverlay=gpio-led,... lines; nothing in this module reads them.
 _PIN_LED_R = 22
 _PIN_LED_G = 23
 _PIN_LED_B = 24
+
+# gpio-led overlay labels - functionally load-bearing: install.sh's
+# dtoverlay=gpio-led,...,label=<name> lines must use these same values,
+# since each becomes the sysfs device name directly
+# (/sys/class/leds/<label>/brightness). Unlike gpio-key, gpio-led's
+# label= param was confirmed on-device to set the device name reliably,
+# so no keycode-style disambiguation is needed here.
+_LED_LABEL_RED = "led-red"
+_LED_LABEL_GREEN = "led-green"
+_LED_LABEL_BLUE = "led-blue"
 
 # LED colour vocabulary - the single source of truth for what colours this
 # LED supports; COLOURS below is built from these rather than separately
@@ -26,34 +40,47 @@ class RGBLed:
         COLOUR_OFF: (0, 0, 0),
     }
 
-    def __init__(self, red_pin=_PIN_LED_R, green_pin=_PIN_LED_G, blue_pin=_PIN_LED_B):
-        # Required before the GPIO.setup() calls below. No other module sets
-        # this globally (each hardware module owns its own setmode call) -
-        # setmode is idempotent, so calling it here is safe even if another
-        # hardware object in the same process already has.
-        GPIO.setmode(GPIO.BCM)
-        self.pins = {"red": red_pin, "green": green_pin, "blue": blue_pin}
+    def __init__(self, red_label=_LED_LABEL_RED, green_label=_LED_LABEL_GREEN,
+                 blue_label=_LED_LABEL_BLUE):
+        self.paths = {
+            "red": self._resolve(red_label),
+            "green": self._resolve(green_label),
+            "blue": self._resolve(blue_label),
+        }
         self._running = asyncio.Event()
-        for pin in self.pins.values():
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)
+
+    @staticmethod
+    def _resolve(label: str) -> Path:
+        path = _LED_SYSFS_DIR / label / "brightness"
+        if not path.exists():
+            raise RuntimeError(
+                f"No gpio-led sysfs entry found for {label!r} - check "
+                "'dtoverlay=gpio-led,...' in /boot/firmware/config.txt and reboot"
+            )
+        try:
+            path.write_text("0")
+        except PermissionError as e:
+            raise RuntimeError(
+                f"No write access to {path} - check the LED udev rule "
+                "(/etc/udev/rules.d/99-radioglobe-leds.rules) is installed and "
+                "'udevadm control --reload-rules' has run"
+            ) from e
+        return path
 
     def set_color(self, color_name):
         color = self.COLOURS.get(color_name.lower(), (0, 0, 0))
-        GPIO.output(self.pins["red"], GPIO.HIGH if color[0] else GPIO.LOW)
-        GPIO.output(self.pins["green"], GPIO.HIGH if color[1] else GPIO.LOW)
-        GPIO.output(self.pins["blue"], GPIO.HIGH if color[2] else GPIO.LOW)
+        for channel, value in zip(("red", "green", "blue"), color):
+            self.paths[channel].write_text(str(value))
 
     def off(self):
         self.set_color(COLOUR_OFF)
 
     def start(self):
-        pass  # GPIO pins are configured at construction time
+        pass  # sysfs entries already exist once the gpio-led overlay is loaded
 
     async def stop(self):
-        """Turn the LED off and release its GPIO pins."""
+        """Turn the LED off. Nothing to release - the kernel driver owns the pins."""
         self.off()
-        GPIO.cleanup(list(self.pins.values()))
 
     async def flash(self, color: str, duration: float):
         """Turn the LED on for duration seconds, then off.

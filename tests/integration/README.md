@@ -15,7 +15,7 @@ See [../../CONTRIBUTING.md](../../CONTRIBUTING.md) for how to submit changes.
 | `main_test.py` | GPIO + SPI | Encoder index diagnostic: shows current index, search area, and matched cities on latch. LED blinks red on latch. No audio. |
 | `streaming_cvlc_test.py` | GPIO + SPI + cvlc | Full stack test: encoders → city lookup → cvlc audio stream |
 | `async_streamer_test.py` | Network | Resolves and plays a list of internet radio URLs using the async aiohttp streamer (no Pi hardware needed) |
-| `rgb_led_gpio_led_test.py` | GPIO (experimental `gpio-led` overlay) | **Experimental.** Cycles the RGB LED through named colours by writing `/sys/class/leds/*/brightness` via the kernel's `leds-gpio` driver instead of `rgb_led.py`'s `RPi.GPIO`. Not wired into the app — see "Experimental: RGB LED via gpio-led overlay" below before running |
+| `rgb_led_gpio_led_test.py` | GPIO (kernel `gpio-led` overlay) | Low-level diagnostic: cycles the RGB LED through named colours by writing `/sys/class/leds/*/brightness` directly, with no `radioglobe` dependency — same role `encoder_hardware_test.py`/`jog_gpio_keys_test.py` play for the dial/buttons |
 
 ## Examples
 
@@ -45,9 +45,9 @@ python tests/integration/streaming_cvlc_test.py
 # Async streamer (network only)
 python tests/integration/async_streamer_test.py
 
-# Experimental: RGB LED via kernel leds-gpio driver (see setup section below
-# before running - needs sudo, no udev rule grants write access yet)
-sudo python tests/integration/rgb_led_gpio_led_test.py
+# RGB LED via kernel leds-gpio driver (no sudo needed once install.sh's
+# udev rule is installed - see setup section below)
+python tests/integration/rgb_led_gpio_led_test.py
 ```
 
 ## Hardware setup
@@ -83,9 +83,9 @@ pip install -e .
 | Top button | 5 | `BTN_1` (257) |
 | Mid button | 6 | `BTN_2` (258) |
 | Bottom button | 12 | `BTN_3` (259) |
-| LED red | 22 | — (experimental `leds-gpio` label `led-red`) |
-| LED green | 23 | — (experimental `leds-gpio` label `led-green`) |
-| LED blue | 24 | — (experimental `leds-gpio` label `led-blue`) |
+| LED red | 22 | — (`leds-gpio` label `led-red`) |
+| LED green | 23 | — (`leds-gpio` label `led-green`) |
+| LED blue | 24 | — (`leds-gpio` label `led-blue`) |
 
 ### SPI
 
@@ -122,37 +122,29 @@ keycode a device reports, **not** on its `label=` param, since the overlay
 was found on-device to not reliably set the evdev device name (every
 instance shows up as `button@<hex-gpio>` regardless of `label`).
 
-### Experimental: RGB LED via `gpio-led` overlay
+### RGB LED (kernel `gpio-led` overlay)
 
-`rgb_led_gpio_led_test.py` tries driving the RGB status LED (R=22, G=23,
-B=24) through the kernel's `leds-gpio` driver instead of `rgb_led.py`'s
-`RPi.GPIO` output calls, mirroring the kernel-driver approach already
-adopted for the dial and all 4 buttons. **This is exploratory** — not
-wired into `rgb_led.py` or the running service.
-
-Requires adding, in `/boot/firmware/config.txt` (confirmed on-device via
-`dtoverlay -h gpio-led`):
-
-```
-dtoverlay=gpio-led,gpio=22,label=led-red
-dtoverlay=gpio-led,gpio=23,label=led-green
-dtoverlay=gpio-led,gpio=24,label=led-blue
-```
+The RGB status LED (R=22, G=23, B=24) is driven through the kernel's
+`leds-gpio` driver, not directly via `RPi.GPIO` — the same kernel-driver
+approach already used for the dial and all 4 buttons. `install.sh` adds
+the required `dtoverlay=gpio-led,gpio=<pin>,label=<name>` line for each
+channel idempotently — a reboot is required for them to take effect
+(covered by the same reboot prompt `install.sh` already prints).
 
 Unlike `gpio-key`'s `label=` param (which doesn't reliably set the evdev
 device name, see above), `leds-gpio`'s `label=` reliably becomes the sysfs
 class device name directly — each LED shows up at
-`/sys/class/leds/<label>/brightness`, written with a plain `0`/`1`.
+`/sys/class/leds/<label>/brightness`, written with a plain `0`/`1`. Labels
+must match `rgb_led.py`'s `_LED_LABEL_RED`/`_GREEN`/`_BLUE` constants (see
+the pin table above).
 
-**Known gap:** `/sys/class/leds/*/brightness` is `root:root` mode `644` on
-stock Raspberry Pi OS — confirmed on-device (tried writing to the existing
-`ACT` LED as the `radioglobe` user: `Permission denied`). Unlike
-`/dev/input/*` (readable via the `input` group), no udev rule grants
-non-root write access to LED class devices here. Run the test script with
-`sudo` for now. Adopting this for real would need a udev rule (e.g.
-`SUBSYSTEM=="leds", RUN+="/bin/chmod g+w /sys%p/brightness"`) so the
-running service doesn't need root — not set up, since this is still just
-an experiment.
+**Permissions:** `/sys/class/leds/*/brightness` is `root:root` mode `644`
+by default — unlike `/dev/input/*` (readable via the `input` group), no
+kernel/overlay mechanism grants non-root write access on its own.
+`install.sh` also installs a udev rule
+(`/etc/udev/rules.d/99-radioglobe-leds.rules`) granting the `gpio` group
+(which `radioglobe` is already a member of) write access, so neither the
+running service nor `rgb_led_gpio_led_test.py` need `sudo`.
 
 ### Calibration note
 

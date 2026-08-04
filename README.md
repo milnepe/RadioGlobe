@@ -193,7 +193,7 @@ Audio code is now in `radioglobe/streaming/python_vlc_streaming.py` which uses p
 
 To take advantage of pulseaudio it is important to have a logged in user and RadioGlobe must be started as the default user. This will start pulseaudio in a secure way and allow automatic detection of your output devices.
 
-Audio has changed across the last Debian versions; both `Bookworm` and `Trixie` have been tested. `Trixie` needs a couple of extra apt packages (`swig`, `liblgpio-dev`) to build the GPIO Python bindings — `install.sh` installs these automatically.
+Audio has changed across the last Debian versions; both `Bookworm` and `Trixie` have been tested.
 
 Note that radio stations change their URLs all the time so a URL may be out-of-date. You can update this by editing the `stations.json` file. Save a copy first! Some stations go `off-line` in their night time, depending on your timezone. Try back later or you can remove them from `stations.json`.
 
@@ -259,14 +259,16 @@ source .venv/bin/activate
 ```
 uv init --no-workspace
 ```
-6. Add dependencies. `python-vlc`, `lgpio`/`rpi-lgpio`, `liquidcrystal-i2c`, `spidev`
-   and `smbus` are Pi-hardware-only and belong in the `pi` extra (see
+6. Add dependencies. `python-vlc`, `liquidcrystal-i2c`, `spidev` and `smbus`
+   are Pi-hardware-only and belong in the `pi` extra (see
    `pyproject.toml`'s `[project.optional-dependencies]`), not the base
-   dependencies — the core package and unit test suite don't need them:
+   dependencies — the core package and unit test suite don't need them.
+   `lgpio`/`rpi-lgpio` (which provided `RPi.GPIO`) are no longer needed at
+   all — `dial.py`/`buttons.py`/`rgb_led.py` are all kernel-driven
+   (evdev/sysfs) rather than talking to GPIO pins directly:
 ```
 uv add --dev pytest
 uv add --optional pi python-vlc
-uv add --optional pi lgpio rpi-lgpio
 uv add --optional pi "liquidcrystal-i2c @ git+https://github.com/pl31/python-liquidcrystal_i2c.git"
 uv add --optional pi spidev smbus
 ```

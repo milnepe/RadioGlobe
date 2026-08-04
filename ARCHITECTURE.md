@@ -44,7 +44,7 @@ The Raspberry Pi 4B runs Raspberry Pi OS Bookworm Lite. Audio plays through VLC 
 | Mid button (calibrate / shutdown) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 6 | `buttons.py` |
 | Bottom button (volume down) | GPIO (kernel `gpio-keys` driver + evdev) | Pin 12 | `buttons.py` |
 | 20×4 character LCD | I2C | Bus 1, address 0x27 | `display.py` |
-| RGB status LED | GPIO | R=22, G=23, B=24 | `rgb_led.py` |
+| RGB status LED | GPIO (kernel `gpio-led`/`leds-gpio` driver + sysfs) | R=22, G=23, B=24 | `rgb_led.py` |
 | Audio output | VLC / PulseAudio | 3.5mm / Bluetooth | `audio_async.py` |
 
 ### Button Operations
@@ -146,7 +146,7 @@ graph TD
     main --> dial["dial.py\nkernel rotary-encoder + evdev"]
     main --> buttons["buttons.py\nkernel gpio-keys + evdev"]
     main --> display["display.py\nI2C LCD display"]
-    main --> led["rgb_led.py\nGPIO LED"]
+    main --> led["rgb_led.py\nkernel gpio-led + sysfs"]
     main --> audio["audio_async.py\nVLC audio player"]
     main --> nav["navigation.py\n(Navigator)"]
     main --> database["database.py\nPure functions"]
@@ -162,7 +162,7 @@ graph TD
     display --> i2c[("liquidcrystal_i2c")]
     dial --> input[("evdev /dev/input/eventN")]
     buttons --> input
-    led --> gpio[("lgpio / RPi.GPIO")]
+    led --> sysfs[("sysfs /sys/class/leds/*")]
 ```
 
 `App` still imports `get_stations_by_city` (`database.py`) directly — used
@@ -253,9 +253,10 @@ a named `Navigator` method.
 A small dataclass holding the app's mutable station/city selection state,
 owned by `Navigator` (§4.3) rather than `App` directly. Split out of
 `main.py` into its own module specifically so it has no hardware
-dependency: `main.py` imports `RPi.GPIO` at module level and can't be
-imported off a Raspberry Pi at all, so anything meant to be unit-testable
-has to live somewhere that doesn't transitively pull that in.
+dependency: `main.py` transitively imports `evdev` at module level (via
+`buttons.py`, §4.14) and can't be imported off a Raspberry Pi at all
+without stubbing it, so anything meant to be unit-testable has to live
+somewhere that doesn't transitively pull that in.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -597,15 +598,53 @@ class AudioPlayer:
 
 ### 4.10 `rgb_led.py` — Status LED
 
-Three GPIO output pins (R=22, G=23, B=24) with simple on/off control (no PWM).
+Three LED channels (R=22, G=23, B=24), each read via the kernel's
+`gpio-led`/`leds-gpio` driver + sysfs — the same kernel-driver approach
+`dial.py` (§4.6) and `buttons.py` (§4.7) already use — rather than
+`RPi.GPIO.output()`. Migrated because the experiment
+(`tests/integration/rgb_led_gpio_led_test.py`, kept as a standalone
+zero-`radioglobe`-dependency diagnostic, same role
+`encoder_hardware_test.py`/`jog_gpio_keys_test.py` play for the dial/buttons)
+showed correct colours with no flicker on real hardware. `rgb_led.py` was
+the *last* module using `RPi.GPIO`; migrating it means `import RPi.GPIO`
+has zero remaining consumers in `src/`, so `lgpio`/`rpi-lgpio` (and the
+`swig`/`liblgpio-dev` apt packages needed to build them) were removed
+entirely rather than just from this one module (§8).
 
-`RGBLed.flash(colour, duration)` is an async method, always spawned with `asyncio.create_task()` rather than awaited. It:
+Each channel is controlled by writing `"1"`/`"0"` to
+`/sys/class/leds/<label>/brightness`, where `<label>` comes from
+`install.sh`'s `dtoverlay=gpio-led,gpio=<pin>,label=<label>` line — unlike
+`gpio-key`, `gpio-led`'s `label=` was confirmed on-device to reliably set
+the sysfs device name, so (unlike `buttons.py`) no keycode-style
+disambiguation workaround is needed; `RGBLed._resolve(label)` just builds
+the path directly. `_resolve()` also does a one-time test write during
+`__init__`, converting a bare `PermissionError` into a `RuntimeError` that
+names the udev rule to check — see the permissions paragraph below, the
+one part of this migration the dial/button ones didn't need.
+
+`max_brightness` is `1` for these LEDs (binary on/off only, confirmed
+on-device) — identical to what `RPi.GPIO.output(HIGH/LOW)` already gave,
+so this migration changes nothing about brightness/dimming capability.
+
+`RGBLed.flash(colour, duration)` is unchanged in shape — still an async
+method, always spawned with `asyncio.create_task()` rather than awaited. It:
 1. Checks its own `self._running` Event to prevent overlapping flashes (a no-op if a flash is already in progress)
 2. Sets the event, turns the LED on
 3. Sleeps for `duration` seconds
 4. Turns the LED off and clears the event
 
-This used to be a standalone coroutine (`led_task(led, led_running, colour, duration)`) that every call site in `main.py` had to pass a shared `asyncio.Event` into by reference — folded into `RGBLed` itself in the decoupling refactor so `App` only needs to know `self.led.flash(colour, duration)` exists, not that it needs a co-owned `Event`. `RGBLed.__init__` also calls `GPIO.setmode(GPIO.BCM)` itself, for the same self-sufficiency reason as `AsyncButtonManager` — see §4.7. `RGBLed.stop()` mirrors this on teardown: it turns the LED off, then calls `GPIO.cleanup(list(self.pins.values()))` to release only its own 3 pins, rather than relying on a process-wide `GPIO.cleanup()` call in `main.py`.
+`RGBLed.stop()` now just calls `self.off()` — no `GPIO.cleanup()`
+equivalent, since Python never claims these pins at all any more; the
+kernel driver does, exactly like `dial.py`/`buttons.py`. `__init__` no
+longer calls `GPIO.setmode()` either, for the same reason.
+
+**Permissions — the one gap this migration has that the dial/button ones
+didn't:** `/sys/class/leds/*/brightness` is `root:root` mode `644` by
+default (confirmed on-device, unlike `/dev/input/*` which is readable via
+the `input` group). `install.sh` installs a udev rule
+(`/etc/udev/rules.d/99-radioglobe-leds.rules`) granting the `radioglobe`
+user's existing `gpio` group write access, and reloads/retriggers udev so
+a re-run fixes permissions on LEDs that already exist from a prior boot.
 
 `COLOUR_RED`/`COLOUR_GREEN`/`COLOUR_BLUE`/`COLOUR_WHITE`/`COLOUR_OFF` are
 public constants owned here (moved from `constants.py`), and `RGBLed.COLOURS`
@@ -692,7 +731,7 @@ platform. Three files, all new, none of which required changing `dial.py`,
   Pi-backed `(dial, audio_player, encoders, display, led)` tuple. The concrete
   hardware modules are imported inside its function body, not at module
   scope, so importing `radioglobe.hal` never pulls in `evdev`/`spidev`/
-  `RPi.GPIO`/`liquidcrystal_i2c`/`vlc` — only calling `build_hardware()` does.
+  `liquidcrystal_i2c`/`vlc` — only calling `build_hardware()` does.
 
 `App.__init__` (§4.1) takes these 5 hardware objects as required constructor
 parameters (typed against the Protocols above) instead of constructing them
@@ -712,17 +751,18 @@ real-class-plus-stub approach remains the way to test
 
 **Residual import gap:** `main.py` imports `create_button_manager`/
 `ButtonCallbacks` from `buttons.py` at module scope, and (since the
-`gpio-keys` migration, §4.7) `buttons.py` now imports `evdev` at module
-scope instead of `RPi.GPIO`. Separately, `main.py` also imports
-`COLOUR_RED`/`COLOUR_GREEN`/`COLOUR_BLUE` from `rgb_led.py`, which still
-imports `RPi.GPIO`. So `import radioglobe.main` (and therefore
-`radioglobe.cli`) requires **both** `evdev` and `RPi.GPIO` to be importable
-(real or stubbed), independent of this HAL. Any test importing
-`radioglobe.main` needs both stubs — see `tests/main_test.py`.
-`tests/buttons_test.py` only needs the `evdev` stub, since it imports
-`radioglobe.buttons` directly, not `radioglobe.main`/`radioglobe.rgb_led`.
-`radioglobe.hal` itself has no such requirement — it never imports
-`radioglobe.buttons`, `radioglobe.rgb_led`, or `radioglobe.main`.
+`gpio-keys` migration, §4.7) `buttons.py` imports `evdev` at module scope.
+So `import radioglobe.main` (and therefore `radioglobe.cli`) requires
+`evdev` to be importable (real or stubbed), independent of this HAL. Any
+test importing `radioglobe.main` needs the same
+`sys.modules.setdefault("evdev", MagicMock())` stub `tests/buttons_test.py`
+already uses — see `tests/main_test.py`. `radioglobe.hal` itself has no
+such requirement — it never imports `radioglobe.buttons` or `radioglobe.main`.
+
+This gap used to also include `RPi.GPIO`, via `main.py`'s import of
+`COLOUR_*` from `rgb_led.py`. Once `rgb_led.py` migrated to the kernel
+`gpio-led` driver too (§4.10), `RPi.GPIO` dropped out of this chain
+entirely — `main.py` now needs only `evdev`, not both.
 
 This is worth distinguishing from an earlier, *avoidable* version of this
 same gap: a pass once moved `_LED_FLASH_DIAL` (a pure UX duration, not a
@@ -904,7 +944,8 @@ imports it.
 | `_ENCODER_RESOLUTION` | 1024 | `database.py` — owned here (not `positional_encoders.py`) so the pure grid-math module stays hardware-free; `positional_encoders.py` imports it from `database.py` (§4.5) |
 | `_PIN_BTN_JOG` / `_PIN_BTN_TOP` / `_PIN_BTN_MID` / `_PIN_BTN_BOTTOM` | 27 / 5 / 6 / 12 | `buttons.py` — documentation only since the `gpio-keys` migration (§4.7); the kernel driver claims these pins directly via `install.sh`'s overlay lines, nothing in Python reads them |
 | `_KEYCODE_BTN_JOG` / `_KEYCODE_BTN_TOP` / `_KEYCODE_BTN_MID` / `_KEYCODE_BTN_BOTTOM` | `BTN_0`/`BTN_1`/`BTN_2`/`BTN_3` (256-259) | `buttons.py` — functionally load-bearing (§4.7): `AsyncButton._find_button_device()` matches evdev devices by keycode, since the `gpio-key` overlay's `label=` param doesn't reliably set the device name. `install.sh`'s overlay lines must use these same values |
-| `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — `RGBLed.__init__` defaults; never needed outside this module (`main.py` constructs `RGBLed()` with no args) |
+| `_PIN_LED_R` / `_PIN_LED_G` / `_PIN_LED_B` | 22 / 23 / 24 | `rgb_led.py` — documentation only since the `gpio-led` migration (§4.10); the kernel driver claims these pins directly via `install.sh`'s overlay lines, nothing in Python reads them |
+| `_LED_LABEL_RED` / `_LED_LABEL_GREEN` / `_LED_LABEL_BLUE` | `"led-red"` / `"led-green"` / `"led-blue"` | `rgb_led.py` — functionally load-bearing (§4.10): `RGBLed._resolve()` builds `/sys/class/leds/<label>/brightness` directly from these, since `gpio-led`'s `label=` reliably sets the sysfs device name (unlike `gpio-key`'s). `install.sh`'s overlay lines must use these same values |
 | `COLOUR_RED` / `COLOUR_GREEN` / `COLOUR_BLUE` / `COLOUR_WHITE` / `COLOUR_OFF` | `"red"` / `"green"` / `"blue"` / `"white"` / `"off"` | `rgb_led.py` (§4.10) — public (not underscore-prefixed, unlike this table's other rows), since `main.py` and integration test scripts need them; moved from `constants.py` to eliminate a duplicate definition of the same vocabulary in `RGBLed.COLOURS` — passes the hardware-intrinsic test above (a different LED module could support a different colour set) |
 | `_I2C_LCD_ADDR` | `0x27` | `display.py`, alongside the pre-existing `_DISPLAY_I2C_PORT`/`_DISPLAY_COLUMNS`/`_DISPLAY_ROWS` |
 | SPI poll interval | 50ms (`asyncio.sleep(0.05)`) | `positional_encoders.py` — `run_encoder()`; hardcoded. Raised from an original 200ms — see `docs/KERNEL_ROTARY_ENCODER_INVESTIGATION.md` |
@@ -922,12 +963,20 @@ comment marking that line as the single source of truth for those two pins.
 
 ### Optional Pi-specific dependencies
 
-`evdev`, `lgpio`, `rpi-lgpio`, `smbus`, `spidev`, `liquidcrystal-i2c` and
-`python-vlc` live in `pyproject.toml`'s `[project.optional-dependencies]`
-`pi` group, not the base `dependencies` list — `pip install .[pi]` (or
-`install.sh`/`update.sh`, which already do this). The base package, `hal/`'s
-Protocols/fakes, and the unit test suite need none of them; only the six
-hardware modules that actually import these libraries do (§4.14).
+`evdev`, `smbus`, `spidev`, `liquidcrystal-i2c` and `python-vlc` live in
+`pyproject.toml`'s `[project.optional-dependencies]` `pi` group, not the
+base `dependencies` list — `pip install .[pi]` (or `install.sh`/`update.sh`,
+which already do this). The base package, `hal/`'s Protocols/fakes, and the
+unit test suite need none of them; only the hardware modules that actually
+import these libraries do (§4.14). `rgb_led.py` needs **none** of them —
+its `gpio-led` migration (§4.10) means it uses only `pathlib` (stdlib).
+
+`lgpio`/`rpi-lgpio` (which provided `RPi.GPIO`'s namespace on this kernel)
+were removed from the `pi` extra entirely once `rgb_led.py` migrated —
+`import RPi.GPIO` has zero remaining consumers anywhere in `src/`
+(`dial.py`/`buttons.py` use `evdev`, `rgb_led.py` uses sysfs). The apt
+packages that existed only to build `lgpio`'s bindings (`swig`,
+`liblgpio-dev`) were removed from `install.sh` for the same reason.
 
 ---
 
@@ -953,7 +1002,7 @@ uv run pytest
 | `hal/protocols_test.py` | `isinstance(FakeX(), XProtocol)` for all 6 fakes — a regression guard that fakes stay in sync with the Protocol shape |
 | `main_test.py` | `App`'s `_encoder_loop`/`_dial_loop`/`_monitor_stream`/`save_state`/`load_state` (§4.1, §4.14), driven end-to-end via HAL fakes with no real hardware — distinct from the hardware-only `tests/integration/main_test.py` |
 
-All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` stubs `evdev` in `sys.modules` before importing `radioglobe.buttons`, since that module now imports evdev at module scope (§4.7's `gpio-keys` migration); `main_test.py` stubs both `evdev` and `RPi.GPIO`, since `radioglobe.main` transitively imports both `radioglobe.buttons` (evdev) and `radioglobe.rgb_led` (RPi.GPIO) (§4.14's residual import gap). `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons`, `radioglobe.rgb_led`, or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
+All follow the same style: plain `unittest.TestCase`/`IsolatedAsyncioTestCase`, in-memory fixture data, no mocking framework — the module structure introduced in the decoupling refactor made `AppState` and `Navigator` testable this way for the first time; before it, only `database.py` had real unit tests. `buttons_test.py` and `main_test.py` both stub `evdev` in `sys.modules` before importing `radioglobe.buttons`/`radioglobe.main`, since `buttons.py` imports evdev at module scope (§4.7's `gpio-keys` migration) and `main.py` transitively imports it (§4.14's residual import gap). Neither needs an `RPi.GPIO` stub any more — `rgb_led.py`'s `gpio-led` migration (§4.10) removed the last consumer of it. `hal/fake_test.py` and `hal/protocols_test.py` need no such stub — `radioglobe.hal` never imports `radioglobe.buttons`, `radioglobe.rgb_led`, or `radioglobe.main`. None of the unit tests need the `pi` extra installed (§8); only `tests/integration/` does.
 
 **Hardware / integration scripts** live in `tests/integration/` and must be run directly on the Pi. See [tests/integration/README.md](tests/integration/README.md) for the full, maintained list, usage examples, and hardware setup notes — duplicating it here previously went stale (a `simulation_test.py` that never existed lingered in this table for a while; three scripts also silently broke when `led_task` was folded into `RGBLed.flash()`, since nothing exercises them automatically). Highlights:
 

@@ -13,13 +13,17 @@ import asyncio
 import argparse
 import pytest
 
-GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
 from radioglobe.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
+
+try:
+    RGBLed()
+except RuntimeError as e:
+    pytest.skip(str(e), allow_module_level=True)
 
 
 async def main(stickiness: int, fuzziness: int):

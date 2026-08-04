@@ -16,14 +16,15 @@ dependencies = [
 
 [project.optional-dependencies]
 # Hardware-backed modules (dial.py, positional_encoders.py, buttons.py,
-# rgb_led.py, display.py, audio_async.py) need these; the core package,
+# display.py, audio_async.py) need these; the core package,
 # radioglobe.hal's Protocols/fakes, and the unit test suite do not.
-# Install with `pip install .[pi]` (or `uv sync --extra pi`) on the device.
+# rgb_led.py needs none of these - it's kernel-driven via sysfs
+# (dtoverlay=gpio-led) using only the stdlib, same as dial.py/buttons.py's
+# evdev-based kernel drivers. Install with `pip install .[pi]`
+# (or `uv sync --extra pi`) on the device.
 pi = [
     "evdev>=1.7.0",
-    "lgpio>=0.2.2.0",
     "python-vlc>=3.0.21203",
-    "rpi-lgpio>=0.6",
     "smbus>=1.1.post2",
     "spidev>=3.7",
     "liquidcrystal-i2c @ git+https://github.com/pl31/python-liquidcrystal_i2c.git@e26e4d22f039e9a2c04580dda072e8ca9693d1bb",
