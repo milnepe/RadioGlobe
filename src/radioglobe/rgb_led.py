@@ -2,21 +2,28 @@ import asyncio
 import logging
 import RPi.GPIO as GPIO  # type: ignore
 
-from .constants import COLOUR_OFF
-
 # GPIO pin assignments (BCM numbering)
 _PIN_LED_R = 22
 _PIN_LED_G = 23
 _PIN_LED_B = 24
 
+# LED colour vocabulary - the single source of truth for what colours this
+# LED supports; COLOURS below is built from these rather than separately
+# hardcoding the same string keys.
+COLOUR_RED = "red"
+COLOUR_GREEN = "green"
+COLOUR_BLUE = "blue"
+COLOUR_WHITE = "white"
+COLOUR_OFF = "off"
+
 
 class RGBLed:
     COLOURS = {
-        "red": (1, 0, 0),
-        "green": (0, 1, 0),
-        "blue": (0, 0, 1),
-        "white": (1, 1, 1),
-        "off": (0, 0, 0),
+        COLOUR_RED: (1, 0, 0),
+        COLOUR_GREEN: (0, 1, 0),
+        COLOUR_BLUE: (0, 0, 1),
+        COLOUR_WHITE: (1, 1, 1),
+        COLOUR_OFF: (0, 0, 0),
     }
 
     def __init__(self, red_pin=_PIN_LED_R, green_pin=_PIN_LED_G, blue_pin=_PIN_LED_B):

@@ -12,8 +12,7 @@ import pytest
 
 GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 
-from radioglobe.rgb_led import RGBLed
-from radioglobe.constants import COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
+from radioglobe.rgb_led import RGBLed, COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
 
 
 async def scheduler():

@@ -259,13 +259,16 @@ source .venv/bin/activate
 ```
 uv init --no-workspace
 ```
-6. Add dependencies:
+6. Add dependencies. `python-vlc`, `lgpio`/`rpi-lgpio`, `liquidcrystal-i2c`, `spidev`
+   and `smbus` are Pi-hardware-only and belong in the `pi` extra (see
+   `pyproject.toml`'s `[project.optional-dependencies]`), not the base
+   dependencies — the core package and unit test suite don't need them:
 ```
 uv add --dev pytest
-uv add python-vlc
-uv add lgpio rpi-lgpio
-uv pip install "git+https://github.com/pl31/python-liquidcrystal_i2c.git"
-uv add spidev smbus
+uv add --optional pi python-vlc
+uv add --optional pi lgpio rpi-lgpio
+uv add --optional pi "liquidcrystal-i2c @ git+https://github.com/pl31/python-liquidcrystal_i2c.git"
+uv add --optional pi spidev smbus
 ```
 7. Test UV:
 ```

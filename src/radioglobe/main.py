@@ -3,38 +3,49 @@ import logging
 import subprocess
 from typing import Optional
 
-from radioglobe.audio_async import AudioPlayer
 from radioglobe.buttons import (
-    AsyncButtonManager,
-    JOG_BUTTON, TOP_BUTTON, MID_BUTTON, BOTTOM_BUTTON,
+    ButtonCallbacks, create_button_manager,
+    _VOLUME_STEP, _VOLUME_ON_LEVEL, _VOLUME_OFF_LEVEL, _LED_FLASH_SHORT,
 )
 from radioglobe.constants import (
-    COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED,
     MODE_CITY, MODE_STATION,
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
-from radioglobe.dial import AsyncDial
-from radioglobe.display import Display
-from radioglobe.navigation import Navigator
-from radioglobe.positional_encoders import PositionalEncoders
-from radioglobe.radio_config import (
-    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
-    LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
-    STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
+from radioglobe.dial import _LED_FLASH_DIAL
+from radioglobe.hal.protocols import (
+    AudioPlayerProtocol,
+    DialProtocol,
+    DisplayProtocol,
+    PositionalEncodersProtocol,
+    RGBLedProtocol,
 )
-from radioglobe.rgb_led import RGBLed
+from radioglobe.navigation import Navigator
+from radioglobe.radio_config import (
+    BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_LONG,
+    LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
+    STREAM_CHECK_INTERVAL,
+)
+from radioglobe.rgb_led import COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED
 
 
 class App:
-    def __init__(self):
-        self.dial = AsyncDial()
-        self.audio_player = AudioPlayer()
+    def __init__(
+        self,
+        dial: DialProtocol,
+        audio_player: AudioPlayerProtocol,
+        encoders: PositionalEncodersProtocol,
+        display: DisplayProtocol,
+        led: RGBLedProtocol,
+        nav: Optional[Navigator] = None,
+    ):
+        self.dial = dial
+        self.audio_player = audio_player
         self.audio_player.change_volume_level(DEFAULT_VOLUME)
-        self.encoders = PositionalEncoders()
-        self.display = Display()
-        self.led = RGBLed()
-        self.nav = Navigator()
+        self.encoders = encoders
+        self.display = display
+        self.led = led
+        self.nav = nav if nav is not None else Navigator()
         self._stream_task: Optional[asyncio.Task] = None
 
     def save_state(self, cache=STATE_CACHE_PATH):
@@ -151,7 +162,7 @@ class App:
             direction = await self.dial.queue.get()
             if not self.nav.state.is_complete():
                 continue
-            asyncio.create_task(self.led.flash(COLOUR_BLUE, LED_FLASH_DIAL))
+            asyncio.create_task(self.led.flash(COLOUR_BLUE, _LED_FLASH_DIAL))
             logging.debug(
                 f"↪️ Dial turned: {'right' if direction > 0 else 'left'} dir:{direction}"
             )
@@ -169,7 +180,7 @@ class App:
     # ---------------------------------------------------------------------------
 
     async def _on_jog_press(self):
-        asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_GREEN, _LED_FLASH_SHORT))
 
     async def _handle_short_jog(self):
         self.nav.switch_mode()
@@ -181,29 +192,29 @@ class App:
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")
-        await asyncio.sleep(LED_FLASH_SHORT)
+        await asyncio.sleep(_LED_FLASH_SHORT)
 
     async def _on_sound_press(self):
-        asyncio.create_task(self.led.flash(COLOUR_BLUE, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_BLUE, _LED_FLASH_SHORT))
 
     async def _handle_short_top(self):
         logging.debug("🖲️ Top button short press! Increasing volume.")
-        await self._update_volume(VOLUME_STEP)
+        await self._update_volume(_VOLUME_STEP)
 
     async def _handle_long_top(self):
         logging.debug("🖲️ Top button long press! Set volume on")
-        await self._update_volume_level(VOLUME_ON_LEVEL)
+        await self._update_volume_level(_VOLUME_ON_LEVEL)
 
     async def _handle_short_bottom(self):
         logging.debug("🖲️ Bottom button short press! Lowering volume.")
-        await self._update_volume(-VOLUME_STEP)
+        await self._update_volume(-_VOLUME_STEP)
 
     async def _handle_long_bottom(self):
         logging.debug("🖲️ Bottom button long press! Set volume off")
-        await self._update_volume_level(VOLUME_OFF_LEVEL)
+        await self._update_volume_level(_VOLUME_OFF_LEVEL)
 
     async def _on_mid_press(self):
-        asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_SHORT))
+        asyncio.create_task(self.led.flash(COLOUR_GREEN, _LED_FLASH_SHORT))
 
     async def _handle_short_mid(self):
         logging.debug("🖲️ Mid button mid short press! Calibrating.")
@@ -238,14 +249,13 @@ class App:
 
         loop = asyncio.get_running_loop()
 
-        button_definitions = [
-            JOG_BUTTON._replace(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
-            TOP_BUTTON._replace(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
-            MID_BUTTON._replace(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
-            BOTTOM_BUTTON._replace(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
-        ]
-
-        button_manager = AsyncButtonManager(button_definitions, loop)
+        button_manager = create_button_manager(
+            loop,
+            jog=ButtonCallbacks(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
+            top=ButtonCallbacks(short_cb=self._handle_short_top, long_cb=self._handle_long_top, press_cb=self._on_sound_press),
+            mid=ButtonCallbacks(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
+            bottom=ButtonCallbacks(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
+        )
         await button_manager.start()
         asyncio.create_task(button_manager.handle_events())
 
@@ -304,6 +314,8 @@ class App:
 
 
 if __name__ == "__main__":
+    from radioglobe.hal.factory import build_hardware
+
     logging.basicConfig(
         format="%(asctime)s: %(message)s",
         datefmt="%H:%M:%S",
@@ -312,4 +324,4 @@ if __name__ == "__main__":
 
     logging.info("Starting RadioGlobe...")
 
-    asyncio.run(App().run())
+    asyncio.run(App(*build_hardware()).run())

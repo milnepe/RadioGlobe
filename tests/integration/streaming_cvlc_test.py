@@ -9,8 +9,7 @@ GPIO = pytest.importorskip("RPi.GPIO", reason="Requires Raspberry Pi hardware")
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
-from radioglobe.rgb_led import RGBLed
-from radioglobe.constants import COLOUR_RED
+from radioglobe.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC

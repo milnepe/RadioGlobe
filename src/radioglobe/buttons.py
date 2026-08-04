@@ -12,10 +12,27 @@ _PIN_BTN_TOP    = 5
 _PIN_BTN_MID    = 6
 _PIN_BTN_BOTTOM = 12
 
+# Button-triggered tuning values - fixed by this board's 4-button UX (e.g.
+# "how far one Top-button press nudges the volume"), not user-tunable app
+# behavior, so they live here rather than in radio_config.py (see
+# ARCHITECTURE.md §8's _ENCODER_RESOLUTION/database.py precedent). Referenced
+# by name from main.py's button-callback bodies, which own the actual logic.
+_VOLUME_STEP = 10
+_VOLUME_ON_LEVEL = 80
+_VOLUME_OFF_LEVEL = 0
+_LED_FLASH_SHORT = 0.2   # button press feedback (brief since frequent)
+
 
 class ButtonDefinition(NamedTuple):
     name: str
     pin: int
+    short_cb: Optional[Callable] = None
+    long_cb: Optional[Callable] = None
+    press_cb: Optional[Callable] = None
+
+
+class ButtonCallbacks(NamedTuple):
+    """ButtonDefinition minus name/pin - just the callback slots a caller wires up."""
     short_cb: Optional[Callable] = None
     long_cb: Optional[Callable] = None
     press_cb: Optional[Callable] = None
@@ -149,3 +166,26 @@ class AsyncButtonManager:
             return self.event_queue.get_nowait()
         except asyncio.QueueEmpty:
             return None
+
+
+def create_button_manager(
+    loop,
+    *,
+    jog: ButtonCallbacks = ButtonCallbacks(),
+    top: ButtonCallbacks = ButtonCallbacks(),
+    mid: ButtonCallbacks = ButtonCallbacks(),
+    bottom: ButtonCallbacks = ButtonCallbacks(),
+) -> AsyncButtonManager:
+    """Wire the given callbacks to this board's fixed 4-button layout and
+    construct the manager.
+
+    Caller still owns start()/stop() lifecycle, matching every other
+    hardware object (see hal/factory.py's build_hardware()).
+    """
+    button_definitions = [
+        JOG_BUTTON._replace(**jog._asdict()),
+        TOP_BUTTON._replace(**top._asdict()),
+        MID_BUTTON._replace(**mid._asdict()),
+        BOTTOM_BUTTON._replace(**bottom._asdict()),
+    ]
+    return AsyncButtonManager(button_definitions, loop)
