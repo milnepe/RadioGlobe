@@ -21,7 +21,7 @@ import pytest
 
 pytest.importorskip("evdev", reason="Requires the gpio-keys kernel driver + evdev")
 
-from radioglobe.buttons import ButtonCallbacks, create_button_manager  # noqa: E402
+from radioglobe.hal.buttons import ButtonCallbacks, create_button_manager  # noqa: E402
 
 BUTTONS = ["jog", "top", "mid", "bottom"]
 

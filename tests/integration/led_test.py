@@ -10,7 +10,7 @@ import asyncio
 import time
 import pytest
 
-from radioglobe.rgb_led import RGBLed, COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
+from radioglobe.hal.rgb_led import RGBLed, COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE
 
 try:
     RGBLed()

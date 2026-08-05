@@ -3,14 +3,15 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# main.py imports radioglobe.buttons (for create_button_manager/
+# main.py imports radioglobe.hal.buttons (for create_button_manager/
 # ButtonCallbacks), which imports evdev at module scope (buttons.py reads
 # all 4 buttons via the kernel gpio-keys driver) - stub it before importing
 # radioglobe.main so this test can run on any machine, same as
-# tests/buttons_test.py does. radioglobe.rgb_led now uses only pathlib
+# tests/buttons_test.py does. radioglobe.hal.rgb_led now uses only pathlib
 # (stdlib) since its gpio-led migration, so no RPi.GPIO stub is needed any
-# more. radioglobe.hal (Protocols + fakes) needs no stub at all, since it
-# never imports radioglobe.buttons, radioglobe.rgb_led, or radioglobe.main.
+# more. radioglobe.hal.protocols/radioglobe.hal.fake need no stub at all,
+# since neither imports radioglobe.hal.buttons, radioglobe.hal.rgb_led, or
+# radioglobe.main.
 sys.modules.setdefault("evdev", MagicMock())
 
 from radioglobe.constants import MODE_STATION  # noqa: E402
@@ -22,9 +23,9 @@ from radioglobe.hal.fake import (  # noqa: E402
     FakePositionalEncoders,
     FakeRGBLed,
 )
+from radioglobe.hal.rgb_led import COLOUR_BLUE, COLOUR_GREEN  # noqa: E402
 from radioglobe.main import App  # noqa: E402
 from radioglobe.navigation import Navigator  # noqa: E402
-from radioglobe.rgb_led import COLOUR_BLUE, COLOUR_GREEN  # noqa: E402
 
 STATIONS_INFO = {
     "TestCity,XY": {

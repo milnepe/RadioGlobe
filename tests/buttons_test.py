@@ -4,13 +4,13 @@ import unittest
 from unittest.mock import MagicMock
 
 # buttons.py imports evdev at module scope - stub it before importing
-# radioglobe.buttons so this test can run on any machine. Device discovery
+# radioglobe.hal.buttons so this test can run on any machine. Device discovery
 # itself is deferred to Button.start()/ButtonManager.start(),
 # which these tests never call (they drive handle_events() directly via
 # the event_queue), so the stub only needs to satisfy the import.
 sys.modules.setdefault("evdev", MagicMock())
 
-from radioglobe.buttons import ButtonDefinition, ButtonManager  # noqa: E402
+from radioglobe.hal.buttons import ButtonDefinition, ButtonManager  # noqa: E402
 
 
 class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):

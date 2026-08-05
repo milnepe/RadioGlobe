@@ -3,7 +3,7 @@ import pytest
 
 pytest.importorskip("evdev", reason="Requires python-evdev (pip install evdev)")
 
-from radioglobe.dial import Dial
+from radioglobe.hal.dial import Dial
 
 try:
     Dial._find_rotary_device()

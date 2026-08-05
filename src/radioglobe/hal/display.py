@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional
 import liquidcrystal_i2c  # type: ignore
-from .coordinates import Coordinate
+from ..coordinates import Coordinate
 
 _I2C_LCD_ADDR = 0x27
 _DISPLAY_I2C_PORT = 1
