@@ -13,8 +13,9 @@ from radioglobe.hal.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 from streaming.streaming_cvlc import StreamerCVLC
 
+led = RGBLed()
 try:
-    RGBLed()
+    led.start()
 except RuntimeError as e:
     pytest.skip(str(e), allow_module_level=True)
 
@@ -33,8 +34,6 @@ async def main():
     STICKINESS = 2
     FUZZINESS = 5
     AUDIO_SERVICE = "pulse"
-
-    led = RGBLed()
 
     print("Starting up encoders...")
     encoders = PositionalEncoders()
