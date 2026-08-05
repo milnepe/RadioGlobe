@@ -37,7 +37,6 @@ class App:
     ):
         self.dial = dial
         self.audio_player = audio_player
-        self.audio_player.change_volume_level(DEFAULT_VOLUME)
         self.encoders = encoders
         self.display = display
         self.led = led
@@ -242,6 +241,9 @@ class App:
         self.dial.start()
         self.encoders.start()
         self.display.start()
+        self.led.start()
+        self.audio_player.start()
+        self.audio_player.change_volume_level(DEFAULT_VOLUME)
 
         button_manager = create_button_manager(
             jog=ButtonCallbacks(short_cb=self._handle_short_jog, press_cb=self._on_jog_press),
@@ -302,12 +304,8 @@ class App:
         finally:
             if self._stream_task and not self._stream_task.done():
                 self._stream_task.cancel()
-            # Reverse of the start order above (button_manager, display,
-            # encoders, dial). audio_player and led are appended even though
-            # they were never started — both accept stop() safely without a
-            # prior start(), since neither class has a start() at all (see
-            # rgb_led.py / audio_async.py).
-            for hw in [button_manager, self.display, self.encoders, self.dial, self.audio_player, self.led]:
+            # Reverse of the start order above.
+            for hw in [button_manager, self.audio_player, self.led, self.display, self.encoders, self.dial]:
                 await hw.stop()
 
 

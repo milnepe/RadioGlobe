@@ -89,6 +89,13 @@ class TestFakeRGBLed(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("flash", "blue", 0.0), led.calls)
         self.assertEqual(led.current_color, "off")
 
+    async def test_start_stop_toggle_flags(self):
+        led = FakeRGBLed()
+        led.start()
+        self.assertTrue(led.started)
+        await led.stop()
+        self.assertTrue(led.stopped)
+
 
 class TestFakeDisplay(unittest.TestCase):
     def test_message_updates_buffer_and_changed_event(self):
@@ -125,6 +132,11 @@ class TestFakeAudioPlayer(unittest.IsolatedAsyncioTestCase):
         await player.stop()
         await player.stop()
         self.assertEqual(player.stopped_calls, 2)
+
+    def test_start_sets_flag(self):
+        player = FakeAudioPlayer()
+        player.start()
+        self.assertTrue(player.started)
 
 
 if __name__ == "__main__":

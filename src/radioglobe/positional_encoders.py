@@ -15,9 +15,7 @@ class PositionalEncoders:
         self.latitude_offset = latitude_offset
         self.longitude_offset = longitude_offset
         self.updated = asyncio.Event()
-
-        # Enable SPI
-        self.spi = spidev.SpiDev()
+        self.spi = None
 
         # Used to safely stop the task
         self._task = None
@@ -104,7 +102,6 @@ class PositionalEncoders:
     UNLATCH_CONFIRM_THRESHOLD = 2
 
     async def run_encoder(self) -> None:
-        # while self._running:
         unlatch_confirm_count = 0
         while self._task:
             readings = self.read_spi()
@@ -136,6 +133,7 @@ class PositionalEncoders:
             await asyncio.sleep(0.05)
 
     def start(self) -> None:
+        self.spi = spidev.SpiDev()
         self._task = asyncio.create_task(self.run_encoder())
 
     async def stop(self) -> None:

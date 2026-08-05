@@ -326,8 +326,8 @@ Reads two SPI absolute rotary encoders and maintains the current lat/lon positio
 
 Reads a quadrature rotary encoder wired to GPIO pins 18 and 17 — these are the encoder's two switch/channel outputs (A/B), not a clock/direction pair. Decoding happens entirely in the **kernel**, not in Python: `install.sh` adds `dtoverlay=rotary-encoder,pin_a=18,pin_b=17,relative_axis=1` to `/boot/firmware/config.txt`, which binds the stock `drivers/input/misc/rotary_encoder.c` driver to those two pins and does the gray-code decode into `EV_REL`/`REL_X` events.
 
-- `Dial._find_rotary_device()` locates the resulting `/dev/input/eventN` device via `evdev.list_devices()`, matching by capability (`EV_REL`/`REL_X` present, `EV_KEY` absent) rather than a hardcoded device name or event-number, so it survives reboots and eventN renumbering.
-- `start()` registers the device's file descriptor directly on the asyncio event loop with `loop.add_reader(fd, callback)` — no background task, no thread pool.
+- `start()` calls `Dial._find_rotary_device()`, which locates the resulting `/dev/input/eventN` device via `evdev.list_devices()`, matching by capability (`EV_REL`/`REL_X` present, `EV_KEY` absent) rather than a hardcoded device name or event-number, so it survives reboots and eventN renumbering — `__init__` itself never touches evdev.
+- `start()` then registers the device's file descriptor directly on the asyncio event loop with `loop.add_reader(fd, callback)` — no background task, no thread pool.
 - `_on_readable()` pushes `_POLARITY * sign(event.value)` onto `self.queue` (an `asyncio.Queue[int]`, via `put_nowait`) directly for each `REL_X` event — no accumulation or timer. A single `_POLARITY` constant corrects for physical wiring.
 - `stop()` calls `loop.remove_reader(fd)`, which is synchronous and immediate.
 - `main.py`'s `_dial_loop()` consumes `await self.dial.queue.get()` — the kernel-driver decode is entirely internal to `dial.py`.
@@ -400,13 +400,19 @@ Wraps `python-vlc` directly. Does not import from `streaming/`.
 ```python
 class AudioPlayer:
     def __init__(self):
+        self.instance = None
+        self.player = None
+        self.current_url = None
+
+    def start(self):
         self.instance = vlc.Instance(
             "--input-repeat=-1",
             "--network-caching=2000",
         )
         self.player = self.instance.media_player_new()
-        self.current_url = None
 ```
+
+The VLC instance/player are constructed in `start()`, not `__init__` — constructing an `AudioPlayer` never touches VLC (§4.14's `HardwareComponent` contract).
 
 - `play(url)` stops any current playback and starts the new URL immediately. VLC handles playlist URLs (`.m3u`, `.pls`) internally. It records `current_url` so `_monitor_stream` can detect when the user has moved to a new station. `AudioPlayer` only ever deals in URL strings — it has no concept of a "city" or "station"; callers extract the URL from `self.nav.state.station[1]` before calling.
 - `--input-repeat=-1` means VLC retries the stream automatically if the connection drops.
@@ -421,7 +427,7 @@ class AudioPlayer:
 
 Three LED channels (R=22, G=23, B=24), each driven via the kernel's `gpio-led`/`leds-gpio` driver + sysfs — the same kernel-driver approach `dial.py` (§4.6) and `buttons.py` (§4.7) use for their GPIO inputs.
 
-Each channel is controlled by writing `"1"`/`"0"` to `/sys/class/leds/<label>/brightness`, where `<label>` comes from `install.sh`'s `dtoverlay=gpio-led,gpio=<pin>,label=<label>` line. `RGBLed._resolve(label)` builds this path directly and does a one-time test write during `__init__`, converting a `PermissionError` into a `RuntimeError` that names the udev rule to check (see the permissions note below).
+Each channel is controlled by writing `"1"`/`"0"` to `/sys/class/leds/<label>/brightness`, where `<label>` comes from `install.sh`'s `dtoverlay=gpio-led,gpio=<pin>,label=<label>` line. `RGBLed.start()` resolves each label to a path via `_resolve(label)` and does a one-time test write, converting a `PermissionError` into a `RuntimeError` that names the udev rule to check (see the permissions note below) — `__init__` only stores the three labels, deferring the actual sysfs access to `start()` like every other HAL role.
 
 `max_brightness` is `1` for these LEDs — binary on/off only, no dimming.
 
@@ -485,7 +491,7 @@ If you need to understand the audio subsystem, read `audio_async.py`.
 
 Makes `App`'s logic (the dial/encoder event loops, LED-flash-on-event behavior, display/audio call sequencing) unit-testable off a Pi, and lets the base package install and import cleanly on any platform. Three files, none of which require changes to `dial.py`, `positional_encoders.py`, `buttons.py`, `rgb_led.py`, `display.py`, or `audio_async.py`:
 
-- **`protocols.py`** — one `typing.Protocol` per hardware role (`DialProtocol`, `PositionalEncodersProtocol`, `ButtonManagerProtocol`, `RGBLedProtocol`, `DisplayProtocol`, `AudioPlayerProtocol`), matching each real class's public method signatures exactly. `Protocol` uses structural typing, so the six real classes already satisfy these interfaces by shape alone — no inheritance required. A shared `HardwareComponent` base declares only `async def stop(self) -> None`, deliberately not `start()`: `RGBLed` and `AudioPlayer` have no `start()` at all (construction alone makes them ready), while the other four roles do, so each role protocol declares `start()` only where the concrete class has one.
+- **`protocols.py`** — one `typing.Protocol` per hardware role (`DialProtocol`, `PositionalEncodersProtocol`, `ButtonManagerProtocol`, `RGBLedProtocol`, `DisplayProtocol`, `AudioPlayerProtocol`), matching each real class's public method signatures exactly. `Protocol` uses structural typing, so the six real classes already satisfy these interfaces by shape alone — no inheritance required. A shared `HardwareComponent` base declares `def start(self) -> None` and `async def stop(self) -> None`: every concrete class defers real hardware I/O (device discovery, sysfs writes, opening an I2C bus, constructing a VLC instance) from `__init__` to `start()`, so constructing any of the six is always hardware-free — the same deferred-construction pattern `buttons.py`'s `Button` originated (§4.7).
 - **`fake.py`** — `FakeDial`, `FakePositionalEncoders`, `FakeButtonManager`, `FakeRGBLed`, `FakeDisplay`, `FakeAudioPlayer`. Each satisfies its Protocol and exposes simple test hooks (`push_turn()`, `set_position()`, `inject_event()`, `set_error()`, `.calls`/`.played`/`.buffer` recordings) that let a test drive `App`'s real event loops end-to-end with no real I/O. These fakes intentionally do **not** re-implement the real modules' internals (SPI parity checks, evdev capability matching, press/hold timing) — that stays covered separately, e.g. `tests/buttons_test.py`'s stub-and-test-the-real-class approach.
 - **`factory.py`** — `build_hardware()` constructs and returns the real, Pi-backed `(dial, audio_player, encoders, display, led)` tuple. The concrete hardware modules are imported inside its function body, not at module scope, so importing `radioglobe.hal` never pulls in `evdev`/`spidev`/`liquidcrystal_i2c`/`vlc` — only calling `build_hardware()` does.
 
