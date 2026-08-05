@@ -20,15 +20,14 @@ from radioglobe.hal.positional_encoders import PositionalEncoders
 from radioglobe.hal.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
 
+led = RGBLed()
 try:
-    RGBLed()
+    led.start()
 except RuntimeError as e:
     pytest.skip(str(e), allow_module_level=True)
 
 
 async def main(stickiness: int, fuzziness: int):
-    led = RGBLed()
-
     print("Starting up encoders...")
     encoders = PositionalEncoders()
     encoders.start()
