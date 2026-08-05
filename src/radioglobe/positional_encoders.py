@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import spidev  # type: ignore
 
@@ -90,6 +91,7 @@ class PositionalEncoders:
             if self.check_parity(raw_reading):
                 readings.append(raw_reading >> 6)
             else:
+                logging.debug(f"SPI parity check failed for encoder {device} (raw={raw_reading:#06x})")
                 return None
 
         return readings
