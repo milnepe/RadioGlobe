@@ -9,6 +9,7 @@ class AudioPlayer:
         self.current_url = None
 
     def start(self) -> None:
+        """Create the VLC instance and player."""
         self.instance = vlc.Instance(
             "--input-repeat=-1",
             "--network-caching=2000",  # 2 s network buffer absorbs stream jitter

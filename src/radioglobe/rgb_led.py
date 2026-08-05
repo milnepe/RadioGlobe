@@ -47,6 +47,7 @@ class RGBLed:
         self._running = asyncio.Event()
 
     def start(self) -> None:
+        """Resolve and prepare the LED sysfs paths."""
         self.paths = {channel: self._resolve(label) for channel, label in self._labels.items()}
 
     @staticmethod

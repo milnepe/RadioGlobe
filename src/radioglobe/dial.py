@@ -38,6 +38,7 @@ class Dial:
                     self.queue.put_nowait(_POLARITY * -1)
 
     def start(self) -> None:
+        """Locate and open the rotary-encoder device."""
         self._device = self._find_rotary_device()
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
