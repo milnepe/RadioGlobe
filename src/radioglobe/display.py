@@ -17,7 +17,6 @@ class Display:
         )
         self.buffer = ["" for _ in range(_DISPLAY_ROWS)]
         self.changed = asyncio.Event()
-        self.running = True
         self._task = None
         logging.info("Display initialized")
 
@@ -29,14 +28,16 @@ class Display:
 
     async def stop(self):
         """Stop the background display loop and wait for the task to finish."""
-        self.running = False
-        self.changed.set()
         if self._task:
-            await self._task
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
             logging.info("Display loop stopped")
 
     async def _display_loop(self):
-        while self.running:
+        while True:
             await self.changed.wait()
             try:
                 for line_num in range(_DISPLAY_ROWS):
