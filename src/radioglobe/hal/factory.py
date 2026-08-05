@@ -27,10 +27,10 @@ def build_hardware() -> tuple[
     Returned in App.__init__'s parameter order. Only ever called on a real
     Pi with the `pi` extra installed.
     """
-    from radioglobe.audio_async import AudioPlayer
-    from radioglobe.dial import Dial
-    from radioglobe.display import Display
-    from radioglobe.positional_encoders import PositionalEncoders
-    from radioglobe.rgb_led import RGBLed
+    from radioglobe.hal.audio_async import AudioPlayer
+    from radioglobe.hal.dial import Dial
+    from radioglobe.hal.display import Display
+    from radioglobe.hal.positional_encoders import PositionalEncoders
+    from radioglobe.hal.rgb_led import RGBLed
 
     return Dial(), AudioPlayer(), PositionalEncoders(), Display(), RGBLed()

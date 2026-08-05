@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
-from radioglobe.positional_encoders import PositionalEncoders
+from radioglobe.hal.positional_encoders import PositionalEncoders
 
 
 async def main():

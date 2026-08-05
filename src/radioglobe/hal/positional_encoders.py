@@ -4,7 +4,7 @@ from typing import Optional
 
 import spidev  # type: ignore
 
-from .database import _ENCODER_RESOLUTION
+from ..database import _ENCODER_RESOLUTION
 
 
 class PositionalEncoders:

@@ -8,9 +8,9 @@ import pytest
 pytest.importorskip("spidev", reason="Requires SPI hardware")
 
 from radioglobe import database
-from radioglobe.rgb_led import RGBLed, COLOUR_RED
+from radioglobe.hal.positional_encoders import PositionalEncoders
+from radioglobe.hal.rgb_led import RGBLed, COLOUR_RED
 from radioglobe.radio_config import STATIONS_JSON
-from radioglobe.positional_encoders import PositionalEncoders
 from streaming.streaming_cvlc import StreamerCVLC
 
 try:

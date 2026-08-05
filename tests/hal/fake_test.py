@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 
-from radioglobe.buttons import ButtonDefinition
+from radioglobe.hal.buttons import ButtonDefinition
 from radioglobe.hal.fake import (
     FakeAudioPlayer,
     FakeButtonManager,

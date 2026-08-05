@@ -3,12 +3,12 @@ import logging
 import subprocess
 from typing import Optional
 
-from radioglobe.buttons import ButtonCallbacks, create_button_manager
 from radioglobe.constants import (
     MODE_CITY, MODE_STATION,
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
+from radioglobe.hal.buttons import ButtonCallbacks, create_button_manager
 from radioglobe.hal.protocols import (
     AudioPlayerProtocol,
     DialProtocol,
@@ -16,13 +16,13 @@ from radioglobe.hal.protocols import (
     PositionalEncodersProtocol,
     RGBLedProtocol,
 )
+from radioglobe.hal.rgb_led import COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED
 from radioglobe.navigation import Navigator
 from radioglobe.radio_config import (
     BRIEF_DISPLAY_DURATION, DEFAULT_VOLUME, FUZZINESS, LED_FLASH_DIAL, LED_FLASH_LONG,
     LED_FLASH_SHORT, LOG_LEVEL, MESSAGE_DISPLAY_DURATION, STATE_CACHE_PATH, STICKINESS,
     STREAM_CHECK_INTERVAL, VOLUME_OFF_LEVEL, VOLUME_ON_LEVEL, VOLUME_STEP,
 )
-from radioglobe.rgb_led import COLOUR_BLUE, COLOUR_GREEN, COLOUR_RED
 
 
 class App:
