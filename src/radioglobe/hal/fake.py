@@ -15,7 +15,7 @@ from typing import Optional
 
 
 class FakeDial:
-    """Simulate dial turns via push_turn(); real AsyncDial pushes +-1 ints too."""
+    """Simulate dial turns via push_turn(); real Dial pushes +-1 ints too."""
 
     def __init__(self):
         self.queue: "asyncio.Queue[int]" = asyncio.Queue()

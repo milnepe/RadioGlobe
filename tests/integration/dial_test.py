@@ -3,16 +3,16 @@ import pytest
 
 pytest.importorskip("evdev", reason="Requires python-evdev (pip install evdev)")
 
-from radioglobe.dial import AsyncDial
+from radioglobe.dial import Dial
 
 try:
-    AsyncDial._find_rotary_device()
+    Dial._find_rotary_device()
 except RuntimeError:
     pytest.skip("No rotary-encoder input device found — requires the dial overlay loaded", allow_module_level=True)
 
 
 async def main():
-    jog = AsyncDial()
+    jog = Dial()
     jog.start()
 
     print("[INFO] Starting dial monitor...")

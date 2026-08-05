@@ -32,7 +32,7 @@ import time
 
 from evdev import InputDevice, list_devices, ecodes
 
-LONG_PRESS_THRESHOLD = 1.0  # matches buttons.py's AsyncButton default
+LONG_PRESS_THRESHOLD = 1.0  # matches buttons.py's Button default
 
 
 def find_jog_button() -> InputDevice:

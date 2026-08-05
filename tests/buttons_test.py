@@ -5,12 +5,12 @@ from unittest.mock import MagicMock
 
 # buttons.py imports evdev at module scope - stub it before importing
 # radioglobe.buttons so this test can run on any machine. Device discovery
-# itself is deferred to AsyncButton.start()/AsyncButtonManager.start(),
+# itself is deferred to Button.start()/ButtonManager.start(),
 # which these tests never call (they drive handle_events() directly via
 # the event_queue), so the stub only needs to satisfy the import.
 sys.modules.setdefault("evdev", MagicMock())
 
-from radioglobe.buttons import AsyncButtonManager, ButtonDefinition  # noqa: E402
+from radioglobe.buttons import ButtonDefinition, ButtonManager  # noqa: E402
 
 
 class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +32,7 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
             ButtonDefinition("Bad", 1, bad_short, None, None),
             ButtonDefinition("Good", 2, good_short, None, None),
         ]
-        manager = AsyncButtonManager(definitions)
+        manager = ButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         await manager.event_queue.put(("Bad", "short"))
@@ -60,7 +60,7 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
             ButtonDefinition("Bad", 1, bad_short, None, None),
             ButtonDefinition("Good", 2, good_short, None, None),
         ]
-        manager = AsyncButtonManager(definitions)
+        manager = ButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         await manager.event_queue.put(("Bad", "short"))
@@ -79,7 +79,7 @@ class TestHandleEventsResilience(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("boom")
 
         definitions = [ButtonDefinition("Bad", 1, bad_short, None, None)]
-        manager = AsyncButtonManager(definitions)
+        manager = ButtonManager(definitions)
 
         task = asyncio.create_task(manager.handle_events())
         with self.assertLogs(level="ERROR") as logs:

@@ -7,7 +7,7 @@ from evdev import ecodes
 _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 
 
-class AsyncDial:
+class Dial:
     def __init__(self):
         self.queue: asyncio.Queue[int] = asyncio.Queue()
         self._device = self._find_rotary_device()
