@@ -249,7 +249,7 @@ class App:
             mid=ButtonCallbacks(short_cb=self._handle_short_mid, long_cb=self._handle_long_mid, press_cb=self._on_mid_press),
             bottom=ButtonCallbacks(short_cb=self._handle_short_bottom, long_cb=self._handle_long_bottom, press_cb=self._on_sound_press),
         )
-        await button_manager.start()
+        button_manager.start()
         asyncio.create_task(button_manager.handle_events())
 
         encoder_task = None

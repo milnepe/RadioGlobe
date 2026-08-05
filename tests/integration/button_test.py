@@ -53,7 +53,7 @@ async def main():
 
     callbacks = ButtonCallbacks(short_cb=on_short, long_cb=on_long, press_cb=on_press)
     manager = create_button_manager(**{args.button: callbacks})
-    await manager.start()
+    manager.start()
 
     print(f"Testing '{args.button}' button via the kernel gpio-keys driver")
     print("Press the button — Ctrl-C to quit\n")
