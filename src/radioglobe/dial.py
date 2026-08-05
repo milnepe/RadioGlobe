@@ -10,7 +10,7 @@ _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 class Dial:
     def __init__(self) -> None:
         self.queue: asyncio.Queue[int] = asyncio.Queue()
-        self._device = self._find_rotary_device()
+        self._device = None
         self._loop = None
 
     @staticmethod
@@ -38,10 +38,12 @@ class Dial:
                     self.queue.put_nowait(_POLARITY * -1)
 
     def start(self) -> None:
+        self._device = self._find_rotary_device()
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
 
     async def stop(self) -> None:
-        if self._loop is not None:
+        if self._loop is not None and self._device is not None:
             self._loop.remove_reader(self._device.fd)
-        self._device.close()
+        if self._device is not None:
+            self._device.close()

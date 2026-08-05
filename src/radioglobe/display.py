@@ -12,16 +12,17 @@ _DISPLAY_ROWS = 4
 
 class Display:
     def __init__(self) -> None:
-        self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(
-            _I2C_LCD_ADDR, _DISPLAY_I2C_PORT, numlines=_DISPLAY_ROWS
-        )
+        self.lcd = None
         self.buffer = ["" for _ in range(_DISPLAY_ROWS)]
         self.changed = asyncio.Event()
         self._task = None
-        logging.info("Display initialized")
 
     def start(self) -> None:
-        """Start the background display update loop."""
+        """Connect to the LCD and start the background display update loop."""
+        self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(
+            _I2C_LCD_ADDR, _DISPLAY_I2C_PORT, numlines=_DISPLAY_ROWS
+        )
+        logging.info("Display initialized")
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._display_loop())
             logging.info("Display loop started")

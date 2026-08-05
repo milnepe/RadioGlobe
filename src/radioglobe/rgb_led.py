@@ -42,12 +42,12 @@ class RGBLed:
 
     def __init__(self, red_label: str = _LED_LABEL_RED, green_label: str = _LED_LABEL_GREEN,
                  blue_label: str = _LED_LABEL_BLUE) -> None:
-        self.paths = {
-            "red": self._resolve(red_label),
-            "green": self._resolve(green_label),
-            "blue": self._resolve(blue_label),
-        }
+        self._labels = {"red": red_label, "green": green_label, "blue": blue_label}
+        self.paths: dict = {}
         self._running = asyncio.Event()
+
+    def start(self) -> None:
+        self.paths = {channel: self._resolve(label) for channel, label in self._labels.items()}
 
     @staticmethod
     def _resolve(label: str) -> Path:

@@ -4,6 +4,11 @@ import logging
 
 class AudioPlayer:
     def __init__(self) -> None:
+        self.instance = None
+        self.player = None
+        self.current_url = None
+
+    def start(self) -> None:
         self.instance = vlc.Instance(
             "--input-repeat=-1",
             "--network-caching=2000",  # 2 s network buffer absorbs stream jitter
@@ -11,7 +16,6 @@ class AudioPlayer:
         if self.instance is None:
             raise RuntimeError("VLC failed to initialise — check VLC installation and options")
         self.player = self.instance.media_player_new()
-        self.current_url = None
 
     def play(self, url: str) -> None:
         """Play a new URL stream, stopping current playback if needed."""

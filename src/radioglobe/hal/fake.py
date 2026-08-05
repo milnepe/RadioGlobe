@@ -138,7 +138,11 @@ class FakeRGBLed:
     def __init__(self) -> None:
         self.calls: list = []
         self.current_color: Optional[str] = None
+        self.started = False
         self.stopped = False
+
+    def start(self) -> None:
+        self.started = True
 
     def set_color(self, color_name: str) -> None:
         self.current_color = color_name
@@ -202,6 +206,10 @@ class FakeAudioPlayer:
         self.volume = 100
         self._error = False
         self.stopped_calls = 0
+        self.started = False
+
+    def start(self) -> None:
+        self.started = True
 
     def play(self, url: str) -> None:
         self.current_url = url
