@@ -8,7 +8,6 @@ from radioglobe.constants import (
     STATUS_CALIBRATE, STATUS_CALIBRATED, STATUS_CALIBRATING, STATUS_SHUTDOWN,
 )
 from radioglobe.coordinates import Coordinate
-from radioglobe.hal.buttons import ButtonCallbacks, create_button_manager
 from radioglobe.hal.protocols import (
     AudioPlayerProtocol,
     DialProtocol,
@@ -238,6 +237,11 @@ class App:
 
     async def run(self):
         """Main app loop."""
+        # Deferred like hal/factory.py's build_hardware(): buttons.py imports
+        # evdev at module scope, so importing radioglobe.main shouldn't
+        # require evdev unless run() is actually called.
+        from radioglobe.hal.buttons import ButtonCallbacks, create_button_manager
+
         self.dial.start()
         self.encoders.start()
         self.display.start()
