@@ -28,9 +28,9 @@ def build_hardware() -> tuple[
     Pi with the `pi` extra installed.
     """
     from radioglobe.audio_async import AudioPlayer
-    from radioglobe.dial import AsyncDial
+    from radioglobe.dial import Dial
     from radioglobe.display import Display
     from radioglobe.positional_encoders import PositionalEncoders
     from radioglobe.rgb_led import RGBLed
 
-    return AsyncDial(), AudioPlayer(), PositionalEncoders(), Display(), RGBLed()
+    return Dial(), AudioPlayer(), PositionalEncoders(), Display(), RGBLed()

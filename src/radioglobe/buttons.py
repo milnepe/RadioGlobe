@@ -66,12 +66,12 @@ def _fire(callback):
         callback()
 
 
-class AsyncButton:
+class Button:
     """One button read via the kernel gpio-keys driver + evdev, instead of
     RPi.GPIO edge-detection.
 
     Device discovery is deferred to start() rather than done in __init__,
-    so constructing an AsyncButton/AsyncButtonManager (e.g. in tests) never
+    so constructing a Button/ButtonManager (e.g. in tests) never
     touches real hardware unless start() is actually called.
     """
 
@@ -127,11 +127,11 @@ class AsyncButton:
             self._device.close()
 
 
-class AsyncButtonManager:
+class ButtonManager:
     def __init__(self, button_definitions, long_press_threshold=1.0):
         self.event_queue: asyncio.Queue = asyncio.Queue()
         self.buttons = [
-            AsyncButton(
+            Button(
                 d.name, d.keycode, long_press_threshold,
                 d.short_cb, d.long_cb, d.press_cb,
             )
@@ -182,7 +182,7 @@ def create_button_manager(
     top: ButtonCallbacks = ButtonCallbacks(),
     mid: ButtonCallbacks = ButtonCallbacks(),
     bottom: ButtonCallbacks = ButtonCallbacks(),
-) -> AsyncButtonManager:
+) -> ButtonManager:
     """Wire the given callbacks to this board's fixed 4-button layout and
     construct the manager.
 
@@ -195,4 +195,4 @@ def create_button_manager(
         MID_BUTTON._replace(**mid._asdict()),
         BOTTOM_BUTTON._replace(**bottom._asdict()),
     ]
-    return AsyncButtonManager(button_definitions)
+    return ButtonManager(button_definitions)
