@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.3] - 2026-08-05
+### Changed
+- Moved `dial.py`, `positional_encoders.py`, `buttons.py`, `rgb_led.py`,
+  `display.py`, and `audio_async.py` from the top level of the
+  `radioglobe` package into `radioglobe/hal/`, so the package directory
+  structure matches the hardware/app boundary: `hal/` is now
+  exclusively Pi-specific code, everything else under `radioglobe/` has
+  zero hardware dependencies. No logic changes — `Protocol`'s
+  structural typing meant nothing needed to subclass anything. Every
+  importer's path updated from `radioglobe.X` to `radioglobe.hal.X`.
+- `main.py` no longer imports `create_button_manager`/`ButtonCallbacks`
+  at module scope — moved into `run()`, mirroring
+  `hal/factory.py`'s `build_hardware()` deferred-import pattern. Since
+  `hal/buttons.py` imports `evdev` at module scope, this means
+  `import radioglobe.main` (and therefore `radioglobe.cli`) no longer
+  requires `evdev` to be importable at all; only calling `run()` does.
+
+### Fixed
+- Two integration diagnostic scripts (`tests/integration/main_test.py`,
+  `tests/integration/streaming_cvlc_test.py`) had a hardware-presence
+  skip guard (`try: RGBLed() except RuntimeError: skip`) that stopped
+  working in v0.9.2, when `RGBLed`'s sysfs setup moved from `__init__`
+  into `start()` — bare `RGBLed()` no longer raised, so the guard could
+  never trigger. Fixed by calling `.start()` inside the guard instead.
+
+This release is a package-structure cleanup with no behavioral change
+to the running service — deployed and verified on real hardware before
+tagging (clean restart, no warnings/errors, saved station resumed
+automatically, pip's upgrade cleanly removed the old top-level module
+files with no stale leftovers).
+
 ## [0.9.2] - 2026-08-05
 ### Changed
 - `Dial`, `RGBLed`, `Display`, `AudioPlayer`, and `PositionalEncoders`
