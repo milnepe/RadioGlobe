@@ -11,7 +11,7 @@ _DISPLAY_ROWS = 4
 
 
 class Display:
-    def __init__(self):
+    def __init__(self) -> None:
         self.lcd = liquidcrystal_i2c.LiquidCrystal_I2C(
             _I2C_LCD_ADDR, _DISPLAY_I2C_PORT, numlines=_DISPLAY_ROWS
         )
@@ -20,13 +20,13 @@ class Display:
         self._task = None
         logging.info("Display initialized")
 
-    def start(self):
+    def start(self) -> None:
         """Start the background display update loop."""
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(self._display_loop())
             logging.info("Display loop started")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the background display loop and wait for the task to finish."""
         if self._task:
             self._task.cancel()
@@ -36,7 +36,7 @@ class Display:
                 pass
             logging.info("Display loop stopped")
 
-    async def _display_loop(self):
+    async def _display_loop(self) -> None:
         while True:
             await self.changed.wait()
             try:
@@ -47,7 +47,7 @@ class Display:
             self.changed.clear()
             await asyncio.sleep(0.1)
 
-    def message(self, line_1="", line_2="", line_3="", line_4=""):
+    def message(self, line_1: str = "", line_2: str = "", line_3: str = "", line_4: str = "") -> None:
         self.buffer[0] = line_1[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
         self.buffer[1] = line_2[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
         self.buffer[2] = line_3[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
@@ -55,15 +55,15 @@ class Display:
         self.changed.set()
         logging.info(f"Message set: {[line_1, line_2, line_3, line_4]}")
 
-    def show_station(self, coords: Coordinate, city: str, station_name: str):
+    def show_station(self, coords: Coordinate, city: str, station_name: str) -> None:
         """Show the current city and station."""
         self.update(coords, city, volume=0, station=station_name, arrows=False)
 
-    def show_status(self, status: str, coords: Optional[Coordinate] = None):
+    def show_status(self, status: str, coords: Optional[Coordinate] = None) -> None:
         """Show a status message (e.g. calibrating, shutdown)."""
         self.update(coords or Coordinate(0, 0), status, volume=0, station="", arrows=False)
 
-    def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool):
+    def update(self, coords: Coordinate, location: str, volume: int, station: str, arrows: bool) -> None:
         self.buffer[0] = str(coords)[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
         self.buffer[1] = location[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
 

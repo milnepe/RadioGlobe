@@ -17,7 +17,7 @@ from typing import Optional
 class FakeDial:
     """Simulate dial turns via push_turn(); real Dial pushes +-1 ints too."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.queue: "asyncio.Queue[int]" = asyncio.Queue()
         self.started = False
         self.stopped = False
@@ -36,7 +36,7 @@ class FakeDial:
 class FakePositionalEncoders:
     """Test hook: set_position()/latch() drive App._encoder_loop()."""
 
-    def __init__(self, latitude_offset=0, longitude_offset=0):
+    def __init__(self, latitude_offset: int = 0, longitude_offset: int = 0) -> None:
         self.latitude = 0
         self.longitude = 0
         self.latitude_offset = latitude_offset
@@ -94,7 +94,7 @@ class FakePositionalEncoders:
 class FakeButtonManager:
     """Test hook: inject_event() drives handle_events() dispatch, no GPIO involved."""
 
-    def __init__(self, button_definitions, long_press_threshold=1.0):
+    def __init__(self, button_definitions, long_press_threshold: float = 1.0) -> None:
         self.button_definitions = list(button_definitions)
         self.event_queue: "asyncio.Queue" = asyncio.Queue()
         self.started = False
@@ -135,7 +135,7 @@ class FakeButtonManager:
 class FakeRGBLed:
     """Records every set_color()/flash() call for assertions."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.calls: list = []
         self.current_color: Optional[str] = None
         self.stopped = False
@@ -162,7 +162,7 @@ class FakeDisplay:
 
     ROWS = 4
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.buffer = ["" for _ in range(self.ROWS)]
         self.changed = asyncio.Event()
         self.calls: list = []
@@ -196,7 +196,7 @@ class FakeDisplay:
 class FakeAudioPlayer:
     """Records play() calls; error state settable via set_error() for stream-monitor tests."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.current_url: Optional[str] = None
         self.played: list = []
         self.volume = 100
