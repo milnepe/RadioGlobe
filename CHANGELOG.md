@@ -2,6 +2,44 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.1] - 2026-08-05
+### Changed
+- `buttons.py`: `ButtonManager.start()` is now synchronous (previously
+  `async def` despite never awaiting anything), and `Button.stop()` is now
+  `async def` (previously synchronous) — both now match every other HAL
+  component's start()/stop() shape. `hal/protocols.py`'s shared
+  `HardwareComponent`/role protocols updated to match.
+- `display.py`'s `stop()` now cancels its background task directly
+  (`task.cancel()` + await), matching `positional_encoders.py`'s pattern,
+  instead of a cooperative `running` flag plus an event-set wakeup.
+- `display.py`'s defensive catch around each LCD write now logs via
+  `logging.exception()` (captures the traceback) instead of
+  `logging.error(f"...: {e}")`, matching `buttons.py`'s equivalent
+  defensive catch around user callbacks.
+- `positional_encoders.py` now logs SPI parity failures at debug level;
+  this module previously had no logging at all.
+- `App.run()`'s teardown loop (`main.py`) now stops hardware in reverse
+  of its actual start order, with a comment explaining why
+  `audio_player`/`led` are included despite never being started.
+- Renamed `AsyncDial` → `Dial`, `AsyncButton` → `Button`,
+  `AsyncButtonManager` → `ButtonManager` — the "Async" prefix didn't
+  correlate with actual async usage, and `hal/fake.py`'s Fakes already
+  used the unprefixed names.
+- Filled in missing parameter/return type hints across the HAL layer
+  (`dial.py`, `positional_encoders.py`, `buttons.py`, `rgb_led.py`,
+  `display.py`, `audio_async.py`) and their Fakes in `hal/fake.py`.
+
+### Removed
+- `RGBLed.start()` and `AudioPlayer.start()` — dead code, never called;
+  both classes are fully ready after construction.
+
+This release is an internal consistency pass across the HAL (hardware
+abstraction) layer, prompted by a ranked audit of async/sync mismatches,
+dead code, and inconsistent logging/naming/typing across `dial.py`,
+`positional_encoders.py`, `buttons.py`, `rgb_led.py`, `display.py`, and
+`audio_async.py`. No user-facing behavior change; verified on-device
+before tagging.
+
 ## [0.9.0] - 2026-08-04
 ### Added
 - `tests/integration/rgb_led_gpio_led_test.py`: standalone, zero-`radioglobe`-
