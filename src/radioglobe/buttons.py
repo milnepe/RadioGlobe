@@ -120,7 +120,7 @@ class AsyncButton:
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
 
-    def stop(self):
+    async def stop(self):
         if self._loop is not None and self._device is not None:
             self._loop.remove_reader(self._device.fd)
         if self._device is not None:
@@ -138,14 +138,14 @@ class AsyncButtonManager:
             for d in button_definitions
         ]
 
-    async def start(self):
+    def start(self):
         for btn in self.buttons:
             btn.start(self.event_queue)
 
     async def stop(self):
         """Release every managed button's evdev device."""
         for btn in self.buttons:
-            btn.stop()
+            await btn.stop()
 
     async def handle_events(self):
         """Continuously process events with the appropriate handler.

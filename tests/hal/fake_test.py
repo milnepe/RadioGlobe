@@ -76,7 +76,7 @@ class TestFakeButtonManager(unittest.IsolatedAsyncioTestCase):
 
     async def test_start_stop_toggle_flags(self):
         manager = FakeButtonManager([])
-        await manager.start()
+        manager.start()
         self.assertTrue(manager.started)
         await manager.stop()
         self.assertTrue(manager.stopped)

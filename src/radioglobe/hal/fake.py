@@ -94,7 +94,7 @@ class FakePositionalEncoders:
 class FakeButtonManager:
     """Test hook: inject_event() drives handle_events() dispatch, no GPIO involved."""
 
-    def __init__(self, button_definitions, loop=None, long_press_threshold=1.0):
+    def __init__(self, button_definitions, long_press_threshold=1.0):
         self.button_definitions = list(button_definitions)
         self.event_queue: "asyncio.Queue" = asyncio.Queue()
         self.started = False
@@ -104,7 +104,7 @@ class FakeButtonManager:
         """Test hook: simulate a completed short/long press for button `name`."""
         await self.event_queue.put((name, event_type))
 
-    async def start(self) -> None:
+    def start(self) -> None:
         self.started = True
 
     async def stop(self) -> None:
