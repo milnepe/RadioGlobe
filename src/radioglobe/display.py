@@ -42,8 +42,8 @@ class Display:
             try:
                 for line_num in range(_DISPLAY_ROWS):
                     self.lcd.printline(line_num, self.buffer[line_num])
-            except Exception as e:
-                logging.error(f"Display write failed: {e}")
+            except Exception:
+                logging.exception("Display write failed")
             self.changed.clear()
             await asyncio.sleep(0.1)
 
