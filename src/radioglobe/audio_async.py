@@ -13,9 +13,6 @@ class AudioPlayer:
         self.player = self.instance.media_player_new()
         self.current_url = None
 
-    def start(self):
-        pass  # VLC instance is ready at construction time
-
     def play(self, url: str):
         """Play a new URL stream, stopping current playback if needed."""
         if self.player.is_playing():
