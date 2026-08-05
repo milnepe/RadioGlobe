@@ -14,15 +14,22 @@ from radioglobe.coordinates import Coordinate
 
 
 class HardwareComponent(Protocol):
-    """Shared start/stop shape common to all hardware roles."""
+    """Shared teardown shape common to all hardware roles.
 
-    def start(self) -> None: ...
+    Deliberately does NOT declare start() - RGBLed and AudioPlayer have no
+    start() at all (construction alone makes them ready; see rgb_led.py /
+    audio_async.py), while the other four roles do. Each role protocol
+    below declares start() only where the concrete class has one.
+    """
+
     async def stop(self) -> None: ...
 
 
 @runtime_checkable
 class DialProtocol(HardwareComponent, Protocol):
     queue: "asyncio.Queue[int]"
+
+    def start(self) -> None: ...
 
 
 @runtime_checkable
@@ -36,12 +43,14 @@ class PositionalEncodersProtocol(HardwareComponent, Protocol):
     def is_latched(self) -> bool: ...
     def get_calibration(self) -> dict: ...
     def restore_calibration(self, state: dict) -> None: ...
+    def start(self) -> None: ...
 
 
 @runtime_checkable
 class ButtonManagerProtocol(HardwareComponent, Protocol):
     event_queue: "asyncio.Queue"
 
+    def start(self) -> None: ...
     async def handle_events(self) -> None: ...
     def get_event_nowait(self) -> Optional[tuple]: ...
 
@@ -57,6 +66,7 @@ class RGBLedProtocol(HardwareComponent, Protocol):
 class DisplayProtocol(HardwareComponent, Protocol):
     changed: asyncio.Event
 
+    def start(self) -> None: ...
     def message(
         self, line_1: str = "", line_2: str = "", line_3: str = "", line_4: str = ""
     ) -> None: ...

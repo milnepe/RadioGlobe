@@ -75,9 +75,6 @@ class RGBLed:
     def off(self):
         self.set_color(COLOUR_OFF)
 
-    def start(self):
-        pass  # sysfs entries already exist once the gpio-led overlay is loaded
-
     async def stop(self):
         """Turn the LED off. Nothing to release - the kernel driver owns the pins."""
         self.off()

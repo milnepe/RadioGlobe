@@ -138,7 +138,6 @@ class FakeRGBLed:
     def __init__(self):
         self.calls: list = []
         self.current_color: Optional[str] = None
-        self.started = False
         self.stopped = False
 
     def set_color(self, color_name: str) -> None:
@@ -147,9 +146,6 @@ class FakeRGBLed:
 
     def off(self) -> None:
         self.set_color("off")
-
-    def start(self) -> None:
-        self.started = True
 
     async def stop(self) -> None:
         self.off()
@@ -206,10 +202,6 @@ class FakeAudioPlayer:
         self.volume = 100
         self._error = False
         self.stopped_calls = 0
-        self.started = False
-
-    def start(self) -> None:
-        self.started = True
 
     def play(self, url: str) -> None:
         self.current_url = url
