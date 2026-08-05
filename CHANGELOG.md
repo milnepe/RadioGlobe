@@ -2,6 +2,38 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.2] - 2026-08-05
+### Changed
+- `Dial`, `RGBLed`, `Display`, `AudioPlayer`, and `PositionalEncoders`
+  no longer touch real hardware in `__init__` (evdev device
+  enumeration, sysfs writes, opening the I2C bus, constructing a VLC
+  instance, constructing a `SpiDev`) — all deferred to `start()`,
+  matching `Button`'s existing pattern. Constructing any HAL object is
+  now always hardware-free.
+- `App.__init__` (`main.py`) no longer eagerly calls
+  `audio_player.change_volume_level(DEFAULT_VOLUME)` right after
+  construction — legacy from before the HAL abstraction existed, and a
+  blocker for deferring `AudioPlayer`'s VLC setup to `start()`. The
+  call now happens in `run()`, right after the new
+  `self.audio_player.start()`; `run()` also now calls `self.led.start()`
+  alongside the existing `dial`/`encoders`/`display` start() calls.
+  `App.__init__` is now fully hardware-I/O-free, even indirectly.
+- `RGBLed`/`AudioPlayer` regain a `start()` method (removed as dead
+  code in v0.9.1 when there was nothing to defer into it — now there
+  is), and `hal/protocols.py`'s `HardwareComponent` re-absorbs `start()`
+  now that all six HAL roles share the same shape again.
+- Dropped a stale comment in `positional_encoders.py` referencing an
+  attribute the class doesn't have, and added docstrings to
+  `Dial.start()`/`RGBLed.start()`/`AudioPlayer.start()`.
+
+This release completes the ranked HAL-layer consistency audit begun in
+v0.9.1 — the last of 10 items. Unlike v0.9.1's changes, this one is a
+genuine behavior-timing change (not just internal reshuffling), so it
+was deployed and verified on real hardware before tagging: clean
+restart, no warnings/errors, saved station resumed automatically, and
+the relocated volume/display/VLC setup all confirmed working via the
+service's own startup log.
+
 ## [0.9.1] - 2026-08-05
 ### Changed
 - `buttons.py`: `ButtonManager.start()` is now synchronous (previously
