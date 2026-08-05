@@ -8,7 +8,7 @@ _POLARITY = 1  # flip to -1 if on-device verification shows inverted direction
 
 
 class Dial:
-    def __init__(self):
+    def __init__(self) -> None:
         self.queue: asyncio.Queue[int] = asyncio.Queue()
         self._device = self._find_rotary_device()
         self._loop = None
@@ -29,7 +29,7 @@ class Dial:
             "'dtoverlay=rotary-encoder,...' in /boot/firmware/config.txt and reboot"
         )
 
-    def _on_readable(self):
+    def _on_readable(self) -> None:
         for event in self._device.read():
             if event.type == ecodes.EV_REL and event.code == ecodes.REL_X:
                 if event.value > 0:
@@ -37,11 +37,11 @@ class Dial:
                 elif event.value < 0:
                     self.queue.put_nowait(_POLARITY * -1)
 
-    def start(self):
+    def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._loop is not None:
             self._loop.remove_reader(self._device.fd)
         self._device.close()

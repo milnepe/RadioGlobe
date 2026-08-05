@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Optional
 
 import spidev  # type: ignore
 
@@ -7,7 +8,7 @@ from .database import _ENCODER_RESOLUTION
 
 
 class PositionalEncoders:
-    def __init__(self, latitude_offset=0, longitude_offset=0):
+    def __init__(self, latitude_offset: int = 0, longitude_offset: int = 0) -> None:
         self.latch_stickiness = None
         self.latitude = 0
         self.longitude = 0
@@ -21,12 +22,12 @@ class PositionalEncoders:
         # Used to safely stop the task
         self._task = None
 
-    def zero(self):
+    def zero(self) -> list:
         self.latitude_offset = (_ENCODER_RESOLUTION // 2) - self.latitude
         self.longitude_offset = (_ENCODER_RESOLUTION // 2) - self.longitude
         return [self.latitude_offset, self.longitude_offset]
 
-    def reset_latch(self):
+    def reset_latch(self) -> None:
         """Unlock the stickiness so the main loop can re-latch to a new position."""
         self.latch_stickiness = None
 
@@ -35,12 +36,12 @@ class PositionalEncoders:
             self.longitude + self.longitude_offset
         ) % _ENCODER_RESOLUTION
 
-    def latch(self, latitude: int, longitude: int, stickiness: int):
+    def latch(self, latitude: int, longitude: int, stickiness: int) -> None:
         self.latch_stickiness = stickiness
         self.latitude = (latitude - self.latitude_offset) % _ENCODER_RESOLUTION
         self.longitude = (longitude - self.longitude_offset) % _ENCODER_RESOLUTION
 
-    def is_latched(self):
+    def is_latched(self) -> bool:
         return self.latch_stickiness is not None
 
     def get_calibration(self) -> dict:
@@ -52,7 +53,7 @@ class PositionalEncoders:
             "lon_offset": self.longitude_offset,
         }
 
-    def restore_calibration(self, state: dict):
+    def restore_calibration(self, state: dict) -> None:
         """Restore position/calibration from a dict produced by get_calibration().
 
         Also marks the encoders as latched, since a restored position always
@@ -64,7 +65,7 @@ class PositionalEncoders:
         self.longitude_offset = state.get("lon_offset")
         self.latch_stickiness = True
 
-    def check_parity(self, reading: int):
+    def check_parity(self, reading: int) -> bool:
         reading_without_parity_bit = reading >> 1
         parity_bit = reading & 0b1
 
@@ -75,7 +76,7 @@ class PositionalEncoders:
 
         return parity_bit == computed_parity
 
-    def read_spi(self):
+    def read_spi(self) -> Optional[list]:
         BUS = 0
         readings = []
 
@@ -102,7 +103,7 @@ class PositionalEncoders:
     # without having to raise STICKINESS itself.
     UNLATCH_CONFIRM_THRESHOLD = 2
 
-    async def run_encoder(self):
+    async def run_encoder(self) -> None:
         # while self._running:
         unlatch_confirm_count = 0
         while self._task:
@@ -134,10 +135,10 @@ class PositionalEncoders:
 
             await asyncio.sleep(0.05)
 
-    def start(self):
+    def start(self) -> None:
         self._task = asyncio.create_task(self.run_encoder())
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._task:
             self._task.cancel()
             try:

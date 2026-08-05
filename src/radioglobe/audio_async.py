@@ -3,7 +3,7 @@ import logging
 
 
 class AudioPlayer:
-    def __init__(self):
+    def __init__(self) -> None:
         self.instance = vlc.Instance(
             "--input-repeat=-1",
             "--network-caching=2000",  # 2 s network buffer absorbs stream jitter
@@ -13,7 +13,7 @@ class AudioPlayer:
         self.player = self.instance.media_player_new()
         self.current_url = None
 
-    def play(self, url: str):
+    def play(self, url: str) -> None:
         """Play a new URL stream, stopping current playback if needed."""
         if self.player.is_playing():
             self.player.stop()
@@ -24,7 +24,7 @@ class AudioPlayer:
         self.player.play()
         logging.debug(f"🔊 Playing: {url}")
 
-    def change_volume(self, delta, min_volume=10, max_volume=100) -> int:
+    def change_volume(self, delta: int, min_volume: int = 10, max_volume: int = 100) -> int:
         """Adjust volume by delta, clamped between min and max."""
         current_volume = self.player.audio_get_volume()
         new_volume = max(min_volume, min(max_volume, current_volume + delta))
@@ -51,7 +51,7 @@ class AudioPlayer:
         state = self.player.get_state()
         return state not in (vlc.State.Playing, vlc.State.Paused)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop playback if something is playing."""
         if self.player.is_playing():
             self.player.stop()

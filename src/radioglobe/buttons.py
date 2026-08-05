@@ -56,7 +56,7 @@ MID_BUTTON    = ButtonDefinition("Mid",    _PIN_BTN_MID,    keycode=_KEYCODE_BTN
 BOTTOM_BUTTON = ButtonDefinition("Bottom", _PIN_BTN_BOTTOM, keycode=_KEYCODE_BTN_BOTTOM)
 
 
-def _fire(callback):
+def _fire(callback: Optional[Callable]) -> None:
     """Invoke a sync or async callback without blocking the caller."""
     if callback is None:
         return
@@ -75,8 +75,9 @@ class Button:
     touches real hardware unless start() is actually called.
     """
 
-    def __init__(self, name, keycode, long_press_threshold=1.0,
-                 short_cb=None, long_cb=None, press_cb=None):
+    def __init__(self, name: str, keycode: int, long_press_threshold: float = 1.0,
+                 short_cb: Optional[Callable] = None, long_cb: Optional[Callable] = None,
+                 press_cb: Optional[Callable] = None) -> None:
         self.name = name
         self.keycode = keycode
         self.long_press_threshold = long_press_threshold
@@ -101,7 +102,7 @@ class Button:
             "'dtoverlay=gpio-key,...' in /boot/firmware/config.txt and reboot"
         )
 
-    def _on_readable(self):
+    def _on_readable(self) -> None:
         for event in self._device.read():
             if event.type != ecodes.EV_KEY or event.code != self.keycode:
                 continue
@@ -114,13 +115,13 @@ class Button:
                 kind = "long" if held >= self.long_press_threshold else "short"
                 self._event_queue.put_nowait((self.name, kind))
 
-    def start(self, event_queue: asyncio.Queue):
+    def start(self, event_queue: asyncio.Queue) -> None:
         self._event_queue = event_queue
         self._device = self._find_button_device(self.keycode)
         self._loop = asyncio.get_running_loop()
         self._loop.add_reader(self._device.fd, self._on_readable)
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._loop is not None and self._device is not None:
             self._loop.remove_reader(self._device.fd)
         if self._device is not None:
@@ -128,7 +129,7 @@ class Button:
 
 
 class ButtonManager:
-    def __init__(self, button_definitions, long_press_threshold=1.0):
+    def __init__(self, button_definitions: list[ButtonDefinition], long_press_threshold: float = 1.0) -> None:
         self.event_queue: asyncio.Queue = asyncio.Queue()
         self.buttons = [
             Button(
@@ -138,16 +139,16 @@ class ButtonManager:
             for d in button_definitions
         ]
 
-    def start(self):
+    def start(self) -> None:
         for btn in self.buttons:
             btn.start(self.event_queue)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Release every managed button's evdev device."""
         for btn in self.buttons:
             await btn.stop()
 
-    async def handle_events(self):
+    async def handle_events(self) -> None:
         """Continuously process events with the appropriate handler.
 
         A handler that raises must not kill this loop - it's the single
@@ -169,7 +170,7 @@ class ButtonManager:
                         except Exception:
                             logging.exception(f"Button handler failed: {btn.name} {event_type}")
 
-    def get_event_nowait(self):
+    def get_event_nowait(self) -> Optional[tuple]:
         try:
             return self.event_queue.get_nowait()
         except asyncio.QueueEmpty:

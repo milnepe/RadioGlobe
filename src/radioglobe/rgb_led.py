@@ -40,8 +40,8 @@ class RGBLed:
         COLOUR_OFF: (0, 0, 0),
     }
 
-    def __init__(self, red_label=_LED_LABEL_RED, green_label=_LED_LABEL_GREEN,
-                 blue_label=_LED_LABEL_BLUE):
+    def __init__(self, red_label: str = _LED_LABEL_RED, green_label: str = _LED_LABEL_GREEN,
+                 blue_label: str = _LED_LABEL_BLUE) -> None:
         self.paths = {
             "red": self._resolve(red_label),
             "green": self._resolve(green_label),
@@ -67,15 +67,15 @@ class RGBLed:
             ) from e
         return path
 
-    def set_color(self, color_name):
+    def set_color(self, color_name: str) -> None:
         color = self.COLOURS.get(color_name.lower(), (0, 0, 0))
         for channel, value in zip(("red", "green", "blue"), color):
             self.paths[channel].write_text(str(value))
 
-    def off(self):
+    def off(self) -> None:
         self.set_color(COLOUR_OFF)
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Turn the LED off. Nothing to release - the kernel driver owns the pins."""
         self.off()
 
