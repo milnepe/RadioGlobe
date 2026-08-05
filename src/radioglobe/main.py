@@ -302,7 +302,12 @@ class App:
         finally:
             if self._stream_task and not self._stream_task.done():
                 self._stream_task.cancel()
-            for hw in [self.audio_player, self.dial, self.encoders, self.display, self.led, button_manager]:
+            # Reverse of the start order above (button_manager, display,
+            # encoders, dial). audio_player and led are appended even though
+            # they were never started — both accept stop() safely without a
+            # prior start(), since neither class has a start() at all (see
+            # rgb_led.py / audio_async.py).
+            for hw in [button_manager, self.display, self.encoders, self.dial, self.audio_player, self.led]:
                 await hw.stop()
 
 
