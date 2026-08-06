@@ -2,6 +2,35 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.5] - 2026-08-06
+### Changed
+- `cli.py` now logs via the stdlib `logging.handlers.SysLogHandler`
+  pointed at `/dev/log` instead of a plain stderr stream. `systemd-
+  journald` speaks syslog on that socket and maps the syslog priority
+  (derived automatically from the Python log level) into the journal's
+  own `PRIORITY` field, so `journalctl -p <level>` now filters
+  meaningfully — previously every log line landed at the same
+  undifferentiated priority regardless of level. Falls back to the
+  previous plain stderr format if `/dev/log` isn't available (e.g. a
+  non-systemd host).
+- An initial design using the `systemd-python` package
+  (`systemd.journal.JournalHandler`) was tried and rejected: it has no
+  prebuilt wheels anywhere and needs `libsystemd-dev` to build even
+  just to resolve `uv lock` metadata, breaking `uv run pytest`/`ruff
+  check` on any dev machine without Pi-specific tooling installed — a
+  `platform_machine` marker restricting it to ARM didn't help, since
+  `uv`'s universal lock still needs metadata for that branch regardless
+  of the current host. The `SysLogHandler` approach needs zero new
+  dependencies and behaves identically on-device and off.
+
+This closes out Improvement D from `ARCHITECTURE.md`'s Suggested
+Improvements (added in v0.9.4's review). Deployed and verified on real
+hardware before tagging: after restart, journal entries switched from
+the old `bash[PID]:` stdout-capture prefix to the new `radioglobe[PID]:`
+syslog identifier, and `journalctl --user-unit=radioglobe.service -p
+info` / `-p warning` / `-p err` were confirmed to filter correctly
+against the live service.
+
 ## [0.9.4] - 2026-08-06
 ### Changed
 - `LOG_LEVEL` now reads the `RADIOGLOBE_LOG_LEVEL` environment variable
