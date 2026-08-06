@@ -40,5 +40,5 @@ LED_FLASH_DIAL = 0.1    # dial turn feedback (brief since frequent)
 # State persistence
 STATE_CACHE_PATH = "~/cache/radioglobe.json"
 
-# Logging
-LOG_LEVEL = "DEBUG"
+# Logging - override without a redeploy via RADIOGLOBE_LOG_LEVEL=DEBUG + restart
+LOG_LEVEL = os.environ.get("RADIOGLOBE_LOG_LEVEL", "INFO")
