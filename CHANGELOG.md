@@ -2,6 +2,41 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.4] - 2026-08-06
+### Changed
+- `LOG_LEVEL` now reads the `RADIOGLOBE_LOG_LEVEL` environment variable
+  (default `"INFO"`, was hardcoded `"DEBUG"`), mirroring the existing
+  `RADIOGLOBE_STATIONS` override pattern. A debugging session is now
+  `RADIOGLOBE_LOG_LEVEL=DEBUG` + restart — no redeploy needed. Verified
+  live via `systemctl --user set-environment`.
+- The log format now includes `%(levelname)s`, so severity is visible
+  in `journalctl` output.
+- Trimmed several DEBUG calls that dumped entire station/city lists on
+  routine events (city latching, dial navigation, state save/load)
+  down to counts or the single relevant item.
+- `Display.message()` no longer logs the full 4-line screen buffer at
+  INFO on every update — moved to DEBUG.
+- Replaced a per-latch INFO dump of the full nearby-cities candidate
+  list with a single new line: `_play_station()` now logs "🔊 Now
+  playing: {name} ({city})" — the one method all three playback
+  triggers (encoder latch, dial change, startup resume) go through,
+  giving a clean, readable default-level narrative of what the device
+  has actually played.
+
+This release is observability-only — no behavior change. Deployed and
+verified on real hardware before tagging: confirmed clean restart, the
+new quiet `INFO`-only output during normal use, no warnings/errors,
+and that the `RADIOGLOBE_LOG_LEVEL=DEBUG` override actually works
+without a redeploy before reverting it back to the production default.
+
+Two related findings from the same full-project review were designed
+but deliberately deferred rather than shipped now — recorded in
+`ARCHITECTURE.md` §11 (Improvements C and D) so the design work isn't
+lost: a state-loss-on-deploy bug (no `SIGTERM` handler, so a routine
+`systemctl restart` discards unsaved navigation/calibration state) and
+the lack of `journalctl -p` priority filtering (nothing currently maps
+Python log levels to syslog priorities).
+
 ## [0.9.3] - 2026-08-05
 ### Changed
 - Moved `dial.py`, `positional_encoders.py`, `buttons.py`, `rgb_led.py`,
