@@ -84,6 +84,7 @@ class App:
         name, url = self.nav.state.station
         self.display.show_station(coords, self.nav.state.city, name)
         self.audio_player.play(url)
+        logging.info(f"🔊 Now playing: {name} ({self.nav.state.city})")
         return url
 
     async def _monitor_stream(self, expected_url: str):
@@ -134,19 +135,18 @@ class App:
             cities = self.nav.refresh_nearby_cities(coords)
 
             if not self.encoders.is_latched() and cities:
-                logging.debug(f"latch: {self.encoders.is_latched()} Cities: {cities}")
+                logging.debug(f"latch check: is_latched=False, {len(cities)} nearby cities")
                 asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
-                logging.debug(f"Matching cities: stick:{STICKINESS} fuzz:{FUZZINESS} {cities} {self.encoders.is_latched()}")
+                logging.debug(f"Matching cities: stick:{STICKINESS} fuzz:{FUZZINESS} {len(cities)} candidates")
                 if not self.nav.select_city():
                     logging.warning(f"No stations for {self.nav.state.city!r} — skipping latch")
                     self.encoders.reset_latch()
                     continue
-                logging.info(f"Cities: {cities}")
                 logging.debug(
                     f"📻 Tuning to: city_idx:{self.nav.state.city_idx} "
-                    f"{self.nav.state.city} {self.nav.state.station}\n{self.nav.state.stations}"
+                    f"{self.nav.state.city} {self.nav.state.station}"
                 )
                 self._start_monitor_stream(self._play_station())
 
@@ -182,7 +182,7 @@ class App:
             idx, result = self.nav.state.station_idx, self.nav.state.stations
         else:
             idx, result = self.nav.state.city_idx, self.nav.state.cities
-        logging.debug(f"🖲️ Jog button short press! Change mode idx: {idx} {result}")
+        logging.debug(f"🖲️ Jog button short press! Change mode idx: {idx} ({len(result)} items)")
 
     async def _handle_long_jog(self):
         logging.debug("🖲️ Jog button long press: None")
@@ -288,10 +288,7 @@ class App:
                     self.display.show_status(STATUS_CALIBRATE)
                 else:
                     self._start_monitor_stream(self._play_station())
-                    logging.debug(
-                        f"Playing saved station: {self.nav.state.station} {self.nav.state.city} "
-                        f"{self.nav.state.cities} {self.nav.state.stations}"
-                    )
+                    logging.debug(f"Resumed saved station: {self.nav.state.station} {self.nav.state.city}")
             else:
                 self.display.show_status(STATUS_CALIBRATE)
 
@@ -317,7 +314,7 @@ if __name__ == "__main__":
     from radioglobe.hal.factory import build_hardware
 
     logging.basicConfig(
-        format="%(asctime)s: %(message)s",
+        format="%(asctime)s %(levelname)s: %(message)s",
         datefmt="%H:%M:%S",
         level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
     )

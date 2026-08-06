@@ -703,6 +703,26 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 ---
 
+### Improvement C: State is lost on every routine deploy, not just a hard crash
+
+**Problem:** `App.save_state()` (`main.py`) is only ever called from `_handle_long_mid()`, the physical shutdown-button handler. There is no `SIGTERM`/`SIGINT` handler anywhere in the codebase, and `services/radioglobe.service` has no `KillSignal` override, so it uses the default `SIGTERM`. Python's default `SIGTERM` handling terminates the process immediately without running `run()`'s `finally:` block — so state is never saved there either. Net effect: every `systemctl restart` (i.e. every routine code deploy via `make update`) silently discards any city/station/mode/calibration change made since the device was last physically powered off via the button.
+
+**Fix (designed, not yet implemented):** register a signal handler for `SIGTERM`/`SIGINT` in `run()` that calls `save_state()` immediately, then cancels `_encoder_task`/`_dial_task` (promoted from local variables to instance attributes so the handler can reach them) to trigger the same graceful-shutdown path `KeyboardInterrupt` already uses — the existing `finally:` block's hardware cleanup runs either way. Widen `except KeyboardInterrupt:` to `except (KeyboardInterrupt, asyncio.CancelledError):`, since the signal-triggered cancellation surfaces as `CancelledError`. Deliberately scoped to the graceful-stop case only (a `systemctl restart` is exactly this); a true `SIGKILL`, crash, or power loss would still lose unsaved state, same as today. A broader fix (save proactively on every navigation/calibration change, debounced to avoid SD-card write bursts from rapid dial spinning) was also designed but set aside as more complexity than currently wanted.
+
+**Effort:** ~1 hour (signal handler + tests) for the scoped fix above.
+
+---
+
+### Improvement D: No `journalctl -p` priority filtering is possible
+
+**Problem:** Python's `logging` module levels (DEBUG/INFO/WARNING/etc.) aren't mapped to syslog priorities anywhere — the app uses a plain `StreamHandler` via `logging.basicConfig()`, and `services/radioglobe.service` has no `SyslogIdentifier=`. Every log line, regardless of Python level, lands in the systemd journal at the same undifferentiated priority. `journalctl -p warning` (or any `-p` filter) currently can't distinguish RadioGlobe's own warnings/errors from its routine output.
+
+**Fix:** add `systemd.journal.JournalHandler` (from the `systemd-python` package) as the logging handler instead of the default stream handler, which maps Python log levels to syslog priorities automatically. This is a new dependency — Pi-only, so it would go in `pyproject.toml`'s existing `pi` extras group rather than the base dependencies.
+
+**Effort:** ~30 minutes, plus on-device verification that `journalctl -p warning --user-unit=radioglobe.service` actually filters as expected.
+
+---
+
 ## 12. What's Already Good
 
 **`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`, called from `Navigator.__init__` — §4.3) is the right trade-off — it makes every city lookup in `_encoder_loop()` O(1).

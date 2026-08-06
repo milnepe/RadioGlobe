@@ -50,7 +50,7 @@ class Navigator:
         PositionalEncoders object, since Navigator has no hardware
         dependency and can't read one directly.
         """
-        logging.debug(f"STATIONS: {self.state.stations}")
+        logging.debug(f"Saving state: city={self.state.city!r}, {len(self.state.stations)} stations")
         state = asdict(self.state)
         state.update(encoder_offsets)
         state["latch"] = True
@@ -112,7 +112,7 @@ class Navigator:
             logging.debug("⚠️ No stations available.")
             return
         self.state.station_idx = (self.state.station_idx + direction) % len(self.state.stations)
-        logging.debug(f"station_idx:{self.state.station_idx} {self.state.stations}")
+        logging.debug(f"station_idx:{self.state.station_idx} ({len(self.state.stations)} stations)")
         self.state.station = self.state.stations[self.state.station_idx]
         logging.debug(f"📻 Tuning to: station_idx:{self.state.station_idx} {self.state.station}")
 

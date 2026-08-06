@@ -54,7 +54,7 @@ class Display:
         self.buffer[2] = line_3[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
         self.buffer[3] = line_4[:_DISPLAY_COLUMNS].center(_DISPLAY_COLUMNS)
         self.changed.set()
-        logging.info(f"Message set: {[line_1, line_2, line_3, line_4]}")
+        logging.debug(f"Message set: {[line_1, line_2, line_3, line_4]}")
 
     def show_station(self, coords: Coordinate, city: str, station_name: str) -> None:
         """Show the current city and station."""

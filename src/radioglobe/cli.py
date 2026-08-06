@@ -8,7 +8,7 @@ from radioglobe.radio_config import LOG_LEVEL
 
 def main() -> None:
     logging.basicConfig(
-        format="%(asctime)s: %(message)s",
+        format="%(asctime)s %(levelname)s: %(message)s",
         datefmt="%H:%M:%S",
         level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
     )
