@@ -713,16 +713,6 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 
 ---
 
-### Improvement D: No `journalctl -p` priority filtering is possible
-
-**Problem:** Python's `logging` module levels (DEBUG/INFO/WARNING/etc.) aren't mapped to syslog priorities anywhere — the app uses a plain `StreamHandler` via `logging.basicConfig()`, and `services/radioglobe.service` has no `SyslogIdentifier=`. Every log line, regardless of Python level, lands in the systemd journal at the same undifferentiated priority. `journalctl -p warning` (or any `-p` filter) currently can't distinguish RadioGlobe's own warnings/errors from its routine output.
-
-**Fix:** add `systemd.journal.JournalHandler` (from the `systemd-python` package) as the logging handler instead of the default stream handler, which maps Python log levels to syslog priorities automatically. This is a new dependency — Pi-only, so it would go in `pyproject.toml`'s existing `pi` extras group rather than the base dependencies.
-
-**Effort:** ~30 minutes, plus on-device verification that `journalctl -p warning --user-unit=radioglobe.service` actually filters as expected.
-
----
-
 ## 12. What's Already Good
 
 **`database.py` pure-function design.** All station and city lookups are stateless functions with no hardware dependencies. They're unit-testable without mocking anything and straightforward to reason about. The one-time index build at startup (`build_cities_index`, called from `Navigator.__init__` — §4.3) is the right trade-off — it makes every city lookup in `_encoder_loop()` O(1).
@@ -738,3 +728,5 @@ This is cosmetic and non-crashing, but the display momentarily shows the wrong c
 **Display update coalescing.** The buffer + `asyncio.Event` pattern in `display.py` correctly batches rapid updates. I2C is slow (~100µs per byte); writing all 4 LCD lines takes several milliseconds, so coalescing is not just an optimisation — it's necessary for responsiveness.
 
 **The systemd user service** (not system service) is the correct approach for an application that uses PulseAudio. PulseAudio runs per-user; a system service cannot see the user's audio session. Running as the logged-in user (with `loginctl enable-linger`) is the only reliable way to get auto-detected audio outputs including Bluetooth.
+
+**`journalctl -p` priority filtering** (`cli.py`) uses the stdlib `logging.handlers.SysLogHandler` pointed at `/dev/log` rather than the `systemd-python` package — `systemd-python` has no prebuilt wheels anywhere and needs `libsystemd-dev` to build even just to resolve lock metadata, which broke `uv run` on a plain dev machine with no Pi-specific tooling installed. `systemd-journald` already speaks syslog on `/dev/log` and maps the syslog priority `SysLogHandler` derives from the Python log level into the journal's own `PRIORITY` field, so `journalctl -p warning` filters correctly with zero new dependencies and identical behavior on-device and off. Falls back to the previous plain stderr format if `/dev/log` isn't available (e.g. a non-systemd host).
