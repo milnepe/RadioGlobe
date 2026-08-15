@@ -101,5 +101,5 @@ clean:
 # Check version on device
 # -----------------------------
 device-version:
-	@echo "Device version:" \
-	@ssh $(REMOTE) "cd $(REMOTE_DIR) && cat VERSION"
+	@echo -n "Device version: "
+	@ssh $(REMOTE) 'cat /opt/radioglobe/VERSION 2>/dev/null || /opt/radioglobe/venv/bin/python -c "import importlib.metadata as m; print(m.version(\"radioglobe\"))"'
