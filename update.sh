@@ -36,6 +36,16 @@ if [ -d "$SRC_DIR/dist" ] && ls "$SRC_DIR/dist/radioglobe-"*.whl >/dev/null 2>&1
     echo "📦 Installing wheel: $WHEEL"
     $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$WHEEL[pi]"
 else
+    # No wheel staged: falls back to installing whatever is currently
+    # checked out in $SRC_DIR, which is only as fresh as the last time
+    # someone pulled here. Surface that instead of installing it silently.
+    echo "⚠️  No staged wheel in $SRC_DIR/dist — installing from the source"
+    echo "⚠️  tree instead. This ships whatever is currently checked out"
+    echo "⚠️  here, not necessarily your latest changes — run 'git pull' in"
+    echo "⚠️  $SRC_DIR first, or use 'make deploy' to build+ship a fresh wheel."
+    if git -C "$SRC_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "📌 Installing from commit: $(git -C "$SRC_DIR" log -1 --format='%h %cd %s' --date=short)"
+    fi
     echo "📦 Installing from source: $SRC_DIR"
     $RADIOGLOBE_DIR/venv/bin/pip install --upgrade "$SRC_DIR[pi]"
 fi
