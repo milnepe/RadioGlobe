@@ -29,9 +29,8 @@ bump-major:
 set-version:
 	@NEW_VERSION=$$(cat .new_version); \
 	echo $$NEW_VERSION > VERSION; \
-	sed -i "s/^version = \".*\"/version = \"$$NEW_VERSION\"/" $(VERSION_FILE); \
 	rm .new_version; \
-	git add VERSION $(VERSION_FILE); \
+	git add VERSION; \
 	git commit -m "Release v$$NEW_VERSION"; \
 	git tag v$$NEW_VERSION
 
