@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.6] - 2026-08-15
+### Changed
+- `App._encoder_loop` now checks `PositionalEncoders.is_latched()` before
+  calling `Navigator.refresh_nearby_cities()`, skipping the nearby-city
+  scan entirely while the globe is already latched onto a city. Previously
+  the scan ran on every encoder-update event regardless of latch state,
+  and its result was simply discarded whenever `is_latched()` was true —
+  this only removes that wasted work, with no behavior change while
+  unlatched.
+
 ## [0.9.5] - 2026-08-06
 ### Changed
 - `cli.py` now logs via the stdlib `logging.handlers.SysLogHandler`
