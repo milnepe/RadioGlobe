@@ -131,11 +131,14 @@ class App:
             await self.encoders.updated.wait()
             self.encoders.updated.clear()
 
+            if self.encoders.is_latched():
+                continue
+
             coords = self.encoders.get_readings()
             cities = self.nav.refresh_nearby_cities(coords)
 
-            if not self.encoders.is_latched() and cities:
-                logging.debug(f"latch check: is_latched=False, {len(cities)} nearby cities")
+            if cities:
+                logging.debug(f"latch check: {len(cities)} nearby cities")
                 asyncio.create_task(self.led.flash(COLOUR_GREEN, LED_FLASH_LONG))
 
                 self.encoders.latch(*coords, stickiness=STICKINESS)
