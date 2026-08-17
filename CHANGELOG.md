@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.7] - 2026-08-17
+### Fixed
+- `stations/stations.json` had 391 city-name groups sharing identical
+  lat/lon coordinates across different countries (e.g. `Perth,AU` and
+  `Perth,GB`), because coordinates had effectively been assigned by
+  city name alone, ignoring country. Since the on-device city index
+  keys off rounded encoder position, this collapsed distinct cities
+  onto the same physical globe position. Re-geocoded 346 of the 391
+  affected entries against each entry's (city name, inferred country).
+  45 entries were deliberately left untouched where the source data's
+  legacy 2-letter country code is genuinely ambiguous/overloaded
+  in this dataset, or the city name itself is truncated/misspelled with
+  no reliable gazetteer match — 6 city-name groups still collide as a
+  result. Data-only change; no code touched.
+
 ## [0.9.6] - 2026-08-15
 ### Changed
 - `App._encoder_loop` now checks `PositionalEncoders.is_latched()` before
